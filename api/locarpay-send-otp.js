@@ -61,6 +61,34 @@ async function enviarEmail(email, otp) {
   });
 }
 
+async function verificarEmailCadastrado(email) {
+  // Busca na coleção users se existe inquilino com este email cadastrado pelo admin
+  const url = `${FS_BASE}/users?key=${FB_API_KEY}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: 'users' }],
+        where: {
+          compositeFilter: {
+            op: 'AND',
+            filters: [
+              { fieldFilter: { field: { fieldPath: 'email' }, op: 'EQUAL', value: { stringValue: email.toLowerCase() } } },
+              { fieldFilter: { field: { fieldPath: 'role' }, op: 'EQUAL', value: { stringValue: 'tenant' } } }
+            ]
+          }
+        },
+        limit: 1
+      }
+    })
+  });
+  if (!resp.ok) throw new Error('Erro ao verificar cadastro');
+  const data = await resp.json();
+  // Retorna true se encontrou pelo menos um documento
+  return Array.isArray(data) && data.length > 0 && data[0].document != null;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -71,11 +99,15 @@ export default async function handler(req, res) {
   const { email } = req.body || {};
   if (!email) return res.status(400).json({ error: 'Email obrigatório' });
 
-  const otp = String(Math.floor(100000 + crypto.randomInt(900000)));
-
   try {
-    await salvarOtp(email, otp);
-    await enviarEmail(email, otp);
+    const cadastrado = await verificarEmailCadastrado(email.trim().toLowerCase());
+    if (!cadastrado) {
+      return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com o proprietário.' });
+    }
+
+    const otp = String(Math.floor(100000 + crypto.randomInt(900000)));
+    await salvarOtp(email.trim().toLowerCase(), otp);
+    await enviarEmail(email.trim(), otp);
     return res.status(200).json({ ok: true });
   } catch (e) {
     console.error(e);
