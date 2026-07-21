@@ -62,8 +62,8 @@ async function enviarEmail(email, otp) {
 }
 
 async function verificarEmailCadastrado(email) {
-  // Busca na coleção users se existe inquilino com este email cadastrado pelo admin
-  const url = `${FS_BASE}/users?key=${FB_API_KEY}`;
+  // Endpoint correto para structured query no Firestore REST API
+  const url = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents:runQuery?key=${FB_API_KEY}`;
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -74,7 +74,7 @@ async function verificarEmailCadastrado(email) {
           compositeFilter: {
             op: 'AND',
             filters: [
-              { fieldFilter: { field: { fieldPath: 'email' }, op: 'EQUAL', value: { stringValue: email.toLowerCase() } } },
+              { fieldFilter: { field: { fieldPath: 'email' }, op: 'EQUAL', value: { stringValue: email } } },
               { fieldFilter: { field: { fieldPath: 'role' }, op: 'EQUAL', value: { stringValue: 'tenant' } } }
             ]
           }
@@ -83,10 +83,13 @@ async function verificarEmailCadastrado(email) {
       }
     })
   });
-  if (!resp.ok) throw new Error('Erro ao verificar cadastro');
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`Firestore query falhou: ${err}`);
+  }
   const data = await resp.json();
-  // Retorna true se encontrou pelo menos um documento
-  return Array.isArray(data) && data.length > 0 && data[0].document != null;
+  // runQuery retorna array; cada item tem 'document' se encontrou resultado
+  return Array.isArray(data) && data.some(item => item.document != null);
 }
 
 export default async function handler(req, res) {
