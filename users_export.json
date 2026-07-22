@@ -1,0 +1,56 @@
+{"users": [
+{
+  "localId": "0YG0fKe9k6Z4IBigCji1fzcJ61L2",
+  "email": "denisfelicio20@gmail.com",
+  "emailVerified": true,
+  "displayName": "Denis Felicio",
+  "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocJyhveD0_E0kDaMQE5Bc836DQArgoz8_6votCb6Tco83dCqZ-jM=s96-c",
+  "lastSignedInAt": "1784745045475",
+  "createdAt": "1784608625812",
+  "disabled": false,
+  "providerUserInfo": [
+    {
+      "providerId": "google.com",
+      "rawId": "105526169259123805848",
+      "email": "denisfelicio20@gmail.com",
+      "displayName": "Denis Felicio",
+      "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocJyhveD0_E0kDaMQE5Bc836DQArgoz8_6votCb6Tco83dCqZ-jM=s96-c"
+    }
+  ]
+},
+{
+  "localId": "XvD1thhQdObUtdDG9SCroFNpsS42",
+  "email": "leilaferrinho2@gmail.com",
+  "emailVerified": true,
+  "displayName": "leila ferrinho",
+  "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocJ7QHV8jwNVP17U6psop9-OK4IBKsKp0kr_RxJDFH-0UBRB2aXc=s96-c",
+  "lastSignedInAt": "1784676488283",
+  "createdAt": "1784645797353",
+  "providerUserInfo": [
+    {
+      "providerId": "google.com",
+      "rawId": "114652203891358936360",
+      "email": "leilaferrinho2@gmail.com",
+      "displayName": "leila ferrinho",
+      "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocJ7QHV8jwNVP17U6psop9-OK4IBKsKp0kr_RxJDFH-0UBRB2aXc=s96-c"
+    }
+  ]
+},
+{
+  "localId": "iMNJcu6a7Gdh0kB42dkG8FhpPPY2",
+  "email": "contatotransgu@gmail.com",
+  "emailVerified": true,
+  "displayName": "Gustavo",
+  "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocLfIsLzTb3AICz0Ga9bLZMWEBLQliJOJw5_mrj5lVH7RyCmhg=s96-c",
+  "lastSignedInAt": "1784645914305",
+  "createdAt": "1784645914304",
+  "providerUserInfo": [
+    {
+      "providerId": "google.com",
+      "rawId": "114827408145047207239",
+      "email": "contatotransgu@gmail.com",
+      "displayName": "Gustavo",
+      "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocLfIsLzTb3AICz0Ga9bLZMWEBLQliJOJw5_mrj5lVH7RyCmhg=s96-c"
+    }
+  ]
+}]}
