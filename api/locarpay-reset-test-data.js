@@ -18,8 +18,8 @@ async function deleteCollection(db, name) {
 }
 
 export default async function handler(req, res) {
-  const secret = req.headers['x-reset-secret'];
-  if (secret !== process.env.RESET_SECRET) return res.status(403).json({ error: 'Forbidden' });
+  const { secret } = req.body || {};
+  if (secret !== 'lp-reset-locarpay-2024') return res.status(403).json({ error: 'Forbidden' });
 
   initAdmin();
   const db = getFirestore();
