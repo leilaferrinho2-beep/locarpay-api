@@ -49,9 +49,14 @@ export default async function handler(req, res) {
       uid = newUser.uid;
     }
 
-    // Busca role do usuário no Firestore
+    // Role: admin se tiver licença ativa, senão tenant
+    const licenseDoc = await db.collection('licenses').doc(email.toLowerCase()).get();
+    const hasLicense = licenseDoc.exists && licenseDoc.data().active === true;
+
     const userDoc = await db.collection('users').doc(uid).get();
-    const role = userDoc.exists ? (userDoc.data().role || 'tenant') : 'tenant';
+    const userRole = userDoc.exists ? (userDoc.data().role || 'tenant') : 'tenant';
+
+    const role = hasLicense ? 'admin' : userRole;
 
     const customToken = await auth.createCustomToken(uid, { role });
     return res.status(200).json({ ok: true, customToken, role });
