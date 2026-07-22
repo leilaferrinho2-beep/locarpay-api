@@ -61,6 +61,15 @@ async function enviarEmail(email, otp) {
   });
 }
 
+async function verificarLicenca(email) {
+  const url = `${FS_BASE}/licenses/${encodeURIComponent(email)}?key=${FB_API_KEY}`;
+  const resp = await fetch(url);
+  if (!resp.ok) return false;
+  const data = await resp.json();
+  const active = data?.fields?.active?.booleanValue;
+  return active === true;
+}
+
 async function verificarEmailCadastrado(email) {
   // Endpoint correto para structured query no Firestore REST API
   const url = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents:runQuery?key=${FB_API_KEY}`;
@@ -103,13 +112,20 @@ export default async function handler(req, res) {
   if (!email) return res.status(400).json({ error: 'Email obrigatório' });
 
   try {
-    const cadastrado = await verificarEmailCadastrado(email.trim().toLowerCase());
-    if (!cadastrado) {
+    const emailNorm = email.trim().toLowerCase();
+
+    // Verifica se é admin (licença ativa) ou inquilino cadastrado
+    const [temLicenca, temCadastro] = await Promise.all([
+      verificarLicenca(emailNorm),
+      verificarEmailCadastrado(emailNorm)
+    ]);
+
+    if (!temLicenca && !temCadastro) {
       return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com o proprietário.' });
     }
 
     const otp = String(Math.floor(100000 + crypto.randomInt(900000)));
-    await salvarOtp(email.trim().toLowerCase(), otp);
+    await salvarOtp(emailNorm, otp);
     await enviarEmail(email.trim(), otp);
     return res.status(200).json({ ok: true });
   } catch (e) {
