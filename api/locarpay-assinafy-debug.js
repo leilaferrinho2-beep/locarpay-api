@@ -36,11 +36,16 @@ export default async function handler(req, res) {
     const docsResp = await assinafyGet(apiKey, `accounts/${accountId}/documents?per_page=20`);
     const docs = (docsResp?.data || []).map(d => ({ id: d.id, name: d.name, status: d.status, created_at: d.created_at }));
 
-    const docId = docs[0]?.id;
-    // Busca detalhe completo do documento (pode conter assignments embutidos)
-    const docDetail = await assinafyGet(apiKey, `accounts/${accountId}/documents/${docId}`);
+    const docId = '103bdd8ffcc5800e00a6a5a2e704';
+    const results = {
+      p1: await assinafyGet(apiKey, `documents/${docId}`),
+      p2: await assinafyGet(apiKey, `documents/${docId}/signers`),
+      p3: await assinafyGet(apiKey, `accounts/${accountId}/documents/${docId}/signers`),
+      p4: await assinafyGet(apiKey, `accounts/${accountId}/envelopes`),
+      p5: await assinafyGet(apiKey, `envelopes`),
+    };
 
-    return res.status(200).json({ accountId, docId, docDetail });
+    return res.status(200).json({ accountId, docId, results });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
