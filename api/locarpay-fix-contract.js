@@ -23,7 +23,7 @@ async function fsPatch(path, fields) {
 }
 
 async function assinafyGet(apiKey, path) {
-  const r = await fetch(`https://app.assinafy.com.br/api/v1/${path}`, {
+  const r = await fetch(`https://api.assinafy.com.br/v1/${path}`, {
     headers: { 'X-Api-Key': apiKey, 'Accept': 'application/json' }
   });
   if (!r.ok) throw new Error(`Assinafy GET ${path}: ${r.status} ${await r.text()}`);
