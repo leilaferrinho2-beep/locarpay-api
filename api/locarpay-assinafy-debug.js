@@ -36,17 +36,15 @@ export default async function handler(req, res) {
     const docsResp = await assinafyGet(apiKey, `accounts/${accountId}/documents?per_page=20`);
     const docs = (docsResp?.data || []).map(d => ({ id: d.id, name: d.name, status: d.status, created_at: d.created_at }));
 
-    // Para cada documento, lista assignments
-    const result = [];
-    for (const doc of docs.slice(0, 5)) {
-      const assignmentsResp = await assinafyGet(apiKey, `documents/${doc.id}/assignments`);
-      result.push({
-        document: doc,
-        assignmentsRaw: assignmentsResp
-      });
-    }
+    // Testa diferentes endpoints de assignments para o documento mais recente
+    const docId = docs[0]?.id;
+    const result = {
+      path1: await assinafyGet(apiKey, `documents/${docId}/assignments`),
+      path2: await assinafyGet(apiKey, `accounts/${accountId}/documents/${docId}/assignments`),
+      path3: await assinafyGet(apiKey, `accounts/${accountId}/assignments`),
+    };
 
-    return res.status(200).json({ accountId, docs, result });
+    return res.status(200).json({ accountId, docId, docs, result });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
