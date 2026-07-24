@@ -88,9 +88,9 @@ export default async function handler(req, res) {
       ]
     });
 
-    const assignmentId = assignmentResp.data?.data?.id || assignmentResp.data?.id;
+    const assignmentId = assignmentResp.data?.data?.id || assignmentResp.data?.id || assignmentResp.data?.assignment?.id;
     if (!assignmentId) {
-      return res.status(500).json({ error: 'Não foi possível criar assignment', assignmentResp });
+      return res.status(500).json({ error: 'Não foi possível criar assignment', assignmentResp, ownerContactId, tenantContactId });
     }
 
     await fsPatch(`contracts/${contractId}`, {
