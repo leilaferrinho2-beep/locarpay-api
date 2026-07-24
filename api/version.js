@@ -4,6 +4,6 @@ export default function handler(req, res) {
   res.status(200).json({
     versionCode: 27,
     versionName: "3.5",
-    url: "https://locarpay-api.vercel.app/download/locarpay-v35.apk"
+    url: "https://locarpay-api.vercel.app/download/locarpay.apk"
   });
 }
