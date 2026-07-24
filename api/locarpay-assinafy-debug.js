@@ -36,16 +36,14 @@ export default async function handler(req, res) {
     const docsResp = await assinafyGet(apiKey, `accounts/${accountId}/documents?per_page=20`);
     const docs = (docsResp?.data || []).map(d => ({ id: d.id, name: d.name, status: d.status, created_at: d.created_at }));
 
-    const docId = '103bdd8ffcc5800e00a6a5a2e704';
+    // Busca signer do inquilino e seu sign_url
+    const tenantContactId = '19f9627fbc17af597148ca9494b';
     const results = {
-      p1: await assinafyGet(apiKey, `documents/${docId}`),
-      p2: await assinafyGet(apiKey, `documents/${docId}/signers`),
-      p3: await assinafyGet(apiKey, `accounts/${accountId}/documents/${docId}/signers`),
-      p4: await assinafyGet(apiKey, `accounts/${accountId}/envelopes`),
-      p5: await assinafyGet(apiKey, `envelopes`),
+      signer: await assinafyGet(apiKey, `accounts/${accountId}/signers/${tenantContactId}`),
+      signerDocs: await assinafyGet(apiKey, `accounts/${accountId}/signers/${tenantContactId}/documents`),
     };
 
-    return res.status(200).json({ accountId, docId, results });
+    return res.status(200).json({ accountId, tenantContactId, results });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
