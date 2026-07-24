@@ -90,7 +90,24 @@ export default async function handler(req, res) {
 
     const assignmentId = assignmentResp.data?.data?.id || assignmentResp.data?.id || assignmentResp.data?.assignment?.id;
     if (!assignmentId) {
-      return res.status(500).json({ error: 'Não foi possível criar assignment', assignmentResp, ownerContactId, tenantContactId });
+      // Tenta buscar assignment existente no documento
+      const listResp = await assinafyGet(apiKey, `accounts/${accountId}/documents/${documentId}/assignments`);
+      const existingId = listResp?.data?.[0]?.id || listResp?.data?.id;
+      if (existingId) {
+        await fsPatch(`contracts/${contractId}`, {
+          assinafyDocumentId: { stringValue: documentId },
+          assinafyAssignmentId: { stringValue: existingId },
+          assinafyStatus: { stringValue: 'pending' }
+        });
+        return res.status(200).json({ ok: true, documentId, assignmentId: existingId, source: 'existing' });
+      }
+      return res.status(500).json({
+        error: 'Não foi possível criar assignment',
+        assignmentRespStr: JSON.stringify(assignmentResp),
+        listRespStr: JSON.stringify(listResp),
+        ownerContactId,
+        tenantContactId
+      });
     }
 
     await fsPatch(`contracts/${contractId}`, {
