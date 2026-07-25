@@ -41,31 +41,21 @@ async function fsPatch(path, fields) {
 }
 
 function extractDocumentId(payload) {
-  // Assinafy pode enviar o documentId em diferentes formatos dependendo do evento
-  return (
-    payload?.data?.document?.id ||
-    payload?.document?.id ||
-    payload?.document_id ||
-    payload?.data?.document_id ||
-    null
-  );
+  // Formato real Assinafy: payload.object.id
+  return payload?.object?.id || null;
 }
 
 function extractEvent(payload) {
-  return (
-    payload?.event ||
-    payload?.type ||
-    payload?.data?.event ||
-    ''
-  ).toLowerCase();
+  return (payload?.event || '').toLowerCase();
 }
 
 function extractSignerStep(payload) {
-  const signer =
-    payload?.data?.signer ||
-    payload?.signer ||
-    null;
-  return signer?.step ?? signer?.order ?? null;
+  // Quem assinou está em payload.subject.id
+  // O step está em payload.object.assignment.signers[]
+  const subjectId = payload?.subject?.id;
+  const signers = payload?.object?.assignment?.signers || [];
+  const signer = signers.find(s => s.id === subjectId);
+  return signer?.step ?? null;
 }
 
 function isFullySigned(event) {
