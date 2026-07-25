@@ -1,6 +1,9 @@
 {
+  "cleanUrls": true,
   "rewrites": [
-    { "source": "/version.json", "destination": "/api/version" }
+    { "source": "/version.json", "destination": "/api/version" },
+    { "source": "/admin", "destination": "/admin/index.html" },
+    { "source": "/admin/", "destination": "/admin/index.html" }
   ],
   "headers": [
     {
