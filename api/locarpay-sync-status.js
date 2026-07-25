@@ -78,6 +78,7 @@ export default async function handler(req, res) {
     const assignResp = await assinafyGet(apiKey, `documents/${assinafyDocumentId}/assignments/${assinafyAssignmentId}`);
     const signers = assignResp?.data?.signers || [];
 
+    result.rawAssignResp = assignResp;
     result.signers = signers.map(s => ({ email: s.email, status: s.status, step: s.step }));
 
     const tenantEmailLc = tenantEmail.toLowerCase();
