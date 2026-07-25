@@ -74,11 +74,24 @@ export default async function handler(req, res) {
       return res.status(200).json({ ...result, error: 'IDs Assinafy não preenchidos no contrato' });
     }
 
-    // 3. Consulta assignment na Assinafy
-    const assignResp = await assinafyGet(apiKey, `documents/${assinafyDocumentId}/assignments/${assinafyAssignmentId}`);
-    const signers = assignResp?.data?.signers || [];
+    // 3. Consulta Assinafy - tenta múltiplos endpoints
+    const accountsResp = await assinafyGet(apiKey, 'accounts');
+    const accountId = accountsResp?.data?.[0]?.id;
+    result.accountId = accountId;
 
+    const docResp = accountId
+      ? await assinafyGet(apiKey, `accounts/${accountId}/documents/${assinafyDocumentId}`)
+      : null;
+    result.docStatus = docResp?.data?.status;
+    result.rawDocResp = docResp;
+
+    const assignListResp = await assinafyGet(apiKey, `documents/${assinafyDocumentId}/assignments`);
+    result.rawAssignList = assignListResp;
+
+    const assignResp = await assinafyGet(apiKey, `documents/${assinafyDocumentId}/assignments/${assinafyAssignmentId}`);
     result.rawAssignResp = assignResp;
+
+    const signers = assignResp?.data?.signers || [];
     result.signers = signers.map(s => ({ email: s.email, status: s.status, step: s.step }));
 
     const tenantEmailLc = tenantEmail.toLowerCase();
