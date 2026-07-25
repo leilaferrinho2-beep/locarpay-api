@@ -88,7 +88,10 @@ export default async function handler(req, res) {
     const assignListResp = await assinafyGet(apiKey, `documents/${assinafyDocumentId}/assignments`);
     result.rawAssignList = assignListResp;
 
-    const assignResp = await assinafyGet(apiKey, `documents/${assinafyDocumentId}/assignments/${assinafyAssignmentId}`);
+    // Tenta com accountId (formato correto)
+    const assignResp = accountId
+      ? await assinafyGet(apiKey, `accounts/${accountId}/documents/${assinafyDocumentId}/assignments/${assinafyAssignmentId}`)
+      : await assinafyGet(apiKey, `documents/${assinafyDocumentId}/assignments/${assinafyAssignmentId}`);
     result.rawAssignResp = assignResp;
 
     const signers = assignResp?.data?.signers || [];
