@@ -100,11 +100,19 @@
     renderTenants();
   }
 
+  const DOC_LABELS = {
+    rg_cnh_frente: 'RG / CNH — Frente',
+    rg_cnh_verso: 'RG / CNH — Verso',
+    comprovante_endereco: 'Comprovante de Endereço',
+    holerite: 'Holerite / Renda',
+    imposto_renda: 'Imposto de Renda'
+  };
+
   function renderTenants() {
     const tbody = $('tenants-tbody');
     tbody.innerHTML = '';
     if (tenants.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty">Nenhum inquilino cadastrado</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhum inquilino cadastrado</td></tr>';
       return;
     }
     const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -118,16 +126,56 @@
         : digital
           ? '<span class="badge digital">Digital</span>'
           : '<span class="badge active">Ativo</span>';
+      const docs = t.docs || {};
+      const docsCount = Object.keys(docs).length;
+      const docsBadge = docsCount > 0
+        ? `<span class="badge active" style="cursor:pointer" title="Ver documentos">📄 ${docsCount}/5</span>`
+        : `<span class="badge inactive" style="cursor:pointer" title="Sem documentos">📄 0/5</span>`;
       const row = document.createElement('tr');
+      row.style.cursor = 'pointer';
       row.innerHTML = `
         <td>${t.name || '—'}</td>
         <td>${t.email || '—'}</td>
         <td>${property}</td>
         <td>${rent}</td>
         <td>${status}</td>
+        <td>${docsBadge}</td>
       `;
+      row.addEventListener('click', () => openDocsModal(t));
       tbody.appendChild(row);
     });
+  }
+
+  async function openDocsModal(tenant) {
+    // Reload fresh docs from Firestore in case updated via app
+    const snap = await getDoc(doc(db, 'users', tenant.id));
+    const docs = snap.data()?.docs || {};
+
+    $('docs-modal-name').textContent = tenant.name || tenant.email;
+    const grid = $('docs-grid');
+    grid.innerHTML = '';
+
+    Object.entries(DOC_LABELS).forEach(([key, label]) => {
+      const url = docs[key];
+      const cell = document.createElement('div');
+      cell.className = 'doc-cell';
+      if (url) {
+        cell.innerHTML = `
+          <a href="${url}" target="_blank" rel="noopener">
+            <img src="${url}" alt="${label}" onerror="this.src=''">
+          </a>
+          <div class="doc-label">✅ ${label}</div>
+        `;
+      } else {
+        cell.innerHTML = `
+          <div class="doc-placeholder">📄</div>
+          <div class="doc-label" style="color:#555">⬜ ${label}</div>
+        `;
+      }
+      grid.appendChild(cell);
+    });
+
+    $('modal-docs').style.display = 'flex';
   }
 
   // ── Cadastrar inquilino ───────────────────────────────────
@@ -301,9 +349,11 @@
   $('tenant-save').addEventListener('click', saveTenant);
 
   // Fechar modal clicando fora
-  [$('modal'), $('modal-tenant')].forEach(m => {
+  [$('modal'), $('modal-tenant'), $('modal-docs')].forEach(m => {
     m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
   });
+
+  $('docs-modal-close').addEventListener('click', () => { $('modal-docs').style.display = 'none'; });
 
   onAuthStateChanged(auth, async user => {
     if (!user) { showSection('login-section'); return; }
@@ -479,6 +529,28 @@
   input:checked + .slider { background: #4F86F7; }
   input:checked + .slider:before { transform: translateX(20px); }
 
+  /* Documentos */
+  .docs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+  }
+  .doc-cell { text-align: center; }
+  .doc-cell img {
+    width: 100%; aspect-ratio: 4/3; object-fit: cover;
+    border-radius: 10px; border: 1px solid #3a3d52;
+    transition: opacity 0.15s;
+  }
+  .doc-cell img:hover { opacity: 0.85; }
+  .doc-placeholder {
+    width: 100%; aspect-ratio: 4/3;
+    background: #1a1d2e; border: 2px dashed #3a3d52;
+    border-radius: 10px; display: flex;
+    align-items: center; justify-content: center;
+    font-size: 36px; color: #444;
+  }
+  .doc-label { font-size: 12px; color: #888; margin-top: 6px; }
+
   /* Toast */
   .toast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
@@ -549,7 +621,7 @@
       <thead>
         <tr>
           <th>Nome</th><th>E-mail</th><th>Imóvel</th>
-          <th>Aluguel</th><th>Contrato</th>
+          <th>Aluguel</th><th>Contrato</th><th>Docs</th>
         </tr>
       </thead>
       <tbody id="tenants-tbody">
@@ -646,6 +718,17 @@
       <button class="btn-outline" id="tenant-cancel">Cancelar</button>
       <button class="btn" id="tenant-save">Cadastrar</button>
     </div>
+  </div>
+</div>
+
+<!-- Modal: Documentos do Inquilino -->
+<div id="modal-docs" class="modal-overlay">
+  <div class="modal-box" style="width:700px;max-width:95%">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h3 style="margin:0">Documentos — <span id="docs-modal-name"></span></h3>
+      <button class="btn-outline" id="docs-modal-close">Fechar</button>
+    </div>
+    <div id="docs-grid" class="docs-grid"></div>
   </div>
 </div>
 
