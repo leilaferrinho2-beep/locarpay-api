@@ -73,10 +73,12 @@ function isFullySigned(event) {
   return ['document_ready', 'document_completed', 'assignment.completed', 'completed', 'finished'].some(e => event.includes(e));
 }
 
+function isSignerSignedDocument(event) {
+  // signer_signed_document = um signatário assinou (Assinafy)
+  return event === 'signer_signed_document';
+}
+
 function isSignerRequested(event) {
-  // signature_requested dispara quando um signatário é solicitado.
-  // No fluxo step-based: dispara para step 1 (início) e step 2 (após proprietário assinar).
-  // Só nos interessa quando step >= 2 (inquilino sendo solicitado = proprietário já assinou).
   return event === 'signature_requested';
 }
 
@@ -122,17 +124,24 @@ export default async function handler(req, res) {
       updates.assinafyStatus = { stringValue: 'completed' };
       updates.ownerSigned = { booleanValue: true };
       console.log(`[assinafy-webhook] contrato ${contractFirestoreId} concluído`);
-    } else if (isSignerRequested(event)) {
+    } else if (isSignerSignedDocument(event)) {
+      // Um signatário assinou. Step 1 = proprietário, step 2 = inquilino.
       const step = extractSignerStep(payload);
-      // signature_requested com step=2 significa que o inquilino foi solicitado a assinar,
-      // ou seja, o proprietário (step 1) já assinou.
-      // Se step for null/desconhecido, logamos mas não atualizamos (aguarda payload real).
-      if (step !== null && step >= 2) {
+      if (step === 1 || step === null) {
+        // Proprietário assinou (step 1) ou step desconhecido — marca ownerSigned
         updates.ownerSigned = { booleanValue: true };
-        console.log(`[assinafy-webhook] proprietário assinou, inquilino solicitado (step=${step}) — contrato ${contractFirestoreId}`);
+        console.log(`[assinafy-webhook] proprietário assinou contrato ${contractFirestoreId} (step=${step})`);
       } else {
-        console.log(`[assinafy-webhook] signature_requested step=${step} — aguardando step>=2 para marcar ownerSigned`);
+        // Inquilino assinou (step 2) — contrato concluído
+        updates.ownerSigned = { booleanValue: true };
+        updates.assinafyStatus = { stringValue: 'completed' };
+        console.log(`[assinafy-webhook] inquilino assinou contrato ${contractFirestoreId} (step=${step})`);
       }
+    } else if (isSignerRequested(event)) {
+      // signature_requested: logamos para diagnóstico, sem ação
+      const step = extractSignerStep(payload);
+      console.log(`[assinafy-webhook] signature_requested step=${step} — sem ação`);
+      return res.status(200).json({ ok: true, skipped: 'signature_requested sem ação' });
     } else {
       console.log(`[assinafy-webhook] evento '${event}' não mapeado — nenhuma ação`);
       return res.status(200).json({ ok: true, skipped: `evento '${event}' não mapeado` });
