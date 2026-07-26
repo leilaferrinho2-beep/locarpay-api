@@ -4,6 +4,6 @@ export default function handler(req, res) {
   res.status(200).json({
     versionCode: 53,
     versionName: "3.31",
-    url: "https://locarpay-api.vercel.app/download/locarpay-v53.apk"
+    url: "https://github.com/leilaferrinho2-beep/locarpay-api/releases/download/v3.31/locarpay-v53.apk"
   });
 }
