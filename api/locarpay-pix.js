@@ -31,16 +31,28 @@ async function asaasGet(path, apiKey) {
 }
 
 async function findOrCreateCustomer(name, email, cpf, apiKey) {
+  const cpfDigits = (cpf || '').replace(/\D/g, '');
+
   // Tenta buscar cliente existente por email
   const search = await fetch(
     `https://api.asaas.com/v3/customers?email=${encodeURIComponent(email)}&limit=1`,
     { headers: { 'access_token': apiKey } }
   );
   const searchJson = await search.json();
-  if (searchJson.data?.length > 0) return searchJson.data[0].id;
+  if (searchJson.data?.length > 0) {
+    const existing = searchJson.data[0];
+    // Atualiza CPF se o cliente existente não tiver
+    if (!existing.cpfCnpj && cpfDigits.length === 11) {
+      await fetch(`https://api.asaas.com/v3/customers/${existing.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
+        body: JSON.stringify({ cpfCnpj: cpfDigits })
+      });
+    }
+    return existing.id;
+  }
 
   // Cria novo cliente
-  const cpfDigits = (cpf || '').replace(/\D/g, '');
   const body = { name: name || email.split('@')[0], email };
   if (cpfDigits.length === 11) body.cpfCnpj = cpfDigits;
   const customer = await asaasPost('/customers', body, apiKey);
