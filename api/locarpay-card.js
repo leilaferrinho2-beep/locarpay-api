@@ -395,17 +395,16 @@ async function handleRefund(db, body, apiKey) {
   if (!chargeSnap.exists) throw Object.assign(new Error('Cobrança não encontrada'), { status: 404 });
 
   const charge = chargeSnap.data();
-  let asaasMessage = 'sem cobrança Asaas';
 
-  if (charge.asaasChargeId) {
-    try {
-      await asaasReq('POST', `/payments/${charge.asaasChargeId}/refunds`, {}, apiKey);
-      asaasMessage = 'estorno solicitado no Asaas';
-    } catch (e) {
-      // Se já foi estornado ou expirou, continua a reverter no Firestore
-      asaasMessage = `Asaas: ${e.message}`;
-    }
+  if (!charge.asaasChargeId) {
+    throw Object.assign(
+      new Error('Cobrança sem ID de transação Asaas — estorno não é possível'),
+      { status: 400 }
+    );
   }
+
+  const txId = charge.asaasChargeId;
+  await asaasReq('POST', `/payments/${txId}/refunds`, {}, apiKey);
 
   await db.collection('charges').doc(chargeId).update({
     status:        'pending',
@@ -414,10 +413,10 @@ async function handleRefund(db, body, apiKey) {
     pixQrCode:     '',
     paidAt:        null,
     refundedAt:    new Date(),
-    refundNote:    asaasMessage
+    refundNote:    `estornado via Asaas (ID: ${txId})`
   });
 
-  return { ok: true, message: `Estorno realizado (${asaasMessage})` };
+  return { ok: true, message: `Estorno solicitado com sucesso`, asaasChargeId: txId };
 }
 
 // ── PREVIEW VALORES ──────────────────────────────────────────────────────────
