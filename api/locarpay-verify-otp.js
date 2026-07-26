@@ -53,8 +53,34 @@ export default async function handler(req, res) {
     const licenseDoc = await db.collection('licenses').doc(email.toLowerCase()).get();
     const hasLicense = licenseDoc.exists && licenseDoc.data().active === true;
 
-    const userDoc = await db.collection('users').doc(uid).get();
-    const userRole = userDoc.exists ? (userDoc.data().role || 'tenant') : 'tenant';
+    // Busca documento do usuário — pode ter sido criado com ID diferente do UID (pelo admin)
+    let userRole = 'tenant';
+    let userDoc = await db.collection('users').doc(uid).get();
+
+    if (!userDoc.exists) {
+      // Documento ainda não está no caminho users/{uid} — busca pelo email
+      const emailQuery = await db.collection('users')
+        .whereEqualTo('email', email.toLowerCase())
+        .limit(1).get();
+
+      if (!emailQuery.empty) {
+        const existing = emailQuery.docs[0];
+        userRole = existing.data().role || 'tenant';
+
+        // Cria/atualiza users/{uid} com os dados do usuário para que futuras
+        // buscas por UID funcionem (ex: aceite de termos, perfil)
+        await db.collection('users').doc(uid).set({
+          ...existing.data(),
+          id: uid,
+          authUid: uid
+        }, { merge: true });
+      } else {
+        // Usuário não cadastrado pelo admin
+        userRole = 'tenant';
+      }
+    } else {
+      userRole = userDoc.data().role || 'tenant';
+    }
 
     const role = hasLicense ? 'admin' : userRole;
 
