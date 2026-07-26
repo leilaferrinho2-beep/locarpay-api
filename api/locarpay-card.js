@@ -465,6 +465,39 @@ async function handlePreview(db, body) {
   return { baseValue, multa, juros, diasAtraso, valueComAtraso, taxaCartao, totalCartao };
 }
 
+// ── SYNC STATUS ──────────────────────────────────────────────────────────────
+async function handleSyncStatus(db, apiKey) {
+  // Busca todas as cobranças "paid" que têm asaasChargeId
+  const snap = await db.collection('charges')
+    .where('status', '==', 'paid')
+    .get();
+
+  const toReset = [];
+
+  await Promise.all(snap.docs.map(async (doc) => {
+    const data = doc.data();
+    if (!data.asaasChargeId) return;
+    try {
+      const payment = await asaasReq('GET', `/payments/${data.asaasChargeId}`, null, apiKey);
+      // REFUNDED ou CHARGEBACK = estorno confirmado no Asaas
+      if (['REFUNDED', 'CHARGEBACK', 'REFUND_REQUESTED'].includes(payment.status)) {
+        await doc.ref.update({
+          status:        'pending',
+          asaasChargeId: '',
+          pixCopyPaste:  '',
+          pixQrCode:     '',
+          paidAt:        null,
+          refundedAt:    new Date(),
+          refundNote:    `sincronizado do Asaas: ${payment.status}`
+        });
+        toReset.push(doc.id);
+      }
+    } catch (_) { /* ignora cobranças que não existem mais no Asaas */ }
+  }));
+
+  return { ok: true, updated: toReset.length, chargeIds: toReset };
+}
+
 // ── HANDLER ──────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -487,6 +520,7 @@ export default async function handler(req, res) {
     if (step === 'preview')      return res.status(200).json(await handlePreview(db, req.body));
     if (step === 'list-saved')   return res.status(200).json(await handleListSaved(db, req.body));
     if (step === 'delete-saved') return res.status(200).json(await handleDeleteSaved(db, req.body));
+    if (step === 'sync-status')  return res.status(200).json(await handleSyncStatus(db, apiKey));
     return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {
