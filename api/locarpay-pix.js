@@ -138,13 +138,21 @@ export default async function handler(req, res) {
 
     const value = charge.totalAmount || charge.baseRent || 5;
 
-    // Cria cobrança PIX no Asaas
+    // Configurações de atraso (lidas do Firestore ou padrão)
+    const configData = configSnap.data() || {};
+    const finePercentage    = configData.finePercentage    ?? 2;    // multa 2% padrão
+    const interestRate      = configData.interestRate      ?? 1;    // juros 1%/mês padrão
+    const cardFeePercentage = configData.cardFeePercentage ?? 2.99; // taxa cartão 2.99%
+
+    // Cria cobrança PIX no Asaas com configuração de juros/multa
     const asaasCharge = await asaasPost('/payments', {
       customer:    customerId,
       billingType: 'PIX',
       value,
       dueDate,
-      description: `Aluguel ${dueDate.slice(0, 7)}`
+      description: `Aluguel ${dueDate.slice(0, 7)}`,
+      fine:     { value: finePercentage },
+      interest: { value: interestRate }
     }, apiKey);
 
     // Busca QR Code
