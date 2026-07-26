@@ -47,13 +47,41 @@ async function findOrCreateCustomer(name, email, cpf, apiKey) {
 
 // ── INIT ────────────────────────────────────────────────────────────────────
 async function handleInit(db, body, apiKey) {
-  const { tenantId, chargeId, card } = body;
-  if (!tenantId || !chargeId || !card)
-    throw Object.assign(new Error('tenantId, chargeId e card obrigatórios'), { status: 400 });
+  const { tenantId, chargeId, card, savedCardId } = body;
+  if (!tenantId || !chargeId)
+    throw Object.assign(new Error('tenantId e chargeId obrigatórios'), { status: 400 });
 
-  const { holderName, number, expiryMonth, expiryYear, ccv, postalCode, addressNumber } = card;
-  if (!holderName || !number || !expiryMonth || !expiryYear || !ccv)
-    throw Object.assign(new Error('Dados do cartão incompletos'), { status: 400 });
+  let holderName, number, expiryMonth, expiryYear, ccv, postalCode, addressNumber;
+  let usingSavedCard = false;
+  let savedCardFallback = null;
+  let savedToken = null;
+
+  if (savedCardId) {
+    // Usa cartão salvo
+    const savedSnap = await db.collection('users').doc(tenantId).collection('savedCards').doc(savedCardId).get();
+    if (!savedSnap.exists) throw Object.assign(new Error('Cartão salvo não encontrado'), { status: 404 });
+    const sc = savedSnap.data();
+    holderName   = sc.holderName;
+    expiryMonth  = sc.expiryMonth;
+    expiryYear   = sc.expiryYear;
+    savedToken   = sc.cardToken || null;
+    savedCardFallback = sc.cardFallback || null;
+    usingSavedCard = true;
+    // Se temos token, não precisamos de number/ccv
+    if (!savedToken && !savedCardFallback)
+      throw Object.assign(new Error('Dados do cartão salvo incompletos'), { status: 400 });
+    if (savedCardFallback) {
+      number      = savedCardFallback.number;
+      ccv         = savedCardFallback.ccv;
+      postalCode  = savedCardFallback.postalCode;
+      addressNumber = savedCardFallback.addressNumber;
+    }
+  } else {
+    if (!card) throw Object.assign(new Error('card obrigatório'), { status: 400 });
+    ({ holderName, number, expiryMonth, expiryYear, ccv, postalCode, addressNumber } = card);
+    if (!holderName || !number || !expiryMonth || !expiryYear || !ccv)
+      throw Object.assign(new Error('Dados do cartão incompletos'), { status: 400 });
+  }
 
   const [userSnap, chargeSnap, configSnap] = await Promise.all([
     db.collection('users').doc(tenantId).get(),
@@ -81,52 +109,83 @@ async function handleInit(db, body, apiKey) {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const dueDate = tomorrow.toISOString().slice(0, 10);
 
-  const chargeBody = {
-    customer:    customerId,
-    billingType: 'CREDIT_CARD',
-    value:       microValue,
-    dueDate,
-    description: 'Verificacao de cartao LocarPay',
-    creditCard: {
-      holderName,
-      number:      number.replace(/\D/g, ''),
-      expiryMonth: expiryMonth.padStart(2, '0'),
-      expiryYear:  expiryYear.length === 2 ? `20${expiryYear}` : expiryYear,
-      ccv
-    },
-    creditCardHolderInfo: {
-      name:          holderName,
-      email,
-      cpfCnpj:       cpf,
-      postalCode:    (postalCode || '').replace(/\D/g, '') || '00000000',
-      addressNumber: addressNumber || 'SN',
-      phone:         phone || '11999999999'
-    }
+  const holderInfoBase = {
+    name:          holderName,
+    email,
+    cpfCnpj:       cpf,
+    postalCode:    (postalCode || '').replace(/\D/g, '') || '00000000',
+    addressNumber: addressNumber || 'SN',
+    phone:         phone || '11999999999'
   };
 
-  const asaasCharge = await asaasReq('POST', '/payments', chargeBody, apiKey);
-  const cardToken   = asaasCharge.creditCard?.creditCardToken || null;
+  let chargeBody;
+  if (savedToken) {
+    chargeBody = {
+      customer:    customerId,
+      billingType: 'CREDIT_CARD',
+      value:       microValue,
+      dueDate,
+      description: 'Verificacao de cartao LocarPay',
+      creditCardToken:      savedToken,
+      creditCardHolderInfo: holderInfoBase
+    };
+  } else {
+    chargeBody = {
+      customer:    customerId,
+      billingType: 'CREDIT_CARD',
+      value:       microValue,
+      dueDate,
+      description: 'Verificacao de cartao LocarPay',
+      creditCard: {
+        holderName,
+        number:      number.replace(/\D/g, ''),
+        expiryMonth: expiryMonth.padStart(2, '0'),
+        expiryYear:  expiryYear.length === 2 ? `20${expiryYear}` : expiryYear,
+        ccv
+      },
+      creditCardHolderInfo: holderInfoBase
+    };
+  }
 
-  // Salva no Firestore — valor NUNCA sai para o cliente
+  const asaasCharge = await asaasReq('POST', '/payments', chargeBody, apiKey);
+  const cardToken   = asaasCharge.creditCard?.creditCardToken || savedToken || null;
+
   const verRef = db.collection('cardVerifications').doc();
-  await verRef.set({
+  const expMonth = expiryMonth ? expiryMonth.padStart(2, '0') : (savedCardFallback?.expiryMonth || '');
+  const expYear  = expiryYear  ? (expiryYear.length === 2 ? `20${expiryYear}` : expiryYear) : (savedCardFallback?.expiryYear || '');
+
+  const verData = {
     tenantId,
     chargeId,
     customerId,
-    expectedAmount:   microValue,
+    expectedAmount: microValue,
     cardToken,
-    asaasVerifyId:    asaasCharge.id,
+    asaasVerifyId:  asaasCharge.id,
     holderName,
-    expiryMonth:      expiryMonth.padStart(2, '0'),
-    expiryYear:       expiryYear.length === 2 ? `20${expiryYear}` : expiryYear,
-    ccv,
-    postalCode:       (postalCode || '').replace(/\D/g, ''),
-    addressNumber:    addressNumber || 'SN',
-    attempts:         0,
-    verified:         false,
-    createdAt:        FieldValue.serverTimestamp(),
-    expiresAt:        new Date(Date.now() + 24 * 60 * 60 * 1000)
-  });
+    expiryMonth:    expMonth,
+    expiryYear:     expYear,
+    postalCode:     (postalCode || '').replace(/\D/g, ''),
+    addressNumber:  addressNumber || 'SN',
+    attempts:       0,
+    verified:       false,
+    createdAt:      FieldValue.serverTimestamp(),
+    expiresAt:      new Date(Date.now() + 24 * 60 * 60 * 1000)
+  };
+
+  // Guarda fallback apenas se não temos token
+  if (!cardToken) {
+    verData.cardFallback = savedCardFallback || {
+      holderName,
+      number:        number.replace(/\D/g, ''),
+      expiryMonth:   expMonth,
+      expiryYear:    expYear,
+      ccv,
+      postalCode:    (postalCode || '').replace(/\D/g, ''),
+      addressNumber: addressNumber || 'SN'
+    };
+  }
+
+  await verRef.set(verData);
 
   return { verificationId: verRef.id };
 }
@@ -176,6 +235,11 @@ async function handleConfirm(db, body, apiKey) {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const dueDate  = tomorrow.toISOString().slice(0, 10);
 
+  const userSnap2 = await db.collection('users').doc(ver.tenantId).get();
+  const cpfConfirm = (userSnap2.data()?.cpf || '').replace(/\D/g, '');
+  const emailConfirm = userSnap2.data()?.email || '';
+  const phoneConfirm = (userSnap2.data()?.phone || '').replace(/\D/g, '') || '11999999999';
+
   let asaasRealCharge;
   if (ver.cardToken) {
     // Usa token — sem precisar dos dados do cartão de novo
@@ -188,24 +252,104 @@ async function handleConfirm(db, body, apiKey) {
       creditCardToken:     ver.cardToken,
       creditCardHolderInfo: {
         name:    ver.holderName,
-        cpfCnpj: (charge.tenantCpf || '').replace(/\D/g, '') || (await db.collection('users').doc(ver.tenantId).get()).data()?.cpf?.replace(/\D/g, '') || ''
+        email:   emailConfirm,
+        cpfCnpj: cpfConfirm,
+        postalCode:    ver.postalCode || '00000000',
+        addressNumber: ver.addressNumber || 'SN',
+        phone:   phoneConfirm
+      }
+    }, apiKey);
+  } else if (ver.cardFallback) {
+    // Fallback: re-envia dados do cartão armazenados temporariamente
+    const fb = ver.cardFallback;
+    asaasRealCharge = await asaasReq('POST', '/payments', {
+      customer:    ver.customerId,
+      billingType: 'CREDIT_CARD',
+      value,
+      dueDate,
+      description: `Aluguel ${dueDate.slice(0, 7)}`,
+      creditCard: {
+        holderName:  fb.holderName,
+        number:      fb.number,
+        expiryMonth: fb.expiryMonth,
+        expiryYear:  fb.expiryYear,
+        ccv:         fb.ccv
+      },
+      creditCardHolderInfo: {
+        name:          fb.holderName,
+        email:         emailConfirm,
+        cpfCnpj:       cpfConfirm,
+        postalCode:    fb.postalCode || '00000000',
+        addressNumber: fb.addressNumber || 'SN',
+        phone:         phoneConfirm
       }
     }, apiKey);
   } else {
-    throw new Error('Token do cartão não disponível. Tente novamente.');
+    throw new Error('Dados do cartão não disponíveis. Recadastre o cartão.');
   }
 
   const paid = ['CONFIRMED','RECEIVED'].includes(asaasRealCharge.status);
-  await Promise.all([
+
+  // Tenta extrair token do cartão da resposta real (para salvar)
+  const realToken = asaasRealCharge.creditCard?.creditCardToken || ver.cardToken || null;
+  const lastFour  = asaasRealCharge.creditCard?.creditCardNumber?.slice(-4) || ver.cardFallback?.number?.slice(-4) || '';
+  const brand     = asaasRealCharge.creditCard?.creditCardBrand || '';
+
+  const ops = [
     db.collection('charges').doc(ver.chargeId).update({
       asaasChargeId: asaasRealCharge.id,
       status:        paid ? 'paid' : 'under_review',
       ...(paid ? { paidAt: FieldValue.serverTimestamp() } : {})
     }),
-    verRef.update({ verified: true, paidAt: FieldValue.serverTimestamp() })
-  ]);
+    verRef.update({ verified: true, paidAt: FieldValue.serverTimestamp(), cardFallback: FieldValue.delete() })
+  ];
+
+  // Salvar cartão se solicitado
+  if (body.saveCard && paid) {
+    const savedCardData = {
+      holderName:  ver.cardFallback?.holderName || ver.holderName,
+      lastFour,
+      brand,
+      expiryMonth: ver.cardFallback?.expiryMonth || ver.expiryMonth,
+      expiryYear:  ver.cardFallback?.expiryYear  || ver.expiryYear,
+      createdAt:   FieldValue.serverTimestamp()
+    };
+    if (realToken) {
+      savedCardData.cardToken = realToken;
+    } else if (ver.cardFallback) {
+      savedCardData.cardFallback = ver.cardFallback;
+    }
+    ops.push(db.collection('users').doc(ver.tenantId).collection('savedCards').add(savedCardData));
+  }
+
+  await Promise.all(ops);
 
   return { paid, status: asaasRealCharge.status, message: paid ? 'Pagamento aprovado!' : 'Pagamento em análise.' };
+}
+
+// ── LIST SAVED CARDS ─────────────────────────────────────────────────────────
+async function handleListSaved(db, body) {
+  const { tenantId } = body;
+  if (!tenantId) throw Object.assign(new Error('tenantId obrigatório'), { status: 400 });
+  const snap = await db.collection('users').doc(tenantId).collection('savedCards')
+    .orderBy('createdAt', 'desc').limit(5).get();
+  const cards = snap.docs.map(d => ({
+    id:         d.id,
+    holderName: d.data().holderName,
+    lastFour:   d.data().lastFour,
+    brand:      d.data().brand,
+    expiryMonth:d.data().expiryMonth,
+    expiryYear: d.data().expiryYear
+  }));
+  return { cards };
+}
+
+// ── DELETE SAVED CARD ─────────────────────────────────────────────────────────
+async function handleDeleteSaved(db, body) {
+  const { tenantId, savedCardId } = body;
+  if (!tenantId || !savedCardId) throw Object.assign(new Error('tenantId e savedCardId obrigatórios'), { status: 400 });
+  await db.collection('users').doc(tenantId).collection('savedCards').doc(savedCardId).delete();
+  return { ok: true };
 }
 
 // ── HANDLER ──────────────────────────────────────────────────────────────────
@@ -224,15 +368,11 @@ export default async function handler(req, res) {
 
     const { step } = req.body || {};
 
-    if (step === 'init') {
-      const result = await handleInit(db, req.body, apiKey);
-      return res.status(200).json(result);
-    }
-    if (step === 'confirm') {
-      const result = await handleConfirm(db, req.body, apiKey);
-      return res.status(200).json(result);
-    }
-    return res.status(400).json({ error: 'step deve ser "init" ou "confirm"' });
+    if (step === 'init')         return res.status(200).json(await handleInit(db, req.body, apiKey));
+    if (step === 'confirm')      return res.status(200).json(await handleConfirm(db, req.body, apiKey));
+    if (step === 'list-saved')   return res.status(200).json(await handleListSaved(db, req.body));
+    if (step === 'delete-saved') return res.status(200).json(await handleDeleteSaved(db, req.body));
+    return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {
     console.error('locarpay-card error:', e.message);
