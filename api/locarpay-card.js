@@ -386,6 +386,40 @@ async function handleDeleteSaved(db, body) {
   return { ok: true };
 }
 
+// ── REFUND ────────────────────────────────────────────────────────────────────
+async function handleRefund(db, body, apiKey) {
+  const { chargeId } = body;
+  if (!chargeId) throw Object.assign(new Error('chargeId obrigatório'), { status: 400 });
+
+  const chargeSnap = await db.collection('charges').doc(chargeId).get();
+  if (!chargeSnap.exists) throw Object.assign(new Error('Cobrança não encontrada'), { status: 404 });
+
+  const charge = chargeSnap.data();
+  let asaasMessage = 'sem cobrança Asaas';
+
+  if (charge.asaasChargeId) {
+    try {
+      await asaasReq('POST', `/payments/${charge.asaasChargeId}/refunds`, {}, apiKey);
+      asaasMessage = 'estorno solicitado no Asaas';
+    } catch (e) {
+      // Se já foi estornado ou expirou, continua a reverter no Firestore
+      asaasMessage = `Asaas: ${e.message}`;
+    }
+  }
+
+  await db.collection('charges').doc(chargeId).update({
+    status:        'pending',
+    asaasChargeId: '',
+    pixCopyPaste:  '',
+    pixQrCode:     '',
+    paidAt:        null,
+    refundedAt:    new Date(),
+    refundNote:    asaasMessage
+  });
+
+  return { ok: true, message: `Estorno realizado (${asaasMessage})` };
+}
+
 // ── PREVIEW VALORES ──────────────────────────────────────────────────────────
 async function handlePreview(db, body) {
   const { chargeId } = body;
@@ -443,6 +477,7 @@ export default async function handler(req, res) {
 
     if (step === 'init')         return res.status(200).json(await handleInit(db, req.body, apiKey));
     if (step === 'confirm')      return res.status(200).json(await handleConfirm(db, req.body, apiKey));
+    if (step === 'refund')       return res.status(200).json(await handleRefund(db, req.body, apiKey));
     if (step === 'preview')      return res.status(200).json(await handlePreview(db, req.body));
     if (step === 'list-saved')   return res.status(200).json(await handleListSaved(db, req.body));
     if (step === 'delete-saved') return res.status(200).json(await handleDeleteSaved(db, req.body));
