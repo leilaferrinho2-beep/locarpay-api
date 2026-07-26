@@ -44,10 +44,14 @@ async function findOrCreateCustomer(name, email, cpf, apiKey) {
     // Atualiza CPF se o cliente existente não tiver
     if (!existing.cpfCnpj && cpfDigits.length === 11) {
       await fetch(`https://api.asaas.com/v3/customers/${existing.id}`, {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
-        body: JSON.stringify({ cpfCnpj: cpfDigits })
+        body: JSON.stringify({ name: existing.name, cpfCnpj: cpfDigits })
       });
+    }
+    // Se ainda sem CPF, lança erro claro
+    if (!existing.cpfCnpj && cpfDigits.length !== 11) {
+      throw new Error('CPF do inquilino não cadastrado. Peça ao administrador para atualizar o cadastro.');
     }
     return existing.id;
   }
