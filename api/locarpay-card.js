@@ -221,10 +221,17 @@ async function handleConfirm(db, body, apiKey) {
     );
   }
 
-  // Valor correto — estorna o micro-cobro
-  try {
-    await asaasReq('POST', `/payments/${ver.asaasVerifyId}/refunds`, {}, apiKey);
-  } catch (_) { /* estorno falhou mas seguimos */ }
+  // Valor correto — cancela a micro-cobrança (ainda PENDING → cancelamento imediato,
+  // sem aparecer na fatura; se já capturada, faz estorno como fallback)
+  if (ver.asaasVerifyId) {
+    try {
+      await asaasReq('POST', `/payments/${ver.asaasVerifyId}/cancel`, {}, apiKey);
+    } catch (_) {
+      try {
+        await asaasReq('POST', `/payments/${ver.asaasVerifyId}/refunds`, {}, apiKey);
+      } catch (_2) { /* ignora se já cancelado/estornado */ }
+    }
+  }
 
   // Cobra o aluguel real
   const [chargeSnap, configSnap2] = await Promise.all([
