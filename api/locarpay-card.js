@@ -473,6 +473,42 @@ async function handlePreview(db, body) {
   return { baseValue, multa, juros, diasAtraso, valueComAtraso, taxaCartao, totalCartao };
 }
 
+// ── SYNC CUSTOMERS (atualiza mobilePhone no Asaas para todos os inquilinos) ──
+async function handleSyncCustomers(db, apiKey) {
+  const usersSnap = await db.collection('users').get();
+  const results = { updated: 0, skipped: 0, errors: [] };
+
+  await Promise.all(usersSnap.docs.map(async (doc) => {
+    const user = doc.data();
+    const phone = (user.phone || '').replace(/\D/g, '');
+    const email = user.email || '';
+    if (!email || phone.length < 10) { results.skipped++; return; }
+
+    try {
+      const search = await fetch(
+        `https://api.asaas.com/v3/customers?email=${encodeURIComponent(email)}&limit=1`,
+        { headers: { 'access_token': apiKey } }
+      );
+      const { data } = await search.json();
+      if (!data?.length) { results.skipped++; return; }
+
+      const existing = data[0];
+      if (existing.mobilePhone) { results.skipped++; return; } // já tem
+
+      await fetch(`https://api.asaas.com/v3/customers/${existing.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
+        body: JSON.stringify({ name: existing.name, mobilePhone: phone })
+      });
+      results.updated++;
+    } catch (e) {
+      results.errors.push(`${email}: ${e.message}`);
+    }
+  }));
+
+  return { ok: true, ...results };
+}
+
 // ── SYNC STATUS ──────────────────────────────────────────────────────────────
 async function handleSyncStatus(db, apiKey) {
   // Busca todas as cobranças "paid" que têm asaasChargeId
@@ -528,7 +564,8 @@ export default async function handler(req, res) {
     if (step === 'preview')      return res.status(200).json(await handlePreview(db, req.body));
     if (step === 'list-saved')   return res.status(200).json(await handleListSaved(db, req.body));
     if (step === 'delete-saved') return res.status(200).json(await handleDeleteSaved(db, req.body));
-    if (step === 'sync-status')  return res.status(200).json(await handleSyncStatus(db, apiKey));
+    if (step === 'sync-status')    return res.status(200).json(await handleSyncStatus(db, apiKey));
+    if (step === 'sync-customers') return res.status(200).json(await handleSyncCustomers(db, apiKey));
     return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {
