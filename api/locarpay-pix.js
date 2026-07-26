@@ -30,10 +30,10 @@ async function asaasGet(path, apiKey) {
   return json;
 }
 
-async function findOrCreateCustomer(name, email, cpf, apiKey) {
-  const cpfDigits = (cpf || '').replace(/\D/g, '');
+async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
+  const cpfDigits   = (cpf   || '').replace(/\D/g, '');
+  const phoneDigits = (phone || '').replace(/\D/g, '');
 
-  // Tenta buscar cliente existente por email
   const search = await fetch(
     `https://api.asaas.com/v3/customers?email=${encodeURIComponent(email)}&limit=1`,
     { headers: { 'access_token': apiKey } }
@@ -41,24 +41,27 @@ async function findOrCreateCustomer(name, email, cpf, apiKey) {
   const searchJson = await search.json();
   if (searchJson.data?.length > 0) {
     const existing = searchJson.data[0];
-    // Atualiza CPF se o cliente existente não tiver
-    if (!existing.cpfCnpj && cpfDigits.length === 11) {
+    const needsUpdate = (!existing.cpfCnpj && cpfDigits.length === 11)
+                     || (!existing.mobilePhone && phoneDigits.length >= 10);
+    if (needsUpdate) {
+      const patch = { name: existing.name };
+      if (!existing.cpfCnpj    && cpfDigits.length === 11)   patch.cpfCnpj     = cpfDigits;
+      if (!existing.mobilePhone && phoneDigits.length >= 10) patch.mobilePhone  = phoneDigits;
       await fetch(`https://api.asaas.com/v3/customers/${existing.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
-        body: JSON.stringify({ name: existing.name, cpfCnpj: cpfDigits })
+        body: JSON.stringify(patch)
       });
     }
-    // Se ainda sem CPF, lança erro claro
     if (!existing.cpfCnpj && cpfDigits.length !== 11) {
       throw new Error('CPF do inquilino não cadastrado. Peça ao administrador para atualizar o cadastro.');
     }
     return existing.id;
   }
 
-  // Cria novo cliente
   const body = { name: name || email.split('@')[0], email };
-  if (cpfDigits.length === 11) body.cpfCnpj = cpfDigits;
+  if (cpfDigits.length === 11)  body.cpfCnpj    = cpfDigits;
+  if (phoneDigits.length >= 10) body.mobilePhone = phoneDigits;
   const customer = await asaasPost('/customers', body, apiKey);
   return customer.id;
 }
@@ -102,6 +105,7 @@ export default async function handler(req, res) {
     const name  = user.name  || user.email?.split('@')[0] || 'Inquilino';
     const email = user.email || '';
     const cpf   = user.cpf   || '';
+    const phone = user.phone || '';
 
     // Se já tem asaasChargeId, tenta só buscar o QR
     if (charge.asaasChargeId) {
@@ -116,7 +120,7 @@ export default async function handler(req, res) {
     }
 
     // Cria ou reutiliza cliente no Asaas
-    const customerId = await findOrCreateCustomer(name, email, cpf, apiKey);
+    const customerId = await findOrCreateCustomer(name, email, cpf, phone, apiKey);
 
     // DueDate: usa a data da cobrança, mas garante que seja >= amanhã se já venceu
     let dueDate;

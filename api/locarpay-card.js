@@ -21,8 +21,10 @@ async function asaasReq(method, path, body, apiKey) {
   return json;
 }
 
-async function findOrCreateCustomer(name, email, cpf, apiKey) {
-  const cpfDigits = (cpf || '').replace(/\D/g, '');
+async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
+  const cpfDigits   = (cpf   || '').replace(/\D/g, '');
+  const phoneDigits = (phone || '').replace(/\D/g, '');
+
   const search = await fetch(
     `https://api.asaas.com/v3/customers?email=${encodeURIComponent(email)}&limit=1`,
     { headers: { 'access_token': apiKey } }
@@ -30,17 +32,23 @@ async function findOrCreateCustomer(name, email, cpf, apiKey) {
   const { data } = await search.json();
   if (data?.length > 0) {
     const existing = data[0];
-    if (!existing.cpfCnpj && cpfDigits.length === 11) {
+    const needsUpdate = (!existing.cpfCnpj && cpfDigits.length === 11)
+                     || (!existing.mobilePhone && phoneDigits.length >= 10);
+    if (needsUpdate) {
+      const patch = { name: existing.name };
+      if (!existing.cpfCnpj   && cpfDigits.length === 11)   patch.cpfCnpj     = cpfDigits;
+      if (!existing.mobilePhone && phoneDigits.length >= 10) patch.mobilePhone = phoneDigits;
       await fetch(`https://api.asaas.com/v3/customers/${existing.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
-        body: JSON.stringify({ name: existing.name, cpfCnpj: cpfDigits })
+        body: JSON.stringify(patch)
       });
     }
     return existing.id;
   }
   const body = { name: name || email.split('@')[0], email };
-  if (cpfDigits.length === 11) body.cpfCnpj = cpfDigits;
+  if (cpfDigits.length === 11)   body.cpfCnpj     = cpfDigits;
+  if (phoneDigits.length >= 10)  body.mobilePhone  = phoneDigits;
   const c = await asaasReq('POST', '/customers', body, apiKey);
   return c.id;
 }
@@ -100,7 +108,7 @@ async function handleInit(db, body, apiKey) {
   if (cpf.length !== 11)
     throw Object.assign(new Error('CPF do inquilino não cadastrado. Peça ao administrador.'), { status: 400 });
 
-  const customerId = await findOrCreateCustomer(name, email, cpf, apiKey);
+  const customerId = await findOrCreateCustomer(name, email, cpf, phone, apiKey);
 
   // Valor aleatório entre R$5,01 e R$9,99 (mínimo Asaas = R$5,00)
   const microValue = parseFloat((5 + Math.random() * 4.98).toFixed(2));
