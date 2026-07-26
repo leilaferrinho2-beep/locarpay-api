@@ -227,9 +227,35 @@ async function handleConfirm(db, body, apiKey) {
   } catch (_) { /* estorno falhou mas seguimos */ }
 
   // Cobra o aluguel real
-  const chargeSnap = await db.collection('charges').doc(ver.chargeId).get();
-  const charge     = chargeSnap.data();
-  const value      = charge.totalAmount || charge.baseRent || 5;
+  const [chargeSnap, configSnap2] = await Promise.all([
+    db.collection('charges').doc(ver.chargeId).get(),
+    db.collection('config').doc('asaas').get()
+  ]);
+  const charge = chargeSnap.data();
+  const configData = configSnap2.data() || {};
+
+  // Taxa do cartão repassada ao inquilino (padrão 2.99% + R$0.49 fixo)
+  const cardFeeRate  = (configData.cardFeePercentage ?? 2.99) / 100;
+  const cardFeeFixed = configData.cardFeeFixed ?? 0.49;
+
+  // Juros/multa por atraso
+  const baseValue   = charge.totalAmount || charge.baseRent || 5;
+  const dueDateObj  = charge.dueDate?.toDate ? charge.dueDate.toDate() : new Date(charge.dueDate?.seconds * 1000);
+  const today       = new Date(); today.setHours(0, 0, 0, 0);
+  const dueDateOnly = new Date(dueDateObj); dueDateOnly.setHours(0, 0, 0, 0);
+  const diasAtraso  = Math.max(0, Math.floor((today - dueDateOnly) / 86400000));
+
+  const finePercentage = (configData.finePercentage ?? 2) / 100;
+  const interestRate   = (configData.interestRate   ?? 1) / 100 / 30; // ao dia
+
+  let valueComAtraso = baseValue;
+  if (diasAtraso > 0) {
+    valueComAtraso = baseValue * (1 + finePercentage + interestRate * diasAtraso);
+    valueComAtraso = parseFloat(valueComAtraso.toFixed(2));
+  }
+
+  // Adiciona taxa do cartão em cima do valor (com atraso, se houver)
+  const value = parseFloat(((valueComAtraso + cardFeeFixed) / (1 - cardFeeRate)).toFixed(2));
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -324,7 +350,15 @@ async function handleConfirm(db, body, apiKey) {
 
   await Promise.all(ops);
 
-  return { paid, status: asaasRealCharge.status, message: paid ? 'Pagamento aprovado!' : 'Pagamento em análise.' };
+  return {
+    paid,
+    status:     asaasRealCharge.status,
+    message:    paid ? 'Pagamento aprovado!' : 'Pagamento em análise.',
+    baseValue,
+    totalCharged: value,
+    diasAtraso,
+    cardFee: parseFloat((value - valueComAtraso).toFixed(2))
+  };
 }
 
 // ── LIST SAVED CARDS ─────────────────────────────────────────────────────────
@@ -352,6 +386,45 @@ async function handleDeleteSaved(db, body) {
   return { ok: true };
 }
 
+// ── PREVIEW VALORES ──────────────────────────────────────────────────────────
+async function handlePreview(db, body) {
+  const { chargeId } = body;
+  if (!chargeId) throw Object.assign(new Error('chargeId obrigatório'), { status: 400 });
+
+  const [chargeSnap, configSnap] = await Promise.all([
+    db.collection('charges').doc(chargeId).get(),
+    db.collection('config').doc('asaas').get()
+  ]);
+  if (!chargeSnap.exists) throw Object.assign(new Error('Cobrança não encontrada'), { status: 404 });
+
+  const charge = chargeSnap.data();
+  const cfg = configSnap.data() || {};
+
+  const cardFeeRate  = (cfg.cardFeePercentage ?? 2.99) / 100;
+  const cardFeeFixed = cfg.cardFeeFixed ?? 0.49;
+  const finePercentage = (cfg.finePercentage ?? 2) / 100;
+  const interestRate   = (cfg.interestRate   ?? 1) / 100 / 30;
+
+  const baseValue   = charge.totalAmount || charge.baseRent || 5;
+  const dueDateObj  = charge.dueDate?.toDate ? charge.dueDate.toDate() : new Date(charge.dueDate?.seconds * 1000);
+  const today       = new Date(); today.setHours(0, 0, 0, 0);
+  const dueDateOnly = new Date(dueDateObj); dueDateOnly.setHours(0, 0, 0, 0);
+  const diasAtraso  = Math.max(0, Math.floor((today - dueDateOnly) / 86400000));
+
+  let valueComAtraso = baseValue;
+  let multa = 0, juros = 0;
+  if (diasAtraso > 0) {
+    multa = parseFloat((baseValue * finePercentage).toFixed(2));
+    juros = parseFloat((baseValue * interestRate * diasAtraso).toFixed(2));
+    valueComAtraso = parseFloat((baseValue + multa + juros).toFixed(2));
+  }
+
+  const totalCartao = parseFloat(((valueComAtraso + cardFeeFixed) / (1 - cardFeeRate)).toFixed(2));
+  const taxaCartao  = parseFloat((totalCartao - valueComAtraso).toFixed(2));
+
+  return { baseValue, multa, juros, diasAtraso, valueComAtraso, taxaCartao, totalCartao };
+}
+
 // ── HANDLER ──────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -370,6 +443,7 @@ export default async function handler(req, res) {
 
     if (step === 'init')         return res.status(200).json(await handleInit(db, req.body, apiKey));
     if (step === 'confirm')      return res.status(200).json(await handleConfirm(db, req.body, apiKey));
+    if (step === 'preview')      return res.status(200).json(await handlePreview(db, req.body));
     if (step === 'list-saved')   return res.status(200).json(await handleListSaved(db, req.body));
     if (step === 'delete-saved') return res.status(200).json(await handleDeleteSaved(db, req.body));
     return res.status(400).json({ error: 'step inválido' });
