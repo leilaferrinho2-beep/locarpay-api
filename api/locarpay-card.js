@@ -74,8 +74,8 @@ async function handleInit(db, body, apiKey) {
 
   const customerId = await findOrCreateCustomer(name, email, cpf, apiKey);
 
-  // Valor aleatório entre R$1,01 e R$4,99 com centavos aleatórios
-  const microValue = parseFloat((1 + Math.random() * 3.98).toFixed(2));
+  // Valor aleatório entre R$5,01 e R$9,99 (mínimo Asaas = R$5,00)
+  const microValue = parseFloat((5 + Math.random() * 4.98).toFixed(2));
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
