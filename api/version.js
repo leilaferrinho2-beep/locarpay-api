@@ -2,8 +2,8 @@ export default function handler(req, res) {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.status(200).json({
-    versionCode: 52,
-    versionName: "3.30",
-    url: "https://locarpay-api.vercel.app/download/locarpay-v52.apk"
+    versionCode: 53,
+    versionName: "3.31",
+    url: "https://locarpay-api.vercel.app/download/locarpay-v53.apk"
   });
 }
