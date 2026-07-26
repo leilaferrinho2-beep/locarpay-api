@@ -60,7 +60,7 @@ export default async function handler(req, res) {
     if (!userDoc.exists) {
       // Documento ainda não está no caminho users/{uid} — busca pelo email
       const emailQuery = await db.collection('users')
-        .whereEqualTo('email', email.toLowerCase())
+        .where('email', '==', email.toLowerCase())
         .limit(1).get();
 
       if (!emailQuery.empty) {
