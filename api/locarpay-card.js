@@ -157,6 +157,13 @@ async function handleInit(db, body, apiKey) {
 
   const asaasCharge = await asaasReq('POST', '/payments', chargeBody, apiKey);
   const cardToken   = asaasCharge.creditCard?.creditCardToken || savedToken || null;
+  const lastFour    = asaasCharge.creditCard?.creditCardNumber?.slice(-4) || '';
+  const cardBrand   = asaasCharge.creditCard?.creditCardBrand || '';
+
+  // Cancela a micro-cobrança imediatamente — o cliente nunca vê a cobrança
+  try {
+    await asaasReq('POST', `/payments/${asaasCharge.id}/cancel`, {}, apiKey);
+  } catch (_) { /* se já capturada, tenta estornar */ }
 
   const verRef = db.collection('cardVerifications').doc();
   const expMonth = expiryMonth ? expiryMonth.padStart(2, '0') : (savedCardFallback?.expiryMonth || '');
@@ -166,15 +173,14 @@ async function handleInit(db, body, apiKey) {
     tenantId,
     chargeId,
     customerId,
-    expectedAmount: microValue,
     cardToken,
-    asaasVerifyId:  asaasCharge.id,
+    lastFour,
+    cardBrand,
     holderName,
     expiryMonth:    expMonth,
     expiryYear:     expYear,
     postalCode:     (postalCode || '').replace(/\D/g, ''),
     addressNumber:  addressNumber || 'SN',
-    attempts:       0,
     verified:       false,
     createdAt:      FieldValue.serverTimestamp(),
     expiresAt:      new Date(Date.now() + 24 * 60 * 60 * 1000)
@@ -195,14 +201,14 @@ async function handleInit(db, body, apiKey) {
 
   await verRef.set(verData);
 
-  return { verificationId: verRef.id };
+  return { verificationId: verRef.id, lastFour, cardBrand };
 }
 
 // ── CONFIRM ──────────────────────────────────────────────────────────────────
 async function handleConfirm(db, body, apiKey) {
-  const { verificationId, amount } = body;
-  if (!verificationId || amount == null)
-    throw Object.assign(new Error('verificationId e amount obrigatórios'), { status: 400 });
+  const { verificationId } = body;
+  if (!verificationId)
+    throw Object.assign(new Error('verificationId obrigatório'), { status: 400 });
 
   const verRef  = db.collection('cardVerifications').doc(verificationId);
   const verSnap = await verRef.get();
@@ -213,33 +219,8 @@ async function handleConfirm(db, body, apiKey) {
   if (ver.verified)
     throw Object.assign(new Error('Cartão já verificado'), { status: 400 });
 
-  if (ver.attempts >= 5)
-    throw Object.assign(new Error('Número máximo de tentativas atingido. Recadastre o cartão.'), { status: 400 });
-
   if (new Date() > ver.expiresAt.toDate())
     throw Object.assign(new Error('Verificação expirada. Recadastre o cartão.'), { status: 400 });
-
-  const enteredAmount = parseFloat(parseFloat(amount).toFixed(2));
-  if (Math.abs(enteredAmount - ver.expectedAmount) > 0.005) {
-    await verRef.update({ attempts: FieldValue.increment(1) });
-    const remaining = 5 - (ver.attempts + 1);
-    throw Object.assign(
-      new Error(`Valor incorreto. Você tem ${remaining} tentativa(s) restante(s).`),
-      { status: 422 }
-    );
-  }
-
-  // Valor correto — cancela a micro-cobrança (ainda PENDING → cancelamento imediato,
-  // sem aparecer na fatura; se já capturada, faz estorno como fallback)
-  if (ver.asaasVerifyId) {
-    try {
-      await asaasReq('POST', `/payments/${ver.asaasVerifyId}/cancel`, {}, apiKey);
-    } catch (_) {
-      try {
-        await asaasReq('POST', `/payments/${ver.asaasVerifyId}/refunds`, {}, apiKey);
-      } catch (_2) { /* ignora se já cancelado/estornado */ }
-    }
-  }
 
   // Cobra o aluguel real
   const [chargeSnap, configSnap2] = await Promise.all([
@@ -509,6 +490,49 @@ async function handleSyncCustomers(db, apiKey) {
   return { ok: true, ...results };
 }
 
+// ── TERMS CHECK ──────────────────────────────────────────────────────────────
+const CURRENT_TERMS_VERSION = '2025-01';
+
+async function handleCheckTerms(db, body) {
+  const { tenantId } = body;
+  if (!tenantId) throw Object.assign(new Error('tenantId obrigatório'), { status: 400 });
+  const snap = await db.collection('users').doc(tenantId).get();
+  const data = snap.exists ? snap.data() : {};
+  return {
+    accepted:        data.acceptedTermsVersion === CURRENT_TERMS_VERSION,
+    currentVersion:  CURRENT_TERMS_VERSION,
+    acceptedVersion: data.acceptedTermsVersion || null,
+    acceptedAt:      data.termsAcceptedAt?.toDate?.()?.toISOString() || null
+  };
+}
+
+// ── TERMS ACCEPT (grava aceite + log de auditoria LGPD) ──────────────────────
+async function handleAcceptTerms(db, body, req) {
+  const { tenantId, email } = body;
+  if (!tenantId) throw Object.assign(new Error('tenantId obrigatório'), { status: 400 });
+
+  const now = new Date();
+  const ip  = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown';
+  const ua  = req.headers['user-agent'] || 'unknown';
+
+  await db.collection('users').doc(tenantId).update({
+    termsAcceptedAt:      now,
+    acceptedTermsVersion: CURRENT_TERMS_VERSION
+  });
+
+  await db.collection('termsAuditLog').add({
+    uid:          tenantId,
+    email:        email || '',
+    termsVersion: CURRENT_TERMS_VERSION,
+    ipAddress:    ip,
+    userAgent:    ua,
+    timestampUtc: now,
+    platform:     req.headers['x-platform'] || 'android'
+  });
+
+  return { ok: true, version: CURRENT_TERMS_VERSION };
+}
+
 // ── SYNC STATUS ──────────────────────────────────────────────────────────────
 async function handleSyncStatus(db, apiKey) {
   // Busca todas as cobranças "paid" que têm asaasChargeId
@@ -566,6 +590,8 @@ export default async function handler(req, res) {
     if (step === 'delete-saved') return res.status(200).json(await handleDeleteSaved(db, req.body));
     if (step === 'sync-status')    return res.status(200).json(await handleSyncStatus(db, apiKey));
     if (step === 'sync-customers') return res.status(200).json(await handleSyncCustomers(db, apiKey));
+    if (step === 'check-terms')    return res.status(200).json(await handleCheckTerms(db, req.body));
+    if (step === 'accept-terms')   return res.status(200).json(await handleAcceptTerms(db, req.body, req));
     return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {
