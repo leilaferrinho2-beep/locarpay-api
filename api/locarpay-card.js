@@ -515,10 +515,11 @@ async function handleAcceptTerms(db, body, req) {
   const ip  = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown';
   const ua  = req.headers['user-agent'] || 'unknown';
 
-  await db.collection('users').doc(tenantId).update({
+  await db.collection('users').doc(tenantId).set({
     termsAcceptedAt:      now,
-    acceptedTermsVersion: CURRENT_TERMS_VERSION
-  });
+    acceptedTermsVersion: CURRENT_TERMS_VERSION,
+    ...(email ? { email: email.toLowerCase() } : {})
+  }, { merge: true });
 
   await db.collection('termsAuditLog').add({
     uid:          tenantId,
