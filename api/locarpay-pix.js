@@ -86,13 +86,40 @@ export default async function handler(req, res) {
     ]);
 
     if (!userSnap.exists) return res.status(404).json({ error: 'Inquilino não encontrado' });
-    if (!chargeSnap.exists) return res.status(404).json({ error: 'Cobrança não encontrada' });
 
     const apiKey = configSnap.data()?.apiKey;
     if (!apiKey) return res.status(500).json({ error: 'Chave Asaas não configurada' });
 
-    const user   = userSnap.data();
-    const charge = chargeSnap.data();
+    const user = userSnap.data();
+
+    // Se chargeId não existe, busca cobrança pendente do inquilino pelo tenantId
+    let charge, resolvedChargeId;
+    if (chargeSnap.exists) {
+      charge = chargeSnap.data();
+      resolvedChargeId = chargeId;
+    } else {
+      const fallbackSnap = await db.collection('charges')
+        .where('tenantId', '==', tenantId)
+        .where('status', 'in', ['pending', 'overdue'])
+        .orderBy('dueDate', 'desc')
+        .limit(1)
+        .get();
+      if (fallbackSnap.empty) {
+        // Tenta por email como último recurso
+        const emailFallback = await db.collection('charges')
+          .where('tenantEmail', '==', user.email || '')
+          .where('status', 'in', ['pending', 'overdue'])
+          .orderBy('dueDate', 'desc')
+          .limit(1)
+          .get();
+        if (emailFallback.empty) return res.status(404).json({ error: 'Cobrança não encontrada' });
+        charge = emailFallback.docs[0].data();
+        resolvedChargeId = emailFallback.docs[0].id;
+      } else {
+        charge = fallbackSnap.docs[0].data();
+        resolvedChargeId = fallbackSnap.docs[0].id;
+      }
+    }
 
     // Se já tem PIX salvo, retorna direto
     if (charge.pixCopyPaste && charge.pixQrCode) {
@@ -111,7 +138,7 @@ export default async function handler(req, res) {
     if (charge.asaasChargeId) {
       try {
         const pix = await asaasGet(`/payments/${charge.asaasChargeId}/pixQrCode`, apiKey);
-        await db.collection('charges').doc(chargeId).update({
+        await db.collection('charges').doc(resolvedChargeId).update({
           pixCopyPaste: pix.payload,
           pixQrCode:    pix.encodedImage
         });
@@ -163,7 +190,7 @@ export default async function handler(req, res) {
     const pix = await asaasGet(`/payments/${asaasCharge.id}/pixQrCode`, apiKey);
 
     // Salva no Firestore
-    await db.collection('charges').doc(chargeId).update({
+    await db.collection('charges').doc(resolvedChargeId).update({
       asaasChargeId: asaasCharge.id,
       pixCopyPaste:  pix.payload,
       pixQrCode:     pix.encodedImage
