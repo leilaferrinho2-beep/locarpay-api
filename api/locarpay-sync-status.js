@@ -85,9 +85,31 @@ export default async function handler(req, res) {
     result.docStatus = docResp?.data?.status;
     result.rawDocResp = docResp;
 
-    // Lista todos os documentos para diagnóstico
-    if (accountId) {
-      result.allDocs = await assinafyGet(apiKey, `accounts/${accountId}/documents`);
+    // Lista todos os documentos
+    const allDocsResp = accountId ? await assinafyGet(apiKey, `accounts/${accountId}/documents`) : null;
+    const allDocs = allDocsResp?.data || [];
+    result.allDocsCount = allDocs.length;
+
+    // Se o documento do contrato não existe (404), busca na lista pelo email do inquilino
+    if (docResp?.status === 404 && allDocs.length > 0) {
+      const emailLc = tenantEmail.toLowerCase();
+      const found = allDocs.find(doc => {
+        if (!['certificated', 'signed', 'completed'].includes(doc.status?.toLowerCase())) return false;
+        return (doc.assignment?.signers || []).some(s => s.email?.toLowerCase() === emailLc);
+      });
+      if (found) {
+        const signedUrl = found.artifacts?.certificated || found.artifacts?.bundle || found.download_url;
+        result.fixedDocId = found.id;
+        result.fixedSignedUrl = signedUrl;
+        if (signedUrl) {
+          await fsPatch(`contracts/${contractId}`, {
+            assinafyDocumentId: { stringValue: found.id },
+            signedFileUrl: { stringValue: signedUrl },
+            assinafyStatus: { stringValue: found.status }
+          });
+          result.firestoreFixed = true;
+        }
+      }
     }
 
     const assignListResp = await assinafyGet(apiKey, `documents/${assinafyDocumentId}/assignments`);
