@@ -85,6 +85,11 @@ export default async function handler(req, res) {
     result.docStatus = docResp?.data?.status;
     result.rawDocResp = docResp;
 
+    // Lista todos os documentos para diagnóstico
+    if (accountId) {
+      result.allDocs = await assinafyGet(apiKey, `accounts/${accountId}/documents`);
+    }
+
     const assignListResp = await assinafyGet(apiKey, `documents/${assinafyDocumentId}/assignments`);
     result.rawAssignList = assignListResp;
 
