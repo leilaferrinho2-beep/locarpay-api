@@ -430,56 +430,82 @@
   }
   .btn-sm:hover { background: #3a3d52; color: #fff; }
 
-  /* Login */
+  /* Login — full screen split */
   #login-section {
-    position: fixed; inset: 0;
-    display: flex; align-items: stretch;
-    background: #0f1117;
-    z-index: 100;
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    display: grid; grid-template-columns: 1fr 440px;
+    z-index: 100; overflow: hidden;
   }
   .login-left {
-    flex: 1;
-    background: linear-gradient(135deg, #1a2a4a 0%, #0f1117 100%);
+    background: linear-gradient(160deg, #0d1b35 0%, #0a1628 50%, #06101e 100%);
     display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: 60px;
-    border-right: 1px solid #1e2a3a;
+    justify-content: center; padding: 80px 72px;
+    position: relative; overflow: hidden;
   }
-  .login-left .brand { font-size: 32px; font-weight: 800; color: #fff; letter-spacing: -1px; margin-bottom: 12px; }
-  .login-left .brand span { color: #4F86F7; }
-  .login-left .tagline { color: #5a7a9a; font-size: 15px; max-width: 300px; text-align: center; line-height: 1.6; }
-  .login-left .features { margin-top: 48px; display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 320px; }
-  .login-left .feature { display: flex; align-items: center; gap: 14px; }
-  .login-left .feature-icon { width: 40px; height: 40px; border-radius: 10px; background: #1e3a5f; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
-  .login-left .feature-text { font-size: 13px; color: #7a9abf; line-height: 1.4; }
-  .login-left .feature-text strong { display: block; color: #c0d4ea; font-size: 14px; margin-bottom: 2px; }
+  .login-left::before {
+    content: ''; position: absolute;
+    width: 600px; height: 600px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(79,134,247,0.08) 0%, transparent 70%);
+    top: -100px; right: -100px; pointer-events: none;
+  }
+  .login-left::after {
+    content: ''; position: absolute;
+    width: 400px; height: 400px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(79,134,247,0.05) 0%, transparent 70%);
+    bottom: -80px; left: -80px; pointer-events: none;
+  }
+  .ll-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 56px; }
+  .ll-logo-mark {
+    width: 36px; height: 36px; border-radius: 9px;
+    background: linear-gradient(135deg, #4F86F7, #2563eb);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 800; color: #fff; letter-spacing: -1px;
+  }
+  .ll-logo-name { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+  .ll-logo-name span { color: #4F86F7; }
+  .ll-headline {
+    font-size: 40px; font-weight: 800; color: #fff;
+    line-height: 1.15; letter-spacing: -1px; margin-bottom: 20px;
+    max-width: 480px;
+  }
+  .ll-headline em { font-style: normal; color: #4F86F7; }
+  .ll-sub { font-size: 16px; color: #4a6a8a; line-height: 1.7; max-width: 400px; margin-bottom: 56px; }
+  .ll-stats { display: flex; gap: 40px; }
+  .ll-stat-num { font-size: 28px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+  .ll-stat-label { font-size: 12px; color: #3a5a7a; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+
   .login-right {
-    width: 480px; flex-shrink: 0;
+    background: #080c14;
     display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: 60px 48px;
-    background: #0f1117;
+    justify-content: center; align-items: stretch;
+    padding: 56px 48px;
+    border-left: 1px solid rgba(255,255,255,0.04);
   }
-  .login-right .card-title { font-size: 26px; font-weight: 700; color: #fff; margin-bottom: 8px; }
-  .login-right .card-sub { color: #5a6a7a; font-size: 14px; margin-bottom: 40px; }
+  .lr-eyebrow { font-size: 11px; font-weight: 600; color: #4F86F7; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; }
+  .lr-title { font-size: 28px; font-weight: 700; color: #fff; letter-spacing: -0.5px; margin-bottom: 8px; }
+  .lr-sub { font-size: 14px; color: #3a4a5a; margin-bottom: 40px; line-height: 1.5; }
   .btn-google {
     display: flex; align-items: center; justify-content: center; gap: 12px;
-    width: 100%; padding: 14px 24px;
-    background: #fff; color: #1a1a2e;
+    width: 100%; padding: 15px 24px;
+    background: #fff; color: #111;
     border: none; border-radius: 10px;
     font-size: 15px; font-weight: 600; cursor: pointer;
-    transition: box-shadow 0.2s, transform 0.1s;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    transition: opacity 0.15s, transform 0.1s;
+    letter-spacing: -0.1px;
   }
-  .btn-google:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.4); transform: translateY(-1px); }
-  .btn-google:active { transform: translateY(0); }
+  .btn-google:hover { opacity: 0.92; transform: translateY(-1px); }
+  .btn-google:active { transform: translateY(0); opacity: 1; }
   .btn-google svg { width: 20px; height: 20px; flex-shrink: 0; }
-  .login-divider { width: 100%; height: 1px; background: #1e2a3a; margin: 28px 0; }
-  .login-note { font-size: 12px; color: #3a4a5a; text-align: center; line-height: 1.6; }
-  #login-error { color: #ef5350; font-size: 13px; margin-top: 16px; min-height: 20px; text-align: center; }
-  @media (max-width: 768px) {
+  .lr-divider { display: flex; align-items: center; gap: 12px; margin: 28px 0; }
+  .lr-divider::before, .lr-divider::after { content: ''; flex: 1; height: 1px; background: #1a2030; }
+  .lr-divider span { font-size: 11px; color: #2a3a4a; text-transform: uppercase; letter-spacing: 1px; }
+  .lr-note { font-size: 12px; color: #2a3545; text-align: center; line-height: 1.7; }
+  #login-error { color: #ef5350; font-size: 13px; margin-top: 16px; text-align: center; min-height: 18px; }
+
+  @media (max-width: 860px) {
+    #login-section { grid-template-columns: 1fr; }
     .login-left { display: none; }
-    .login-right { width: 100%; padding: 40px 24px; }
+    .login-right { padding: 40px 28px; }
   }
 
   /* Dashboard */
@@ -634,26 +660,22 @@
 <!-- Login -->
 <section id="login-section">
   <div class="login-left">
-    <div class="brand">Locar<span>Pay</span></div>
-    <div class="tagline">Plataforma de gestão de aluguéis com assinatura digital e cobrança automatizada.</div>
-    <div class="features">
-      <div class="feature">
-        <div class="feature-icon">📋</div>
-        <div class="feature-text"><strong>Contratos digitais</strong>Assine e gerencie contratos com validade jurídica</div>
-      </div>
-      <div class="feature">
-        <div class="feature-icon">💳</div>
-        <div class="feature-text"><strong>Cobrança automática</strong>PIX e cartão de crédito integrados</div>
-      </div>
-      <div class="feature">
-        <div class="feature-icon">🏠</div>
-        <div class="feature-text"><strong>Gestão de inquilinos</strong>Acompanhe pagamentos e documentos em um só lugar</div>
-      </div>
+    <div class="ll-logo">
+      <div class="ll-logo-mark">L</div>
+      <div class="ll-logo-name">Locar<span>Pay</span></div>
+    </div>
+    <div class="ll-headline">Gestão de aluguéis<br><em>sem complicação</em></div>
+    <div class="ll-sub">Contratos digitais, cobranças automáticas e acompanhamento de inquilinos em um único painel.</div>
+    <div class="ll-stats">
+      <div><div class="ll-stat-num">100%</div><div class="ll-stat-label">Digital</div></div>
+      <div><div class="ll-stat-num">PIX</div><div class="ll-stat-label">& Cartão</div></div>
+      <div><div class="ll-stat-num">LGPD</div><div class="ll-stat-label">Conforme</div></div>
     </div>
   </div>
   <div class="login-right">
-    <div class="card-title">Bem-vindo de volta</div>
-    <div class="card-sub">Acesse o painel administrativo</div>
+    <div class="lr-eyebrow">Painel Administrativo</div>
+    <div class="lr-title">Bem-vindo de volta</div>
+    <div class="lr-sub">Acesse com sua conta Google autorizada para gerenciar inquilinos e contratos.</div>
     <button class="btn-google" id="btn-login">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -663,8 +685,8 @@
       </svg>
       Continuar com Google
     </button>
-    <div class="login-divider"></div>
-    <div class="login-note">Somente contas autorizadas têm acesso ao painel.<br>Entre em contato com o suporte se precisar de acesso.</div>
+    <div class="lr-divider"><span>acesso restrito</span></div>
+    <div class="lr-note">Somente contas autorizadas têm acesso.<br>Entre em contato com o suporte se precisar de ajuda.</div>
     <div id="login-error"></div>
   </div>
 </section>
