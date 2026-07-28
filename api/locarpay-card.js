@@ -403,7 +403,7 @@ async function handleRefund(db, body, apiKey) {
   await asaasReq('POST', `/payments/${txId}/refunds`, {}, apiKey);
 
   await db.collection('charges').doc(chargeId).update({
-    status:        'refunded',
+    status:        'pending',
     asaasChargeId: '',
     pixCopyPaste:  '',
     pixQrCode:     '',
@@ -551,7 +551,7 @@ async function handleSyncStatus(db, apiKey) {
       // REFUNDED ou CHARGEBACK = estorno confirmado no Asaas
       if (['REFUNDED', 'CHARGEBACK', 'REFUND_REQUESTED'].includes(payment.status)) {
         await doc.ref.update({
-          status:        'refunded',
+          status:        'pending',
           asaasChargeId: '',
           pixCopyPaste:  '',
           pixQrCode:     '',
