@@ -299,11 +299,22 @@
   // ── Eventos ───────────────────────────────────────────────
 
   // Captura resultado do redirect ao voltar do Google
-  getRedirectResult(auth).catch(e => { if ($('login-error')) $('login-error').textContent = e.message; });
+  getRedirectResult(auth).then(result => {
+    // onAuthStateChanged cuida do resto
+  }).catch(e => {
+    if ($('login-error') && e.code !== 'auth/no-auth-event') $('login-error').textContent = e.message;
+  });
 
   $('btn-login').addEventListener('click', async () => {
-    try { await signInWithRedirect(auth, provider); }
-    catch(e) { $('login-error').textContent = e.message; }
+    try {
+      await signInWithPopup(auth, provider);
+    } catch(e) {
+      if (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request') {
+        signInWithRedirect(auth, provider);
+      } else {
+        $('login-error').textContent = e.message;
+      }
+    }
   });
 
   $('btn-logout').addEventListener('click', () => signOut(auth));
