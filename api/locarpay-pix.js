@@ -53,9 +53,6 @@ async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
         body: JSON.stringify(patch)
       });
     }
-    if (!existing.cpfCnpj && cpfDigits.length !== 11) {
-      throw new Error('CPF do inquilino não cadastrado. Peça ao administrador para atualizar o cadastro.');
-    }
     return existing.id;
   }
 
