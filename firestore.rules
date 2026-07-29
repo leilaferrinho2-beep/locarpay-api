@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isMaster() {
+      return request.auth != null
+          && request.auth.token.email == 'contatotransgu@gmail.com';
+    }
+
+    // Owners podem ler o próprio documento (match por email)
+    function isOwnOwnerDoc(ownerData) {
+      return isAuthenticated()
+          && ownerData.email == request.auth.token.email;
+    }
+
+    // ── owners ─────────────────────────────────────────────────
+    // Master acesso total; owner lê o próprio doc; criação apenas pelo servidor
+    match /owners/{ownerId} {
+      allow read: if isMaster() || isOwnOwnerDoc(resource.data);
+      allow write: if isMaster();
+    }
+
+    // ── users ───────────────────────────────────────────────────
+    // Authenticated (admin panel Google + app Firebase Auth)
+    match /users/{userId} {
+      allow read, write: if isAuthenticated();
+      match /savedCards/{cardId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // ── contracts ───────────────────────────────────────────────
+    match /contracts/{contractId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ── charges ─────────────────────────────────────────────────
+    match /charges/{chargeId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ── cardVerifications (temporário, expira em 24h) ───────────
+    match /cardVerifications/{verId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ── termsAuditLog (LGPD) ────────────────────────────────────
+    match /termsAuditLog/{logId} {
+      allow read:   if isMaster();
+      allow create: if isAuthenticated();
+    }
+
+    // ── config (chaves API) ─────────────────────────────────────
+    // Apenas servidor (Admin SDK) — client nunca acessa diretamente
+    match /config/{docId} {
+      allow read, write: if isMaster();
+    }
+
+    // ── licenses (legado) ───────────────────────────────────────
+    match /licenses/{licId} {
+      allow read, write: if isMaster();
+    }
+
+    // ── default: nega tudo que não foi explicitamente permitido ─
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
