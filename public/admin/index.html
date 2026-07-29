@@ -39,7 +39,7 @@
   }
 
   function setTab(tab) {
-    ['tab-tenants','tab-owners'].forEach(t => {
+    ['tab-tenants','tab-owners','tab-overdue'].forEach(t => {
       $(t).classList.remove('active');
       $(t.replace('tab-', 'panel-')).style.display = 'none';
     });
@@ -352,6 +352,91 @@
     } catch (e) {
       showToast('Erro: ' + e.message, 'error');
     }
+  };
+
+  // ── Inadimplentes ──────────────────────────────────────────
+  let overdueCharges = [];
+
+  async function loadOverdue() {
+    $('overdue-tbody').innerHTML = '<tr><td colspan="6" class="empty">Carregando...</td></tr>';
+    try {
+      const q = currentOwnerId
+        ? query(collection(db, 'charges'), where('ownerId', '==', currentOwnerId), where('status', '==', 'overdue'))
+        : query(collection(db, 'charges'), where('status', '==', 'overdue'));
+      const snap = await getDocs(q);
+      overdueCharges = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Sort by dueDate asc (oldest first)
+      overdueCharges.sort((a, b) => {
+        const sa = a.dueDate?.seconds ?? 0;
+        const sb = b.dueDate?.seconds ?? 0;
+        return sa - sb;
+      });
+      // Load tenant names
+      const tIds = [...new Set(overdueCharges.map(c => c.tenantId).filter(Boolean))];
+      const nameMap = {};
+      for (let i = 0; i < tIds.length; i += 10) {
+        const sl = tIds.slice(i, i + 10);
+        const us = await getDocs(query(collection(db, 'users'), where('__name__', 'in', sl)));
+        us.docs.forEach(d => { nameMap[d.id] = { name: d.data().name || d.data().email, email: d.data().email }; });
+      }
+      renderOverdue(nameMap);
+    } catch (e) {
+      $('overdue-tbody').innerHTML = `<tr><td colspan="6" class="empty" style="color:#ef9a9a">Erro: ${e.message}</td></tr>`;
+    }
+  }
+
+  function renderOverdue(nameMap) {
+    const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const tbody = $('overdue-tbody');
+    if (overdueCharges.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty" style="color:#81c784">✓ Nenhum inadimplente</td></tr>';
+      $('overdue-count').textContent = '0 cobranças vencidas';
+      $('overdue-total').textContent = '';
+      return;
+    }
+    const total = overdueCharges.reduce((s, c) => s + (c.totalAmount || c.baseRent || 0), 0);
+    $('overdue-count').textContent = `${overdueCharges.length} cobrança${overdueCharges.length !== 1 ? 's' : ''} vencida${overdueCharges.length !== 1 ? 's' : ''}`;
+    $('overdue-total').textContent = `Total em aberto: ${fmt.format(total)}`;
+    tbody.innerHTML = overdueCharges.map(c => {
+      const dueD  = c.dueDate?.seconds ? new Date(c.dueDate.seconds * 1000) : null;
+      const daysLate = dueD ? Math.floor((Date.now() - dueD) / 86400000) : '?';
+      const tenant = nameMap[c.tenantId] || { name: c.tenantId, email: '' };
+      const multa = c.multaAplicada ? fmt.format(c.multaAplicada) : '—';
+      return `<tr>
+        <td><strong>${tenant.name}</strong><br><span style="font-size:11px;color:#888">${tenant.email}</span></td>
+        <td style="font-weight:600;color:#ef9a9a">${fmt.format(c.totalAmount || c.baseRent || 0)}</td>
+        <td style="color:#ffb74d">${dueD ? dueD.toLocaleDateString('pt-BR') : '—'}</td>
+        <td><span style="color:#ef5350;font-weight:600">${daysLate} dias</span></td>
+        <td style="color:#ce93d8">${multa}</td>
+        <td class="actions">
+          <button class="btn-sm" style="color:#81c784;border-color:#2a4a2a" onclick="markChargePaid('${c.id}')">✓ Pago</button>
+          <button class="btn-sm" onclick="sendOverduePush('${c.tenantId}')">Push</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  window.markChargePaid = async (chargeId) => {
+    if (!confirm('Marcar esta cobrança como paga manualmente?')) return;
+    try {
+      await updateDoc(doc(db, 'charges', chargeId), { status: 'paid', paidAt: serverTimestamp(), paidManually: true });
+      showToast('Cobrança marcada como paga', 'success');
+      await loadOverdue();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+  };
+
+  window.sendOverduePush = async (tenantId) => {
+    try {
+      const r = await fetch('/api/locarpay-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'send-push', tenantId, ownerId: currentOwnerId,
+          title: 'Aluguel em atraso ⚠️',
+          message: 'Você possui uma cobrança vencida. Regularize sua situação pelo app.' })
+      });
+      const data = await r.json();
+      showToast(data.ok ? 'Push enviado' : (data.error || 'Erro'), data.ok ? 'success' : 'error');
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
   };
 
   window.switchOwner = async (ownerId) => {
@@ -1122,6 +1207,7 @@
 
   $('tab-tenants').addEventListener('click', () => { setTab('tenants'); loadTenants(); });
   $('tab-owners').addEventListener('click',  () => { setTab('owners');  loadOwners(); });
+  $('tab-overdue').addEventListener('click', () => { setTab('overdue'); loadOverdue(); });
 
   $('btn-add-tenant').addEventListener('click', () => { $('modal-tenant').style.display = 'flex'; $('t-name').focus(); });
   $('btn-generate-charges').addEventListener('click', generateCharges);
@@ -1348,6 +1434,7 @@
 <section id="dashboard-section">
   <div class="tabs">
     <div class="tab active" id="tab-tenants">Inquilinos</div>
+    <div class="tab" id="tab-overdue" style="color:#ef9a9a">⚠ Inadimplentes</div>
     <div class="tab" id="tab-owners">Imobiliárias</div>
   </div>
 
@@ -1378,6 +1465,24 @@
       </thead>
       <tbody id="tenants-tbody">
         <tr><td colspan="7" class="empty">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Painel: Inadimplentes -->
+  <div class="panel" id="panel-overdue" style="display:none">
+    <div class="section-header" style="flex-wrap:wrap;gap:8px">
+      <h2 style="color:#ef9a9a">⚠ Inadimplentes</h2>
+      <span id="overdue-count" style="font-size:13px;color:#888;align-self:center"></span>
+      <span id="overdue-total" style="font-size:13px;color:#ef9a9a;font-weight:600;align-self:center"></span>
+      <button class="btn btn-secondary" onclick="loadOverdue()">↻ Atualizar</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Inquilino</th><th>Valor</th><th>Vencimento</th><th>Atraso</th><th>Multa</th><th>Ações</th></tr>
+      </thead>
+      <tbody id="overdue-tbody">
+        <tr><td colspan="6" class="empty">Carregando...</td></tr>
       </tbody>
     </table>
   </div>
