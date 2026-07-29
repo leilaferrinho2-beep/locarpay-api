@@ -48,48 +48,66 @@ async function handleSetOwnerSigned(req, res) {
   }
 }
 
-// GET /api/locarpay-fix-contract?contractId=xxx → resolve signed PDF URL via Assinafy
+// GET /api/locarpay-fix-contract?contractId=xxx
+// Baixa o PDF do contrato via backend (proxied) — a API key da Assinafy nunca vai ao cliente
 async function handleGetContractPdf(req, res) {
   const { contractId } = req.query;
   if (!contractId) return res.status(400).json({ error: 'contractId obrigatório' });
   try {
-    // Verifica URL cacheada no Firestore
     const contractDoc = await fsGet(`contracts/${contractId}`);
     if (!contractDoc?.fields) return res.status(404).json({ error: 'Contrato não encontrado' });
-    const cachedUrl = contractDoc.fields.signedFileUrl?.stringValue;
-    if (cachedUrl) return res.status(200).json({ url: cachedUrl });
-
-    const assinafyDocId = contractDoc.fields.assinafyDocumentId?.stringValue;
-    if (!assinafyDocId) return res.status(404).json({ error: 'Contrato ainda não enviado para assinatura digital' });
 
     const configDoc = await fsGet('config/assinafy');
     const apiKey = configDoc?.fields?.apiKey?.stringValue;
     if (!apiKey) return res.status(500).json({ error: 'Configuração Assinafy não encontrada' });
 
-    const accounts = await assinafyGet(apiKey, 'accounts');
-    const accountId = accounts.data?.[0]?.id;
-    if (!accountId) return res.status(500).json({ error: 'Conta Assinafy não encontrada' });
-
-    let signedUrl = null;
-    try {
-      const docRes = await assinafyGet(apiKey, `accounts/${accountId}/documents/${assinafyDocId}`);
-      signedUrl = docRes.data?.signed_url || docRes.data?.signedUrl || null;
-    } catch (_) {}
+    // Resolve signed URL (usa cache do Firestore ou busca na Assinafy)
+    let signedUrl = contractDoc.fields.signedFileUrl?.stringValue || null;
 
     if (!signedUrl) {
-      const listRes = await assinafyGet(apiKey, `accounts/${accountId}/documents`);
-      const found = (listRes.data || []).find(d =>
-        (d.is_certificated || d.isCertificated) && (d.signed_url || d.signedUrl)
-      );
-      if (found) signedUrl = found.signed_url || found.signedUrl;
+      const assinafyDocId = contractDoc.fields.assinafyDocumentId?.stringValue;
+      if (!assinafyDocId) return res.status(404).json({ error: 'Contrato ainda não enviado para assinatura digital' });
+
+      const accounts = await assinafyGet(apiKey, 'accounts');
+      const accountId = accounts.data?.[0]?.id;
+      if (!accountId) return res.status(500).json({ error: 'Conta Assinafy não encontrada' });
+
+      try {
+        const docRes = await assinafyGet(apiKey, `accounts/${accountId}/documents/${assinafyDocId}`);
+        signedUrl = docRes.data?.signed_url || docRes.data?.signedUrl || null;
+      } catch (_) {}
+
+      if (!signedUrl) {
+        const listRes = await assinafyGet(apiKey, `accounts/${accountId}/documents`);
+        const found = (listRes.data || []).find(d =>
+          (d.is_certificated || d.isCertificated) && (d.signed_url || d.signedUrl)
+        );
+        if (found) signedUrl = found.signed_url || found.signedUrl;
+      }
+
+      if (!signedUrl) return res.status(404).json({ error: 'Contrato assinado não encontrado na Assinafy' });
+
+      await fsPatch(`contracts/${contractId}`, { signedFileUrl: { stringValue: signedUrl } });
     }
 
-    if (!signedUrl) return res.status(404).json({ error: 'Contrato assinado não encontrado na Assinafy' });
+    // Proxia o PDF — a API key nunca sai do servidor
+    const pdfResp = await fetch(signedUrl, {
+      headers: { 'X-Api-Key': apiKey, 'Accept': 'application/pdf,*/*' }
+    });
 
-    // Cacheia no Firestore via REST
-    await fsPatch(`contracts/${contractId}`, { signedFileUrl: { stringValue: signedUrl } });
+    if (!pdfResp.ok) {
+      // URL expirou? Limpa o cache e tenta novamente na próxima chamada
+      if (pdfResp.status === 401 || pdfResp.status === 403) {
+        await fsPatch(`contracts/${contractId}`, { signedFileUrl: { stringValue: '' } });
+      }
+      return res.status(502).json({ error: `Erro ao baixar PDF da Assinafy: HTTP ${pdfResp.status}` });
+    }
 
-    return res.status(200).json({ url: signedUrl });
+    const bytes = Buffer.from(await pdfResp.arrayBuffer());
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="contrato_assinado.pdf"');
+    res.setHeader('Content-Length', bytes.length);
+    return res.status(200).send(bytes);
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
