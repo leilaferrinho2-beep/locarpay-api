@@ -916,6 +916,32 @@ async function handleMarkOverdue(db, body) {
     }));
   } catch (_) {}
 
+  // Push FCM para cada tenant inadimplente
+  try {
+    const fmtVal = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    await Promise.all(overdue.map(async d => {
+      const data = d.data();
+      const tenantId = data.tenantId;
+      if (!tenantId) return;
+      try {
+        const userSnap = await db.collection('users').doc(tenantId).get();
+        const token = userSnap.data()?.fcmToken;
+        if (!token) return;
+        const base = data.baseRent || data.totalAmount || 0;
+        const diasAtraso = Math.max(1, Math.floor((Date.now() - (data.dueDate?.seconds ?? 0) * 1000) / 86400000));
+        await getMessaging().send({
+          token,
+          notification: {
+            title: '⚠️ Aluguel em atraso',
+            body: `Sua cobrança de ${fmtVal.format(base)} está vencida há ${diasAtraso} dia${diasAtraso > 1 ? 's' : ''}. Regularize agora.`
+          },
+          data: { type: 'reminder', chargeId: d.id },
+          android: { priority: 'high' }
+        });
+      } catch (_) {}
+    }));
+  } catch (_) {}
+
   return { ok: true, updated: overdue.length };
 }
 
