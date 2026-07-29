@@ -404,6 +404,74 @@
     $('t-digital').checked = false;
   }
 
+  // ── Banner de plano ────────────────────────────────────────
+
+  function renderPlanBanner() {
+    if (isMaster) { $('plan-banner').style.display = 'none'; return; }
+    const o = currentOwnerData;
+    if (!o) return;
+    const now = Date.now();
+    const ms  = (ts) => ts?.seconds ? ts.seconds * 1000 : null;
+    const trialEnd  = ms(o.trialEndsAt);
+    const activeUntil = ms(o.planActiveUntil);
+    const banner = $('plan-banner');
+
+    // Plano pago ativo — sem banner (ou sucesso discreto)
+    if (o.status === 'active' && activeUntil && activeUntil > now) {
+      banner.style.display = 'none';
+      return;
+    }
+
+    // Trial expirando em ≤ 5 dias
+    if (trialEnd && trialEnd > now) {
+      const days = Math.ceil((trialEnd - now) / 86400000);
+      if (days <= 5) {
+        showBanner('warning', `⚠ Seu trial expira em ${days} dia${days !== 1 ? 's' : ''}. Ative um plano para continuar usando o LocarPay.`);
+      } else {
+        banner.style.display = 'none';
+      }
+      return;
+    }
+
+    // Trial ou plano expirado
+    if (o.status === 'suspended') {
+      showBanner('error', '🔒 Conta suspensa. Entre em contato com o suporte.');
+      return;
+    }
+    showBanner('error', '⛔ Seu período de trial expirou. Ative um plano para continuar.');
+  }
+
+  function showBanner(type, msg) {
+    const banner = $('plan-banner');
+    banner.style.display = 'flex';
+    banner.className = 'plan-banner plan-banner-' + type;
+    $('plan-banner-msg').textContent = msg;
+  }
+
+  window.activateMyPlan = async () => {
+    const plan = $('my-plan-select').value;
+    const btn  = $('my-plan-btn');
+    btn.disabled = true; btn.textContent = 'Ativando...';
+    try {
+      const resp = await fetch('/api/locarpay-owner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'activate-plan', ownerId: currentOwnerId, plan })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Erro');
+      showToast('Plano ativado! Realize o pagamento pelo link enviado.', 'success');
+      // Recarrega dados do owner para atualizar banner
+      const snap = await getDocs(query(collection(db, 'owners'), where('email', '==', auth.currentUser.email), limit(1)));
+      if (!snap.empty) currentOwnerData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+      renderPlanBanner();
+    } catch (e) {
+      showToast('Erro: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Ativar Plano';
+    }
+  };
+
   // ── Toast ──────────────────────────────────────────────────
 
   function showToast(msg, type = 'success') {
@@ -459,6 +527,7 @@
     if (!isMaster) $('tab-owners').style.display = 'none';
 
     showSection('dashboard-section');
+    renderPlanBanner();
     setTab('tenants');
     await loadTenants();
   });
@@ -564,6 +633,10 @@
   .doc-placeholder { width: 100%; aspect-ratio: 4/3; background: #1a1d2e; border: 2px dashed #3a3d52; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 36px; color: #444; }
   .doc-label { font-size: 12px; color: #888; margin-top: 6px; }
 
+  .plan-banner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 32px; font-size: 13px; font-weight: 500; flex-wrap: wrap; }
+  .plan-banner-warning { background: #2a2000; border-bottom: 1px solid #5a4000; color: #FFD54F; }
+  .plan-banner-error   { background: #2a0a0a; border-bottom: 1px solid #5a1010; color: #ef9a9a; }
+
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1a1d2e; border: 1px solid #3a3d52; border-radius: 10px; padding: 12px 24px; font-size: 14px; font-weight: 500; opacity: 0; transition: opacity 0.3s, transform 0.3s; z-index: 200; max-width: 90vw; text-align: center; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast.success { border-color: #4caf50; color: #4caf50; }
@@ -616,6 +689,18 @@
     <div id="login-error"></div>
   </div>
 </section>
+
+<!-- Banner de plano -->
+<div id="plan-banner" class="plan-banner" style="display:none">
+  <span id="plan-banner-msg"></span>
+  <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+    <select id="my-plan-select" style="background:#0f1117;color:#e0e0e0;border:1px solid #3a3d52;border-radius:6px;padding:5px 8px;font-size:12px">
+      <option value="basic">Basic — R$49/mês</option>
+      <option value="pro">Pro — R$99/mês</option>
+    </select>
+    <button id="my-plan-btn" class="btn" style="padding:7px 16px;font-size:13px" onclick="activateMyPlan()">Ativar Plano</button>
+  </div>
+</div>
 
 <!-- Dashboard -->
 <section id="dashboard-section">

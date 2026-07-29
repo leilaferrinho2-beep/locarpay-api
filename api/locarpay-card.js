@@ -4,7 +4,7 @@
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue }      from 'firebase-admin/firestore';
-import { getAsaasKey, getDefaultOwnerId } from '../lib/owner.js';
+import { getAsaasKey, getDefaultOwnerId, checkOwnerPlanActive } from '../lib/owner.js';
 
 function initFirebase() {
   if (getApps().length) return;
@@ -608,7 +608,21 @@ export default async function handler(req, res) {
     initFirebase();
     const db = getFirestore();
 
-    const { step } = req.body || {};
+    const { step, ownerId: bodyOwnerId } = req.body || {};
+
+    // Verifica plano ativo nos steps que geram cobranças
+    if (step === 'init' || step === 'confirm' || step === 'preview') {
+      const checkId = bodyOwnerId || await getDefaultOwnerId(db).catch(() => null);
+      if (checkId) {
+        const plan = await checkOwnerPlanActive(db, checkId);
+        if (!plan.active) {
+          return res.status(402).json({
+            error: 'Plano expirado. Acesse o painel LocarPay para renovar a assinatura.',
+            reason: plan.reason
+          });
+        }
+      }
+    }
 
     if (step === 'init')           return res.status(200).json(await handleInit(db, req.body, null));
     if (step === 'confirm')        return res.status(200).json(await handleConfirm(db, req.body));
