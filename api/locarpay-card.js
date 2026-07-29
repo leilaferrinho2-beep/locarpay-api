@@ -4,6 +4,7 @@
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue }      from 'firebase-admin/firestore';
+import { getAsaasKey, getDefaultOwnerId } from './lib/owner.js';
 
 function initFirebase() {
   if (getApps().length) return;
@@ -91,13 +92,16 @@ async function handleInit(db, body, apiKey) {
       throw Object.assign(new Error('Dados do cartão incompletos'), { status: 400 });
   }
 
-  const [userSnap, chargeSnap, configSnap] = await Promise.all([
+  const [userSnap, chargeSnap] = await Promise.all([
     db.collection('users').doc(tenantId).get(),
     db.collection('charges').doc(chargeId).get(),
-    db.collection('config').doc('asaas').get()
   ]);
   if (!userSnap.exists)   throw Object.assign(new Error('Inquilino não encontrado'), { status: 404 });
   if (!chargeSnap.exists) throw Object.assign(new Error('Cobrança não encontrada'),  { status: 404 });
+
+  const ownerId = chargeSnap.data().ownerId || await getDefaultOwnerId(db);
+  apiKey = apiKey || await getAsaasKey(db, ownerId);
+  if (!apiKey) throw Object.assign(new Error('Chave Asaas não configurada'), { status: 500 });
 
   const user   = userSnap.data();
   const cpf    = (user.cpf || '').replace(/\D/g, '');
@@ -205,7 +209,7 @@ async function handleInit(db, body, apiKey) {
 }
 
 // ── CONFIRM ──────────────────────────────────────────────────────────────────
-async function handleConfirm(db, body, apiKey) {
+async function handleConfirm(db, body) {
   const { verificationId } = body;
   if (!verificationId)
     throw Object.assign(new Error('verificationId obrigatório'), { status: 400 });
@@ -223,12 +227,16 @@ async function handleConfirm(db, body, apiKey) {
     throw Object.assign(new Error('Verificação expirada. Recadastre o cartão.'), { status: 400 });
 
   // Cobra o aluguel real
-  const [chargeSnap, configSnap2] = await Promise.all([
-    db.collection('charges').doc(ver.chargeId).get(),
-    db.collection('config').doc('asaas').get()
-  ]);
+  const chargeSnap = await db.collection('charges').doc(ver.chargeId).get();
   const charge = chargeSnap.data();
-  const configData = configSnap2.data() || {};
+
+  const ownerId = charge.ownerId || await getDefaultOwnerId(db);
+  const [apiKey, ownerSnap] = await Promise.all([
+    getAsaasKey(db, ownerId),
+    db.collection('owners').doc(ownerId).get(),
+  ]);
+  if (!apiKey) throw Object.assign(new Error('Chave Asaas não configurada'), { status: 500 });
+  const configData = ownerSnap.exists ? ownerSnap.data() : {};
 
   // Taxa do cartão repassada ao inquilino (padrão 2.99% + R$0.49 fixo)
   const cardFeeRate  = (configData.cardFeePercentage ?? 2.99) / 100;
@@ -383,7 +391,7 @@ async function handleDeleteSaved(db, body) {
 }
 
 // ── REFUND ────────────────────────────────────────────────────────────────────
-async function handleRefund(db, body, apiKey) {
+async function handleRefund(db, body) {
   const { chargeId } = body;
   if (!chargeId) throw Object.assign(new Error('chargeId obrigatório'), { status: 400 });
 
@@ -391,6 +399,9 @@ async function handleRefund(db, body, apiKey) {
   if (!chargeSnap.exists) throw Object.assign(new Error('Cobrança não encontrada'), { status: 404 });
 
   const charge = chargeSnap.data();
+  const ownerId = charge.ownerId || await getDefaultOwnerId(db);
+  const apiKey = await getAsaasKey(db, ownerId);
+  if (!apiKey) throw Object.assign(new Error('Chave Asaas não configurada'), { status: 500 });
 
   if (!charge.asaasChargeId) {
     throw Object.assign(
@@ -420,14 +431,13 @@ async function handlePreview(db, body) {
   const { chargeId } = body;
   if (!chargeId) throw Object.assign(new Error('chargeId obrigatório'), { status: 400 });
 
-  const [chargeSnap, configSnap] = await Promise.all([
-    db.collection('charges').doc(chargeId).get(),
-    db.collection('config').doc('asaas').get()
-  ]);
+  const chargeSnap = await db.collection('charges').doc(chargeId).get();
   if (!chargeSnap.exists) throw Object.assign(new Error('Cobrança não encontrada'), { status: 404 });
 
   const charge = chargeSnap.data();
-  const cfg = configSnap.data() || {};
+  const ownerId = charge.ownerId || await getDefaultOwnerId(db);
+  const ownerSnap = await db.collection('owners').doc(ownerId).get();
+  const cfg = ownerSnap.exists ? ownerSnap.data() : {};
 
   const cardFeeRate  = (cfg.cardFeePercentage ?? 2.99) / 100;
   const cardFeeFixed = cfg.cardFeeFixed ?? 0.49;
@@ -455,7 +465,10 @@ async function handlePreview(db, body) {
 }
 
 // ── SYNC CUSTOMERS (atualiza mobilePhone no Asaas para todos os inquilinos) ──
-async function handleSyncCustomers(db, apiKey) {
+async function handleSyncCustomers(db) {
+  const ownerId = await getDefaultOwnerId(db);
+  const apiKey = await getAsaasKey(db, ownerId);
+  if (!apiKey) throw Object.assign(new Error('Chave Asaas não configurada'), { status: 500 });
   const usersSnap = await db.collection('users').get();
   const results = { updated: 0, skipped: 0, errors: [] };
 
@@ -543,7 +556,10 @@ async function handleAcceptTerms(db, body, req) {
 }
 
 // ── SYNC STATUS ──────────────────────────────────────────────────────────────
-async function handleSyncStatus(db, apiKey) {
+async function handleSyncStatus(db) {
+  const ownerId = await getDefaultOwnerId(db);
+  const apiKey = await getAsaasKey(db, ownerId);
+  if (!apiKey) throw Object.assign(new Error('Chave Asaas não configurada'), { status: 500 });
   // Busca todas as cobranças "paid" que têm asaasChargeId
   const snap = await db.collection('charges')
     .where('status', '==', 'paid')
@@ -585,20 +601,16 @@ export default async function handler(req, res) {
     initFirebase();
     const db = getFirestore();
 
-    const configSnap = await db.collection('config').doc('asaas').get();
-    const apiKey     = configSnap.data()?.apiKey;
-    if (!apiKey) return res.status(500).json({ error: 'Chave Asaas não configurada' });
-
     const { step } = req.body || {};
 
-    if (step === 'init')         return res.status(200).json(await handleInit(db, req.body, apiKey));
-    if (step === 'confirm')      return res.status(200).json(await handleConfirm(db, req.body, apiKey));
-    if (step === 'refund')       return res.status(200).json(await handleRefund(db, req.body, apiKey));
-    if (step === 'preview')      return res.status(200).json(await handlePreview(db, req.body));
-    if (step === 'list-saved')   return res.status(200).json(await handleListSaved(db, req.body));
-    if (step === 'delete-saved') return res.status(200).json(await handleDeleteSaved(db, req.body));
-    if (step === 'sync-status')    return res.status(200).json(await handleSyncStatus(db, apiKey));
-    if (step === 'sync-customers') return res.status(200).json(await handleSyncCustomers(db, apiKey));
+    if (step === 'init')           return res.status(200).json(await handleInit(db, req.body, null));
+    if (step === 'confirm')        return res.status(200).json(await handleConfirm(db, req.body));
+    if (step === 'refund')         return res.status(200).json(await handleRefund(db, req.body));
+    if (step === 'preview')        return res.status(200).json(await handlePreview(db, req.body));
+    if (step === 'list-saved')     return res.status(200).json(await handleListSaved(db, req.body));
+    if (step === 'delete-saved')   return res.status(200).json(await handleDeleteSaved(db, req.body));
+    if (step === 'sync-status')    return res.status(200).json(await handleSyncStatus(db));
+    if (step === 'sync-customers') return res.status(200).json(await handleSyncCustomers(db));
     if (step === 'check-terms')    return res.status(200).json(await handleCheckTerms(db, req.body));
     if (step === 'accept-terms')   return res.status(200).json(await handleAcceptTerms(db, req.body, req));
     return res.status(400).json({ error: 'step inválido' });
