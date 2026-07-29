@@ -48,11 +48,59 @@ async function handleSetOwnerSigned(req, res) {
   }
 }
 
+// GET /api/locarpay-fix-contract?contractId=xxx → resolve signed PDF URL via Assinafy
+async function handleGetContractPdf(req, res) {
+  const { contractId } = req.query;
+  if (!contractId) return res.status(400).json({ error: 'contractId obrigatório' });
+  try {
+    // Verifica URL cacheada no Firestore
+    const contractDoc = await fsGet(`contracts/${contractId}`);
+    if (!contractDoc?.fields) return res.status(404).json({ error: 'Contrato não encontrado' });
+    const cachedUrl = contractDoc.fields.signedFileUrl?.stringValue;
+    if (cachedUrl) return res.status(200).json({ url: cachedUrl });
+
+    const assinafyDocId = contractDoc.fields.assinafyDocumentId?.stringValue;
+    if (!assinafyDocId) return res.status(404).json({ error: 'Contrato ainda não enviado para assinatura digital' });
+
+    const configDoc = await fsGet('config/assinafy');
+    const apiKey = configDoc?.fields?.apiKey?.stringValue;
+    if (!apiKey) return res.status(500).json({ error: 'Configuração Assinafy não encontrada' });
+
+    const accounts = await assinafyGet(apiKey, 'accounts');
+    const accountId = accounts.data?.[0]?.id;
+    if (!accountId) return res.status(500).json({ error: 'Conta Assinafy não encontrada' });
+
+    let signedUrl = null;
+    try {
+      const docRes = await assinafyGet(apiKey, `accounts/${accountId}/documents/${assinafyDocId}`);
+      signedUrl = docRes.data?.signed_url || docRes.data?.signedUrl || null;
+    } catch (_) {}
+
+    if (!signedUrl) {
+      const listRes = await assinafyGet(apiKey, `accounts/${accountId}/documents`);
+      const found = (listRes.data || []).find(d =>
+        (d.is_certificated || d.isCertificated) && (d.signed_url || d.signedUrl)
+      );
+      if (found) signedUrl = found.signed_url || found.signedUrl;
+    }
+
+    if (!signedUrl) return res.status(404).json({ error: 'Contrato assinado não encontrado na Assinafy' });
+
+    // Cacheia no Firestore via REST
+    await fsPatch(`contracts/${contractId}`, { signedFileUrl: { stringValue: signedUrl } });
+
+    return res.status(200).json({ url: signedUrl });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method === 'GET') return handleGetContractPdf(req, res);
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   // Roteamento por step (set-owner-signed foi absorvido aqui)
