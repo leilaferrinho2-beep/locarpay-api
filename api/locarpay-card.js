@@ -567,20 +567,19 @@ async function handleSyncStatus(db, body) {
   const ownerId = body?.ownerId || await getDefaultOwnerId(db);
   const apiKey = await getAsaasKey(db, ownerId);
   if (!apiKey) throw Object.assign(new Error('Chave Asaas não configurada'), { status: 500 });
-  // Filtra cobranças "paid" pelo owner
-  const snap = await db.collection('charges')
+
+  // Cobranças pagas → verifica estorno no Asaas
+  const paidSnap = await db.collection('charges')
     .where('ownerId', '==', ownerId)
     .where('status', '==', 'paid')
     .get();
 
   const toReset = [];
-
-  await Promise.all(snap.docs.map(async (doc) => {
+  await Promise.all(paidSnap.docs.map(async (doc) => {
     const data = doc.data();
     if (!data.asaasChargeId) return;
     try {
       const payment = await asaasReq('GET', `/payments/${data.asaasChargeId}`, null, apiKey);
-      // REFUNDED ou CHARGEBACK = estorno confirmado no Asaas
       if (['REFUNDED', 'CHARGEBACK', 'REFUND_REQUESTED'].includes(payment.status)) {
         await doc.ref.update({
           status:        'pending',
@@ -593,10 +592,106 @@ async function handleSyncStatus(db, body) {
         });
         toReset.push(doc.id);
       }
-    } catch (_) { /* ignora cobranças que não existem mais no Asaas */ }
+    } catch (_) {}
   }));
 
-  return { ok: true, updated: toReset.length, chargeIds: toReset };
+  // Cobranças pendentes/vencidas com asaasChargeId → verifica se foram pagas no Asaas
+  const pendingSnap = await db.collection('charges')
+    .where('ownerId', '==', ownerId)
+    .where('status', 'in', ['pending', 'overdue'])
+    .get();
+
+  const newlyPaid = [];
+  await Promise.all(pendingSnap.docs.map(async (doc) => {
+    const data = doc.data();
+    if (!data.asaasChargeId) return;
+    try {
+      const payment = await asaasReq('GET', `/payments/${data.asaasChargeId}`, null, apiKey);
+      if (['CONFIRMED', 'RECEIVED'].includes(payment.status)) {
+        await doc.ref.update({ status: 'paid', paidAt: new Date() });
+        newlyPaid.push({ chargeId: doc.id, contractId: data.contractId, ownerId });
+      }
+    } catch (_) {}
+  }));
+
+  // Para cada pagamento confirmado, gera cobrança do próximo mês se ainda não existe
+  if (newlyPaid.length > 0) {
+    await handleGenerateCharges(db, { ownerId, monthOffset: 1 }).catch(() => {});
+  }
+
+  return { ok: true, reset: toReset.length, confirmed: newlyPaid.length };
+}
+
+// ── GENERATE CHARGES ─────────────────────────────────────────────────────────
+// Para cada contrato ativo do owner, verifica se já existe cobrança do mês
+// corrente (ou próximo). Se não, cria automaticamente.
+async function handleGenerateCharges(db, body) {
+  const { ownerId, monthOffset = 0 } = body;
+  // monthOffset=0 → mês atual, 1 → próximo mês
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatório'), { status: 400 });
+
+  const contractsSnap = await db.collection('contracts')
+    .where('ownerId', '==', ownerId)
+    .where('active', '==', true)
+    .get();
+
+  if (contractsSnap.empty) return { ok: true, created: 0 };
+
+  const now      = new Date();
+  const target   = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+  const year     = target.getFullYear();
+  const month    = target.getMonth(); // 0-indexed
+
+  let created = 0;
+  const batch = db.batch();
+
+  await Promise.all(contractsSnap.docs.map(async contractDoc => {
+    const contract = contractDoc.data();
+    const { tenantId, tenantEmail, baseRent, dueDay = 10, id: contractId } = contract;
+    if (!tenantId || !baseRent) return;
+
+    // dueDate = ano/mês alvo + dia de vencimento
+    let dueDate = new Date(year, month, dueDay);
+    // se o dia não existe no mês (ex: 31 de fevereiro), JS avança para o próximo mês — corrigir
+    if (dueDate.getMonth() !== month) {
+      dueDate = new Date(year, month + 1, 0); // último dia do mês
+    }
+
+    const dueSecs = Math.floor(dueDate.getTime() / 1000);
+    const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+    // Verifica se já existe cobrança para este contrato neste mês
+    const existing = await db.collection('charges')
+      .where('contractId', '==', contractId)
+      .where('monthRef', '==', monthStr)
+      .limit(1)
+      .get();
+
+    if (!existing.empty) return; // já existe
+
+    const chargeRef = db.collection('charges').doc();
+    batch.set(chargeRef, {
+      id:           chargeRef.id,
+      contractId,
+      tenantId,
+      tenantEmail:  tenantEmail || '',
+      dueDate:      { seconds: dueSecs, nanoseconds: 0 },
+      baseRent,
+      extras:       [],
+      totalAmount:  baseRent,
+      status:       'pending',
+      asaasChargeId:'',
+      pixCopyPaste: '',
+      pixQrCode:    '',
+      ownerId,
+      monthRef:     monthStr,
+      generatedAt:  new Date()
+    });
+    created++;
+  }));
+
+  if (created > 0) await batch.commit();
+  return { ok: true, created };
 }
 
 // ── MARK OVERDUE ─────────────────────────────────────────────────────────────
@@ -720,8 +815,9 @@ export default async function handler(req, res) {
     if (step === 'sync-customers') return res.status(200).json(await handleSyncCustomers(db, req.body));
     if (step === 'check-terms')    return res.status(200).json(await handleCheckTerms(db, req.body));
     if (step === 'accept-terms')   return res.status(200).json(await handleAcceptTerms(db, req.body, req));
-    if (step === 'mark-overdue')   return res.status(200).json(await handleMarkOverdue(db, req.body));
-    if (step === 'send-push')      return res.status(200).json(await handleSendPush(db, req.body));
+    if (step === 'mark-overdue')      return res.status(200).json(await handleMarkOverdue(db, req.body));
+    if (step === 'send-push')         return res.status(200).json(await handleSendPush(db, req.body));
+    if (step === 'generate-charges')  return res.status(200).json(await handleGenerateCharges(db, req.body));
     return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {

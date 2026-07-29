@@ -490,6 +490,36 @@
     notifyTrialByEmail();
   }
 
+  async function generateCharges() {
+    const btn = $('btn-generate-charges');
+    btn.disabled = true;
+    btn.textContent = 'Gerando...';
+    try {
+      // Gera mês atual
+      const r0 = await fetch('/api/locarpay-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'generate-charges', ownerId: currentOwnerId, monthOffset: 0 })
+      });
+      const d0 = await r0.json();
+      // Gera próximo mês também (idempotente se já existir)
+      const r1 = await fetch('/api/locarpay-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'generate-charges', ownerId: currentOwnerId, monthOffset: 1 })
+      });
+      const d1 = await r1.json();
+      const total = (d0.created ?? 0) + (d1.created ?? 0);
+      showToast(total > 0 ? `${total} cobrança(s) gerada(s) com sucesso.` : 'Todas as cobranças já existem.', total > 0 ? 'success' : 'info');
+      await renderMetrics();
+    } catch (e) {
+      showToast('Erro ao gerar cobranças: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Gerar cobranças';
+    }
+  }
+
   async function notifyOverdue() {
     const btn = $('btn-notify-overdue');
     btn.disabled = true;
@@ -600,6 +630,7 @@
   $('tab-owners').addEventListener('click',  () => { setTab('owners');  loadOwners(); });
 
   $('btn-add-tenant').addEventListener('click', () => { $('modal-tenant').style.display = 'flex'; $('t-name').focus(); });
+  $('btn-generate-charges').addEventListener('click', generateCharges);
   $('btn-notify-overdue').addEventListener('click', notifyOverdue);
   $('tenant-cancel').addEventListener('click',  () => { $('modal-tenant').style.display = 'none'; resetTenantForm(); });
   $('tenant-save').addEventListener('click', saveTenant);
@@ -815,6 +846,7 @@
     <div class="section-header">
       <h2>Inquilinos</h2>
       <button class="btn" id="btn-add-tenant">+ Novo Inquilino</button>
+      <button class="btn btn-secondary" id="btn-generate-charges" title="Gera cobranças do mês atual para todos os contratos ativos">Gerar cobranças</button>
       <button class="btn btn-secondary" id="btn-notify-overdue" title="Marca cobranças vencidas e envia push para inquilinos em atraso">Notificar vencimentos</button>
     </div>
     <table>
