@@ -127,11 +127,17 @@
               ${isOverdue && diaAtraso > 0 ? `<div class="card-row"><span class="card-meta text-red">${diaAtraso} dia${diaAtraso>1?'s':''} de atraso · multa aplicada</span></div>` : ''}
               ${c.pixCopyPaste ? `
                 <div class="pix-section">
+                  ${c.pixQrCode ? `
+                    <p class="pix-label">QR Code PIX</p>
+                    <div style="text-align:center;margin-bottom:12px">
+                      <img src="data:image/png;base64,${c.pixQrCode}" alt="QR Code PIX" style="width:180px;height:180px;border-radius:8px;background:#fff;padding:8px">
+                    </div>
+                  ` : ''}
                   <p class="pix-label">PIX Copia e Cola</p>
                   <div class="pix-code">${c.pixCopyPaste}</div>
                   <button class="btn-pix" onclick="copyPix('${c.id}','${c.pixCopyPaste.replace(/'/g,"\\'")}')">Copiar código PIX</button>
                 </div>
-              ` : `<p class="pix-hint">Abra o app LocarPay para gerar o QR Code PIX.</p>`}
+              ` : `<p class="pix-hint">Solicite ao proprietário para gerar o PIX no app LocarPay.</p>`}
             </div>`;
         });
       }
