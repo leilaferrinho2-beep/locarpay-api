@@ -1512,9 +1512,9 @@ async function handleNotifyContractExpiry(db, body) {
   if (!ownerSnap.exists) throw Object.assign(new Error('Owner não encontrado'), { status: 404 });
   const owner = ownerSnap.data();
 
-  // Busca FCM token do owner via users (role=admin)
-  let ownerFcmToken = null;
-  if (owner.email) {
+  // Busca FCM token do owner: primeiro em owners (cadastro via /cadastro), fallback em users
+  let ownerFcmToken = owner.fcmToken || null;
+  if (!ownerFcmToken && owner.email) {
     const ownerUserSnap = await db.collection('users')
       .where('email', '==', owner.email).where('role', '==', 'admin').limit(1).get();
     ownerFcmToken = ownerUserSnap.docs[0]?.data()?.fcmToken || null;
