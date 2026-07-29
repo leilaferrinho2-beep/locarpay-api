@@ -1349,6 +1349,126 @@ async function handleMonthlyReport(db, body) {
   return { ok: true, sentTo: owner.email, month: target, paid: paid.length, pending: pending.length + overdue.length, totalPaid };
 }
 
+// ── NOTIFY CONTRACT EXPIRY ────────────────────────────────────────────────────
+// Verifica contratos ativos cujo endDate está em 30, 15 ou 7 dias e envia
+// email + push ao owner. Idempotente: usa o campo expiryAlertsSent para não
+// reenviar o mesmo alerta no mesmo dia.
+async function handleNotifyContractExpiry(db, body) {
+  const { ownerId } = body;
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatório'), { status: 400 });
+
+  const ownerSnap = await db.collection('owners').doc(ownerId).get();
+  if (!ownerSnap.exists) throw Object.assign(new Error('Owner não encontrado'), { status: 404 });
+  const owner = ownerSnap.data();
+
+  const now       = Date.now();
+  const thresholds = [7, 15, 30]; // dias antes do vencimento
+  const msPerDay   = 86_400_000;
+
+  const contractsSnap = await db.collection('contracts')
+    .where('ownerId', '==', ownerId)
+    .where('active', '==', true)
+    .get();
+
+  if (contractsSnap.empty) return { ok: true, checked: 0, alerted: 0 };
+
+  // Busca nomes dos inquilinos em lote
+  const tenantIds = [...new Set(contractsSnap.docs.map(d => d.data().tenantId).filter(Boolean))];
+  const nameMap = {};
+  for (let i = 0; i < tenantIds.length; i += 10) {
+    const slice = tenantIds.slice(i, i + 10);
+    const usersSnap = await db.collection('users').where('__name__', 'in', slice).get();
+    usersSnap.docs.forEach(d => { nameMap[d.id] = d.data().name || d.data().email || d.id; });
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.titan.email', port: 587, secure: false,
+    auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
+  });
+
+  const fmt     = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const batch   = db.batch();
+  let alerted   = 0;
+
+  for (const doc of contractsSnap.docs) {
+    const contract = doc.data();
+    if (!contract.endDate?.seconds) continue;
+
+    const endMs       = contract.endDate.seconds * 1000;
+    const daysLeft    = Math.ceil((endMs - now) / msPerDay);
+    if (daysLeft < 0 || daysLeft > 30) continue;
+
+    const alertKey = thresholds.find(t => daysLeft <= t);
+    if (!alertKey) continue;
+
+    const sentAlerts = contract.expiryAlertsSent || [];
+    if (sentAlerts.includes(alertKey)) continue; // já enviado
+
+    const tenantName = nameMap[contract.tenantId] || 'Inquilino';
+    const endFmt     = fmt.format(new Date(endMs));
+
+    // Email ao owner
+    if (owner.email) {
+      await transporter.sendMail({
+        from: 'LocarPay <denis@dlftech.com.br>',
+        to: owner.email,
+        subject: `⚠️ Contrato vence em ${daysLeft} dia${daysLeft !== 1 ? 's' : ''} — ${tenantName}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#fafafa">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
+              <div style="background:#2D6A2D;border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff">L</div>
+              <span style="font-size:18px;font-weight:700;color:#1a1a1a">LocarPay</span>
+            </div>
+            <div style="background:#fff;border-radius:12px;padding:28px;border:1px solid #e8e8e8">
+              <div style="text-align:center;margin-bottom:20px">
+                <div style="font-size:36px">⚠️</div>
+                <h2 style="color:#e65100;margin:8px 0 4px">Contrato próximo do vencimento</h2>
+                <p style="color:#888;margin:0;font-size:14px">Ação necessária</p>
+              </div>
+              <table style="width:100%;border-collapse:collapse">
+                <tr><td style="padding:8px 0;color:#555;border-bottom:1px solid #eee">Inquilino</td>
+                    <td style="padding:8px 0;text-align:right;font-weight:600;border-bottom:1px solid #eee">${tenantName}</td></tr>
+                <tr><td style="padding:8px 0;color:#555;border-bottom:1px solid #eee">Imóvel</td>
+                    <td style="padding:8px 0;text-align:right;border-bottom:1px solid #eee">${contract.propertyDescription || '—'}</td></tr>
+                <tr><td style="padding:8px 0;color:#555;border-bottom:1px solid #eee">Término do contrato</td>
+                    <td style="padding:8px 0;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #eee">${endFmt}</td></tr>
+                <tr><td style="padding:8px 0;color:#555">Dias restantes</td>
+                    <td style="padding:8px 0;text-align:right;font-weight:800;font-size:20px;color:#e65100">${daysLeft} dia${daysLeft !== 1 ? 's' : ''}</td></tr>
+              </table>
+              <p style="color:#888;font-size:13px;margin-top:20px">
+                Acesse o LocarPay para renovar o contrato ou comunicar a saída do inquilino.
+              </p>
+            </div>
+            <p style="color:#aaa;font-size:11px;text-align:center;margin-top:20px">LocarPay — ${new Date().toLocaleDateString('pt-BR')}</p>
+          </div>`
+      });
+    }
+
+    // Push ao owner
+    if (owner.fcmToken) {
+      try {
+        await getMessaging().send({
+          token: owner.fcmToken,
+          notification: {
+            title: `⚠️ Contrato vence em ${daysLeft} dia${daysLeft !== 1 ? 's' : ''}`,
+            body: `${tenantName} — ${contract.propertyDescription || 'Imóvel'}`
+          },
+          data: { type: 'contract_expiry', contractId: doc.id }
+        });
+      } catch (_) {}
+    }
+
+    // Marca alerta como enviado
+    batch.update(doc.ref, {
+      expiryAlertsSent: [...sentAlerts, alertKey]
+    });
+    alerted++;
+  }
+
+  if (alerted > 0) await batch.commit();
+  return { ok: true, checked: contractsSnap.size, alerted };
+}
+
 // ── ANNUAL RECEIPT ───────────────────────────────────────────────────────────
 // Envia comprovante anual de pagamentos para cada inquilino (útil para IR)
 // Parâmetros: { ownerId, year? (padrão: ano atual), tenantId? (opcional — só um) }
@@ -1628,7 +1748,8 @@ export default async function handler(req, res) {
     if (step === 'adjust-rent')       return res.status(200).json(await handleAdjustRent(db, req.body));
     if (step === 'monthly-report')    return res.status(200).json(await handleMonthlyReport(db, req.body));
     if (step === 'asaas-webhook')     return res.status(200).json(await handleAsaasPaymentWebhook(db, req.body));
-    if (step === 'annual-receipt')    return res.status(200).json(await handleAnnualReceipt(db, req.body));
+    if (step === 'annual-receipt')       return res.status(200).json(await handleAnnualReceipt(db, req.body));
+    if (step === 'notify-expiry')        return res.status(200).json(await handleNotifyContractExpiry(db, req.body));
 
     // Webhook Asaas sem step (evento direto da subconta)
     if (!step && req.body?.event && req.body?.payment) {
