@@ -4,7 +4,7 @@
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue }      from 'firebase-admin/firestore';
-import { getAsaasKey, getDefaultOwnerId } from './lib/owner.js';
+import { getAsaasKey, getDefaultOwnerId } from '../lib/owner.js';
 
 function initFirebase() {
   if (getApps().length) return;
