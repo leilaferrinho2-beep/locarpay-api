@@ -165,7 +165,7 @@
     const tbody = $('tenants-tbody');
     tbody.innerHTML = '';
     if (tenants.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhum inquilino cadastrado</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhum inquilino cadastrado</td></tr>';
       return;
     }
     const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -181,18 +181,21 @@
           : '<span class="badge active">Ativo</span>';
       const docs      = t.docs || {};
       const docsCount = Object.keys(docs).length;
-      const docsBadge = `<span class="badge ${docsCount>0?'active':'inactive'}" style="cursor:pointer">📄 ${docsCount}/5</span>`;
       const row = document.createElement('tr');
-      row.style.cursor = 'pointer';
       row.innerHTML = `
         <td>${t.name || '—'}</td>
-        <td>${t.email || '—'}</td>
-        <td>${property}</td>
+        <td style="font-size:12px;color:#888">${t.email || '—'}</td>
+        <td style="font-size:12px">${property}</td>
         <td>${rent}</td>
         <td>${status}</td>
-        <td>${docsBadge}</td>
+        <td><span class="badge ${docsCount>0?'active':'inactive'}" style="cursor:pointer" onclick="openDocsModal_${t.id}()">📄 ${docsCount}/5</span></td>
+        <td style="white-space:nowrap">
+          <button class="btn-sm" onclick="openEditTenant('${t.id}')">Editar</button>
+          <button class="btn-sm btn-sm-alt" onclick="openExtras('${t.id}')">+Extra</button>
+        </td>
       `;
-      row.addEventListener('click', () => openDocsModal(t));
+      // docs click via closure
+      window[`openDocsModal_${t.id}`] = () => openDocsModal(t);
       tbody.appendChild(row);
     });
   }
@@ -490,6 +493,155 @@
     notifyTrialByEmail();
   }
 
+  // ── Editar inquilino ──────────────────────────────────────────
+  let editingTenantId = null;
+  function openEditTenant(tenantId) {
+    editingTenantId = tenantId;
+    const t = tenants.find(x => x.id === tenantId);
+    const c = contracts.find(x => x.tenantId === tenantId);
+    if (!t) return;
+    $('et-name').value  = t.name  || '';
+    $('et-phone').value = t.phone || '';
+    $('et-cpf').value   = t.cpf   || '';
+    $('et-rent').value  = c?.baseRent  || '';
+    $('et-due').value   = c?.dueDay    || 10;
+    $('et-property').value = c?.propertyDescription || '';
+    $('modal-edit-tenant').style.display = 'flex';
+    $('et-name').focus();
+  }
+
+  async function saveEditTenant() {
+    const t = tenants.find(x => x.id === editingTenantId);
+    const c = contracts.find(x => x.tenantId === editingTenantId);
+    if (!t) return;
+    $('et-save').disabled = true;
+    $('et-save').textContent = 'Salvando...';
+    try {
+      const userUpdates = { name: $('et-name').value.trim(), phone: $('et-phone').value.trim(), cpf: $('et-cpf').value.trim() };
+      await updateDoc(doc(db, 'users', editingTenantId), userUpdates);
+      if (c) {
+        const rent = parseFloat($('et-rent').value.replace(',', '.'));
+        const due  = parseInt($('et-due').value);
+        if (!isNaN(rent) && !isNaN(due)) {
+          await updateDoc(doc(db, 'contracts', c.id), { baseRent: rent, dueDay: due, propertyDescription: $('et-property').value.trim() });
+        }
+      }
+      $('modal-edit-tenant').style.display = 'none';
+      showToast('Inquilino atualizado.', 'success');
+      await loadTenants();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { $('et-save').disabled = false; $('et-save').textContent = 'Salvar'; }
+  }
+
+  // ── Cobranças extras ──────────────────────────────────────────
+  let extrasForTenant = null;
+  async function openExtras(tenantId) {
+    extrasForTenant = tenantId;
+    const t = tenants.find(x => x.id === tenantId);
+    $('extras-tenant-name').textContent = t?.name || tenantId;
+    $('ex-desc').value  = '';
+    $('ex-value').value = '';
+    // Busca cobrança pendente/vencida do mês
+    const snap = await getDocs(query(
+      collection(db, 'charges'),
+      where('tenantId', '==', tenantId),
+      where('status', 'in', ['pending', 'overdue'])
+    ));
+    if (snap.empty) { showToast('Nenhuma cobrança pendente para este inquilino.', 'error'); return; }
+    // Pega a mais recente
+    const charge = snap.docs.sort((a,b) => (b.data().dueDate?.seconds||0) - (a.data().dueDate?.seconds||0))[0];
+    extrasForTenant = { tenantId, chargeId: charge.id, extras: charge.data().extras || [] };
+    renderExtrasList();
+    $('modal-extras').style.display = 'flex';
+  }
+
+  function renderExtrasList() {
+    const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const list = $('extras-list');
+    const items = extrasForTenant?.extras || [];
+    list.innerHTML = items.length === 0
+      ? '<div style="color:#666;font-size:13px">Nenhum extra adicionado</div>'
+      : items.map((e,i) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2a2d3e">
+          <span style="font-size:13px">${e.description}</span>
+          <span style="font-size:13px;color:#4caf50">${fmt.format(e.value)}
+            <button class="btn-sm" style="margin-left:8px;color:#ef5350;border-color:#3a1a1a" onclick="removeExtra(${i})">✕</button>
+          </span>
+        </div>`).join('');
+  }
+
+  window.removeExtra = async (idx) => {
+    extrasForTenant.extras.splice(idx, 1);
+    await applyExtras();
+    renderExtrasList();
+  };
+
+  async function addExtra() {
+    const desc  = $('ex-desc').value.trim();
+    const value = parseFloat($('ex-value').value.replace(',', '.'));
+    if (!desc || isNaN(value) || value <= 0) { showToast('Preencha descrição e valor', 'error'); return; }
+    extrasForTenant.extras.push({ description: desc, value });
+    $('ex-desc').value = '';
+    $('ex-value').value = '';
+    await applyExtras();
+    renderExtrasList();
+  }
+
+  async function applyExtras() {
+    const ref = doc(db, 'charges', extrasForTenant.chargeId);
+    const snap = await getDoc(ref);
+    const base  = snap.data()?.baseRent || 0;
+    const total = base + extrasForTenant.extras.reduce((s, e) => s + e.value, 0);
+    await updateDoc(ref, { extras: extrasForTenant.extras, totalAmount: total });
+  }
+
+  async function closeExtras() {
+    $('modal-extras').style.display = 'none';
+    showToast('Extras salvos.', 'success');
+    await renderMetrics();
+  }
+
+  // ── Exportar CSV ──────────────────────────────────────────────
+  async function exportCSV() {
+    const btn = $('btn-export-csv');
+    btn.disabled = true; btn.textContent = 'Exportando...';
+    try {
+      let q = collection(db, 'charges');
+      const snap = await getDocs(currentOwnerId
+        ? query(q, where('ownerId', '==', currentOwnerId))
+        : q);
+
+      const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+      const fmtDate = secs => secs ? new Date(secs * 1000).toLocaleDateString('pt-BR') : '—';
+
+      const rows = [['Inquilino', 'E-mail', 'Imóvel', 'Mês Ref.', 'Vencimento', 'Valor Base', 'Total', 'Status', 'Pago em']];
+      snap.docs.forEach(d => {
+        const c = d.data();
+        const t = tenants.find(x => x.id === c.tenantId);
+        const ct = contracts.find(x => x.tenantId === c.tenantId);
+        rows.push([
+          t?.name || c.tenantId,
+          t?.email || '',
+          ct?.propertyDescription || '',
+          c.monthRef || '',
+          fmtDate(c.dueDate?.seconds),
+          (c.baseRent || 0).toFixed(2).replace('.', ','),
+          (c.totalAmount || 0).toFixed(2).replace('.', ','),
+          c.status || '',
+          c.paidAt ? fmtDate(c.paidAt.seconds) : ''
+        ]);
+      });
+
+      const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = `locarpay-cobranças-${new Date().toISOString().slice(0,10)}.csv`;
+      a.click(); URL.revokeObjectURL(url);
+      showToast(`${rows.length - 1} cobranças exportadas.`, 'success');
+    } catch (e) { showToast('Erro ao exportar: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Exportar CSV'; }
+  }
+
   async function generateCharges() {
     const btn = $('btn-generate-charges');
     btn.disabled = true;
@@ -632,10 +784,15 @@
   $('btn-add-tenant').addEventListener('click', () => { $('modal-tenant').style.display = 'flex'; $('t-name').focus(); });
   $('btn-generate-charges').addEventListener('click', generateCharges);
   $('btn-notify-overdue').addEventListener('click', notifyOverdue);
+  $('btn-export-csv').addEventListener('click', exportCSV);
+  $('et-save').addEventListener('click', saveEditTenant);
+  $('et-cancel').addEventListener('click', () => $('modal-edit-tenant').style.display = 'none');
+  $('ex-add').addEventListener('click', addExtra);
+  $('ex-close').addEventListener('click', closeExtras);
   $('tenant-cancel').addEventListener('click',  () => { $('modal-tenant').style.display = 'none'; resetTenantForm(); });
   $('tenant-save').addEventListener('click', saveTenant);
 
-  [$('modal-tenant'), $('modal-docs'), $('modal-billing')].forEach(m => {
+  [$('modal-tenant'), $('modal-docs'), $('modal-billing'), $('modal-edit-tenant'), $('modal-extras')].forEach(m => {
     m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
   });
   $('docs-modal-close').addEventListener('click', () => { $('modal-docs').style.display = 'none'; });
@@ -726,6 +883,9 @@
   tr:hover td { background: #20233a; }
   .empty { text-align: center; color: #555; padding: 40px; }
 
+  .btn-sm { padding: 3px 10px; font-size: 11px; border-radius: 6px; border: 1px solid #3a3d52; background: transparent; color: #aaa; cursor: pointer; margin-right: 4px; transition: border-color 0.15s, color 0.15s; }
+  .btn-sm:hover { border-color: #4F86F7; color: #4F86F7; }
+  .btn-sm-alt:hover { border-color: #4caf50; color: #4caf50; }
   .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
   .badge.active   { background: #1b3a1f; color: #4caf50; }
   .badge.inactive { background: #3a1a1a; color: #ef5350; }
@@ -848,10 +1008,11 @@
       <button class="btn" id="btn-add-tenant">+ Novo Inquilino</button>
       <button class="btn btn-secondary" id="btn-generate-charges" title="Gera cobranças do mês atual para todos os contratos ativos">Gerar cobranças</button>
       <button class="btn btn-secondary" id="btn-notify-overdue" title="Marca cobranças vencidas e envia push para inquilinos em atraso">Notificar vencimentos</button>
+      <button class="btn btn-secondary" id="btn-export-csv" title="Exporta todas as cobranças em CSV">Exportar CSV</button>
     </div>
     <table>
       <thead>
-        <tr><th>Nome</th><th>E-mail</th><th>Imóvel</th><th>Aluguel</th><th>Contrato</th><th>Docs</th></tr>
+        <tr><th>Nome</th><th>E-mail</th><th>Imóvel</th><th>Aluguel</th><th>Contrato</th><th>Docs</th><th>Ações</th></tr>
       </thead>
       <tbody id="tenants-tbody">
         <tr><td colspan="6" class="empty">Carregando...</td></tr>
@@ -946,6 +1107,46 @@
       <button class="btn-outline" id="docs-modal-close">Fechar</button>
     </div>
     <div id="docs-grid" class="docs-grid"></div>
+  </div>
+</div>
+
+<!-- Modal: Editar Inquilino -->
+<div id="modal-edit-tenant" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Editar Inquilino</h3>
+    <div class="row2">
+      <div><label>Nome completo</label><input id="et-name" type="text"></div>
+      <div><label>Telefone</label><input id="et-phone" type="text"></div>
+    </div>
+    <div class="row2">
+      <div><label>CPF</label><input id="et-cpf" type="text"></div>
+      <div><label>Aluguel (R$)</label><input id="et-rent" type="number" min="0" step="0.01"></div>
+    </div>
+    <div class="row2">
+      <div><label>Dia do vencimento</label><input id="et-due" type="number" min="1" max="28"></div>
+      <div><label>Imóvel</label><input id="et-property" type="text"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-outline" id="et-cancel">Cancelar</button>
+      <button class="btn" id="et-save">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Cobranças Extras -->
+<div id="modal-extras" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Extras — <span id="extras-tenant-name"></span></h3>
+    <p style="font-size:12px;color:#666;margin-bottom:16px">Adicionados à cobrança pendente mais recente</p>
+    <div id="extras-list" style="margin-bottom:20px;min-height:40px"></div>
+    <div class="row2" style="align-items:flex-end">
+      <div><label>Descrição</label><input id="ex-desc" type="text" placeholder="Condomínio, IPTU, Água…"></div>
+      <div><label>Valor (R$)</label><input id="ex-value" type="number" min="0" step="0.01" placeholder="0,00"></div>
+    </div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn-outline" id="ex-close">Fechar</button>
+      <button class="btn" id="ex-add">+ Adicionar extra</button>
+    </div>
   </div>
 </div>
 
