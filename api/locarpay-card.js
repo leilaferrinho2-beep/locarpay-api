@@ -103,6 +103,12 @@ async function handleInit(db, body, apiKey) {
   apiKey = apiKey || await getAsaasKey(db, ownerId);
   if (!apiKey) throw Object.assign(new Error('Chave Asaas não configurada'), { status: 500 });
 
+  // Validação cruzada: inquilino deve pertencer ao mesmo owner da cobrança
+  const userOwnerId = userSnap.data().ownerId;
+  if (userOwnerId && ownerId && userOwnerId !== ownerId) {
+    throw Object.assign(new Error('Acesso negado: cobrança não pertence a este inquilino'), { status: 403 });
+  }
+
   const user   = userSnap.data();
   const cpf    = (user.cpf || '').replace(/\D/g, '');
   const email  = user.email || '';
@@ -465,11 +471,11 @@ async function handlePreview(db, body) {
 }
 
 // ── SYNC CUSTOMERS (atualiza mobilePhone no Asaas para todos os inquilinos) ──
-async function handleSyncCustomers(db) {
-  const ownerId = await getDefaultOwnerId(db);
+async function handleSyncCustomers(db, body) {
+  const ownerId = body?.ownerId || await getDefaultOwnerId(db);
   const apiKey = await getAsaasKey(db, ownerId);
   if (!apiKey) throw Object.assign(new Error('Chave Asaas não configurada'), { status: 500 });
-  const usersSnap = await db.collection('users').get();
+  const usersSnap = await db.collection('users').where('ownerId', '==', ownerId).get();
   const results = { updated: 0, skipped: 0, errors: [] };
 
   await Promise.all(usersSnap.docs.map(async (doc) => {
@@ -556,12 +562,13 @@ async function handleAcceptTerms(db, body, req) {
 }
 
 // ── SYNC STATUS ──────────────────────────────────────────────────────────────
-async function handleSyncStatus(db) {
-  const ownerId = await getDefaultOwnerId(db);
+async function handleSyncStatus(db, body) {
+  const ownerId = body?.ownerId || await getDefaultOwnerId(db);
   const apiKey = await getAsaasKey(db, ownerId);
   if (!apiKey) throw Object.assign(new Error('Chave Asaas não configurada'), { status: 500 });
-  // Busca todas as cobranças "paid" que têm asaasChargeId
+  // Filtra cobranças "paid" pelo owner
   const snap = await db.collection('charges')
+    .where('ownerId', '==', ownerId)
     .where('status', '==', 'paid')
     .get();
 
@@ -609,8 +616,8 @@ export default async function handler(req, res) {
     if (step === 'preview')        return res.status(200).json(await handlePreview(db, req.body));
     if (step === 'list-saved')     return res.status(200).json(await handleListSaved(db, req.body));
     if (step === 'delete-saved')   return res.status(200).json(await handleDeleteSaved(db, req.body));
-    if (step === 'sync-status')    return res.status(200).json(await handleSyncStatus(db));
-    if (step === 'sync-customers') return res.status(200).json(await handleSyncCustomers(db));
+    if (step === 'sync-status')    return res.status(200).json(await handleSyncStatus(db, req.body));
+    if (step === 'sync-customers') return res.status(200).json(await handleSyncCustomers(db, req.body));
     if (step === 'check-terms')    return res.status(200).json(await handleCheckTerms(db, req.body));
     if (step === 'accept-terms')   return res.status(200).json(await handleAcceptTerms(db, req.body, req));
     return res.status(400).json({ error: 'step inválido' });
