@@ -89,6 +89,12 @@ export default async function handler(req, res) {
       ? (chargeSnap.data().ownerId || await getDefaultOwnerId(db))
       : await getDefaultOwnerId(db);
 
+    // Validação cruzada: inquilino deve pertencer ao mesmo owner da cobrança
+    const userOwnerId = userSnap.data().ownerId;
+    if (userOwnerId && ownerId && userOwnerId !== ownerId) {
+      return res.status(403).json({ error: 'Acesso negado: cobrança não pertence a este inquilino' });
+    }
+
     const [apiKey, configSnap] = await Promise.all([
       getAsaasKey(db, ownerId),
       db.collection('owners').doc(ownerId).get(),

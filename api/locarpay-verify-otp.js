@@ -84,8 +84,20 @@ export default async function handler(req, res) {
 
     const role = hasLicense ? 'admin' : userRole;
 
-    const customToken = await auth.createCustomToken(uid, { role });
-    return res.status(200).json({ ok: true, customToken, role });
+    // Resolve ownerId do inquilino (para o app saber a qual imobiliária pertence)
+    let ownerId = null;
+    try {
+      const userSnap = await db.collection('users').doc(uid).get();
+      ownerId = userSnap.data()?.ownerId || null;
+      // Fallback: busca pelo email se o doc do uid não tiver ownerId
+      if (!ownerId) {
+        const q = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get();
+        if (!q.empty) ownerId = q.docs[0].data().ownerId || null;
+      }
+    } catch (_) {}
+
+    const customToken = await auth.createCustomToken(uid, { role, ownerId });
+    return res.status(200).json({ ok: true, customToken, role, ownerId });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'Erro ao verificar código' });
