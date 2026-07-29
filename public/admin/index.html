@@ -928,6 +928,26 @@
     btn.disabled = false;
   };
 
+  // ── Notificar contratos vencendo ──────────────────────────────
+  async function notifyExpiry() {
+    const btn = $('btn-notify-expiry');
+    btn.disabled = true; btn.textContent = 'Verificando...';
+    try {
+      const r = await fetch('/api/locarpay-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'notify-expiry', ownerId: currentOwnerId })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      const msg = d.alerted > 0
+        ? `${d.alerted} contrato(s) com aviso enviado.`
+        : `Nenhum contrato vencendo nos próximos 30 dias.`;
+      showToast(msg, d.alerted > 0 ? 'success' : 'info');
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Contratos'; }
+  }
+
   // ── Comprovante anual ─────────────────────────────────────────
   async function sendAnnualReceipt() {
     const year = prompt('Ano do comprovante:', new Date().getFullYear().toString());
@@ -1297,6 +1317,7 @@
   $('tenant-search').addEventListener('input', e => { searchQuery = e.target.value; filterAndRender(); });
   $('btn-monthly-report').addEventListener('click', sendMonthlyReport);
   $('btn-annual-receipt').addEventListener('click', sendAnnualReceipt);
+  $('btn-notify-expiry').addEventListener('click', notifyExpiry);
   $('btn-adjust-rent').addEventListener('click', openAdjustRent);
   $('adjust-save').addEventListener('click', applyAdjustRent);
   $('adjust-cancel').addEventListener('click', () => $('modal-adjust-rent').style.display = 'none');
@@ -1532,6 +1553,7 @@
       <button class="btn btn-secondary" id="btn-notify-overdue" title="Marca cobranças vencidas e envia push para inquilinos em atraso">Notificar vencidos</button>
       <button class="btn btn-secondary" id="btn-monthly-report" title="Envia relatório mensal por email">Relatório</button>
       <button class="btn btn-secondary" id="btn-annual-receipt" title="Envia comprovante anual de pagamentos para todos os inquilinos">Comp. Anual</button>
+      <button class="btn btn-secondary" id="btn-notify-expiry" title="Avisa o owner sobre contratos vencendo em 30 dias">Contratos</button>
       <button class="btn btn-secondary" id="btn-adjust-rent" title="Reajuste de aluguel para todos os contratos">Reajuste</button>
       <button class="btn btn-secondary" id="btn-export-csv" title="Exporta todas as cobranças em CSV">Exportar CSV</button>
     </div>
