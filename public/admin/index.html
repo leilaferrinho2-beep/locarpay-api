@@ -115,6 +115,7 @@
     contracts = contractsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderTenants();
     renderMetrics();
+    renderPlanBar();
   }
 
   const DOC_LABELS = {
@@ -162,6 +163,46 @@
   }
 
   function renderTenants() { filterAndRender(); }
+
+  // ── Banner "Meu Plano" (visível apenas para owners não-master) ────────────
+  function renderPlanBar() {
+    const bar = $('plan-bar');
+    if (!bar) return;
+    if (isMaster) { bar.style.display = 'none'; return; }
+    const d = currentOwnerData;
+    if (!d) return;
+
+    const now = Date.now();
+    const trialEnd  = d.trialEndsAt?.seconds   ? d.trialEndsAt.seconds   * 1000 : 0;
+    const activeEnd = d.planActiveUntil?.seconds ? d.planActiveUntil.seconds * 1000 : 0;
+
+    let statusHtml, btnHtml = '';
+    if (d.status === 'active' && activeEnd > now) {
+      const dias = Math.ceil((activeEnd - now) / 86400000);
+      statusHtml = `<span style="color:#81c784">✓ Plano <strong>${d.plan || 'basic'}</strong> ativo — renova em ${dias} dia${dias!==1?'s':''}</span>`;
+    } else if (d.status === 'suspended') {
+      statusHtml = `<span style="color:#ef9a9a">✗ Plano suspenso — acesse o painel master para reativar</span>`;
+    } else if (trialEnd && trialEnd > now) {
+      const dias = Math.ceil((trialEnd - now) / 86400000);
+      const color = dias <= 3 ? '#ffb74d' : '#ce93d8';
+      statusHtml = `<span style="color:${color}">⏳ Trial expira em <strong>${dias} dia${dias!==1?'s':''}</strong></span>`;
+      btnHtml = `<button class="btn" style="padding:6px 16px;font-size:12px" onclick="openBillingModal('${d.id}')">Fazer upgrade →</button>`;
+    } else if (trialEnd && trialEnd < now) {
+      statusHtml = `<span style="color:#ef9a9a">⚠ Trial expirado — faça upgrade para continuar</span>`;
+      btnHtml = `<button class="btn" style="padding:6px 16px;font-size:12px;background:#c62828" onclick="openBillingModal('${d.id}')">Ativar plano →</button>`;
+    } else {
+      statusHtml = `<span style="color:#888">Plano: ${d.plan || '—'}</span>`;
+    }
+
+    bar.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="font-size:12px;color:#555;text-transform:uppercase;letter-spacing:.05em;font-weight:600">Meu Plano</span>
+        ${statusHtml}
+        ${btnHtml}
+      </div>
+    `;
+    bar.style.display = 'block';
+  }
 
   async function openDocsModal(tenant) {
     const snap = await getDoc(doc(db, 'users', tenant.id));
@@ -1292,6 +1333,7 @@
 
   <!-- Painel: Inquilinos -->
   <div class="panel" id="panel-tenants" style="display:block">
+    <div id="plan-bar" style="display:none;background:#1a1d2e;border:1px solid #2a2d3e;border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:13px"></div>
     <div id="metrics-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:24px"></div>
     <div class="section-header">
       <h2>Inquilinos</h2>

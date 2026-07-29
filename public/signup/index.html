@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LocarPay — Cadastro de Imobiliária</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #0a0d14;
+      --card:     #111520;
+      --border:   #1e2233;
+      --green:    #2e7d32;
+      --green-lt: #4CAF50;
+      --text:     #e8eaf0;
+      --muted:    #7b8199;
+      --accent:   #43a047;
+      --error:    #ef5350;
+      --radius:   12px;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── NAV ── */
+    nav {
+      width: 100%;
+      max-width: 1100px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .logo-mark {
+      width: 38px; height: 38px; border-radius: 10px;
+      background: var(--green); display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 20px; color: #fff;
+    }
+    .logo-name { font-size: 18px; font-weight: 700; color: var(--text); }
+    .nav-login {
+      color: var(--muted); font-size: 14px; text-decoration: none;
+      border: 1px solid var(--border); border-radius: 8px; padding: 7px 16px;
+      transition: color .2s, border-color .2s;
+    }
+    .nav-login:hover { color: var(--text); border-color: var(--muted); }
+
+    /* ── HERO ── */
+    .hero {
+      text-align: center;
+      padding: 48px 24px 32px;
+      max-width: 640px;
+    }
+    .badge {
+      display: inline-block; background: rgba(76,175,80,.12);
+      color: var(--green-lt); font-size: 12px; font-weight: 600; letter-spacing: .05em;
+      border: 1px solid rgba(76,175,80,.25); border-radius: 20px; padding: 4px 14px;
+      margin-bottom: 20px; text-transform: uppercase;
+    }
+    h1 { font-size: clamp(26px, 5vw, 40px); font-weight: 800; line-height: 1.15; margin-bottom: 14px; }
+    h1 span { color: var(--green-lt); }
+    .hero p { color: var(--muted); font-size: 16px; line-height: 1.7; max-width: 500px; margin: 0 auto 36px; }
+
+    /* ── PRICING ── */
+    .pricing {
+      display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+      padding: 0 24px 40px;
+    }
+    .plan-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px; width: 220px;
+      position: relative; transition: border-color .2s;
+    }
+    .plan-card.featured { border-color: var(--green-lt); }
+    .plan-card .plan-badge {
+      position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+      background: var(--green-lt); color: #fff; font-size: 11px; font-weight: 700;
+      padding: 3px 12px; border-radius: 20px; white-space: nowrap;
+    }
+    .plan-name { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+    .plan-price { font-size: 32px; font-weight: 800; color: var(--text); }
+    .plan-price span { font-size: 14px; font-weight: 400; color: var(--muted); }
+    .plan-limit { font-size: 12px; color: var(--muted); margin: 6px 0 16px; }
+    .plan-features { list-style: none; }
+    .plan-features li { font-size: 13px; color: var(--muted); padding: 3px 0; }
+    .plan-features li::before { content: '✓ '; color: var(--green-lt); }
+
+    /* ── FORM ── */
+    .form-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 32px;
+      width: 100%; max-width: 560px; margin: 0 24px 60px;
+    }
+    .form-card h2 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    .form-card .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    label { display: block; font-size: 12px; color: var(--muted); font-weight: 600;
+            margin-bottom: 5px; letter-spacing: .03em; }
+    input, select {
+      width: 100%; padding: 10px 14px;
+      background: #0f1117; border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 14px;
+      outline: none; transition: border-color .2s;
+    }
+    input:focus, select:focus { border-color: var(--green-lt); }
+    input::placeholder { color: #3a3d52; }
+    select option { background: #0f1117; }
+    .field { margin-bottom: 16px; }
+
+    .plan-select-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px;
+    }
+    .plan-radio { display: none; }
+    .plan-label {
+      display: block; text-align: center; padding: 12px 6px;
+      border: 1px solid var(--border); border-radius: 10px; cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+    .plan-radio:checked + .plan-label {
+      border-color: var(--green-lt); background: rgba(76,175,80,.08);
+    }
+    .plan-label .pname { font-size: 13px; font-weight: 700; color: var(--text); }
+    .plan-label .pprice { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .btn-submit {
+      width: 100%; padding: 14px; font-size: 15px; font-weight: 700;
+      background: var(--green-lt); color: #fff; border: none; border-radius: 10px;
+      cursor: pointer; transition: background .2s; margin-top: 8px;
+    }
+    .btn-submit:hover { background: #388e3c; }
+    .btn-submit:disabled { background: #2a2a3a; color: #555; cursor: not-allowed; }
+
+    .msg { margin-top: 16px; padding: 12px 16px; border-radius: 8px; font-size: 13px; display: none; }
+    .msg.success { background: rgba(76,175,80,.1); border: 1px solid rgba(76,175,80,.3); color: #81c784; display: block; }
+    .msg.error   { background: rgba(239,83,80,.1); border: 1px solid rgba(239,83,80,.3); color: #ef9a9a; display: block; }
+
+    .divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+    .footer-note { color: var(--muted); font-size: 12px; text-align: center; line-height: 1.6; }
+    .footer-note a { color: var(--green-lt); text-decoration: none; }
+
+    @media (max-width: 500px) {
+      .row2 { grid-template-columns: 1fr; }
+      .plan-card { width: 100%; }
+      .form-card { padding: 24px 18px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="logo" href="/">
+    <div class="logo-mark">L</div>
+    <span class="logo-name">LocarPay</span>
+  </a>
+  <a class="nav-login" href="/admin">Já tenho conta →</a>
+</nav>
+
+<div class="hero">
+  <div class="badge">Gestão de Aluguéis</div>
+  <h1>Receba aluguéis com<br><span>PIX e cartão</span> no automático</h1>
+  <p>Cadastre sua imobiliária em 2 minutos. 14 dias grátis, sem cartão de crédito.</p>
+</div>
+
+<!-- Pricing cards -->
+<div class="pricing">
+  <div class="plan-card">
+    <div class="plan-name">Trial</div>
+    <div class="plan-price">R$0<span>/mês</span></div>
+    <div class="plan-limit">até 3 inquilinos</div>
+    <ul class="plan-features">
+      <li>14 dias grátis</li>
+      <li>PIX automático</li>
+      <li>App Android</li>
+    </ul>
+  </div>
+  <div class="plan-card featured">
+    <div class="plan-badge">Mais popular</div>
+    <div class="plan-name">Basic</div>
+    <div class="plan-price">R$49<span>/mês</span></div>
+    <div class="plan-limit">até 10 inquilinos</div>
+    <ul class="plan-features">
+      <li>Tudo do trial</li>
+      <li>Cobranças automáticas</li>
+      <li>Relatórios mensais</li>
+      <li>Notificações push</li>
+    </ul>
+  </div>
+  <div class="plan-card">
+    <div class="plan-name">Pro</div>
+    <div class="plan-price">R$99<span>/mês</span></div>
+    <div class="plan-limit">até 30 inquilinos</div>
+    <ul class="plan-features">
+      <li>Tudo do Basic</li>
+      <li>Contrato digital</li>
+      <li>Reajuste automático</li>
+      <li>Múltiplos imóveis</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Registration form -->
+<div class="form-card">
+  <h2>Criar conta grátis</h2>
+  <p class="subtitle">14 dias de trial — sem cartão de crédito</p>
+
+  <form id="form">
+    <div class="row2">
+      <div class="field">
+        <label>Nome completo / Razão social *</label>
+        <input id="f-name" type="text" placeholder="João Silva" required>
+      </div>
+      <div class="field">
+        <label>E-mail *</label>
+        <input id="f-email" type="email" placeholder="joao@imobiliaria.com.br" required>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Telefone / WhatsApp</label>
+        <input id="f-phone" type="tel" placeholder="(11) 99999-9999">
+      </div>
+      <div class="field">
+        <label>CPF ou CNPJ</label>
+        <input id="f-cpf" type="text" placeholder="000.000.000-00">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Tipo de empresa</label>
+        <select id="f-type">
+          <option value="">Pessoa física / autônomo</option>
+          <option value="MEI">MEI</option>
+          <option value="LIMITED">LTDA</option>
+          <option value="INDIVIDUAL">EIRELI / Individual</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Cidade / Estado</label>
+        <input id="f-city" type="text" placeholder="São Paulo / SP">
+      </div>
+    </div>
+
+    <div class="field" style="margin-bottom:20px">
+      <label style="margin-bottom:12px">Plano desejado</label>
+      <div class="plan-select-grid">
+        <div>
+          <input class="plan-radio" type="radio" name="plan" id="p-trial" value="trial" checked>
+          <label class="plan-label" for="p-trial">
+            <div class="pname">Trial</div>
+            <div class="pprice">Grátis 14 dias</div>
+          </label>
+        </div>
+        <div>
+          <input class="plan-radio" type="radio" name="plan" id="p-basic" value="basic">
+          <label class="plan-label" for="p-basic">
+            <div class="pname">Basic</div>
+            <div class="pprice">R$49/mês</div>
+          </label>
+        </div>
+        <div>
+          <input class="plan-radio" type="radio" name="plan" id="p-pro" value="pro">
+          <label class="plan-label" for="p-pro">
+            <div class="pname">Pro</div>
+            <div class="pprice">R$99/mês</div>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-submit" id="btn" type="submit">Criar conta grátis →</button>
+    <div class="msg" id="msg"></div>
+  </form>
+
+  <hr class="divider">
+  <p class="footer-note">
+    Já tem conta? <a href="/admin">Acesse o painel →</a><br>
+    Dúvidas? <a href="mailto:contatotransgu@gmail.com">contatotransgu@gmail.com</a>
+  </p>
+</div>
+
+<script>
+  const API = '/api/locarpay-owner';
+
+  document.getElementById('form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = document.getElementById('btn');
+    const msg = document.getElementById('msg');
+
+    msg.className = 'msg';
+    msg.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Cadastrando...';
+
+    const plan = document.querySelector('input[name="plan"]:checked')?.value || 'trial';
+    const city = document.getElementById('f-city').value.trim();
+    const [address, province] = city.includes('/') ? city.split('/').map(s => s.trim()) : [city, ''];
+
+    try {
+      const r = await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step:        'register',
+          name:        document.getElementById('f-name').value.trim(),
+          email:       document.getElementById('f-email').value.trim().toLowerCase(),
+          phone:       document.getElementById('f-phone').value.trim(),
+          cpfCnpj:     document.getElementById('f-cpf').value.trim(),
+          companyType: document.getElementById('f-type').value || undefined,
+          address,
+          province,
+          plan
+        })
+      });
+      const data = await r.json();
+
+      if (r.status === 409) {
+        // Already registered — redirect to admin
+        msg.className = 'msg success';
+        msg.innerHTML = '✓ E-mail já cadastrado. <a href="/admin" style="color:#81c784">Acesse o painel →</a>';
+        return;
+      }
+      if (!r.ok) throw new Error(data.error || 'Erro ao cadastrar');
+
+      msg.className = 'msg success';
+      msg.innerHTML = `
+        ✓ Conta criada com sucesso! Trial de 14 dias ativo.<br><br>
+        <strong>Próximo passo:</strong> acesse o painel e adicione seus primeiros inquilinos.<br><br>
+        <a href="/admin" style="color:#81c784;font-weight:700">Ir para o painel admin →</a>
+      `;
+      document.getElementById('form').style.opacity = '0.5';
+      document.getElementById('form').style.pointerEvents = 'none';
+    } catch (err) {
+      msg.className = 'msg error';
+      msg.textContent = err.message;
+      btn.disabled = false;
+      btn.textContent = 'Criar conta grátis →';
+    }
+  });
+</script>
+</body>
+</html>
