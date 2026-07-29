@@ -954,6 +954,41 @@ async function handleCloseContract(db, body) {
   return { ok: true, contractId, pendingCancelled: cancelPendingCharges };
 }
 
+// ── ADJUST RENT ──────────────────────────────────────────────────────────────
+// Aplica reajuste percentual em todos os contratos ativos do owner (ou um específico)
+async function handleAdjustRent(db, body) {
+  const { ownerId, contractId, percentage } = body;
+  if (!ownerId || percentage == null) throw Object.assign(new Error('ownerId e percentage obrigatórios'), { status: 400 });
+  if (percentage <= -100 || percentage > 100) throw Object.assign(new Error('percentage deve estar entre -100 e 100'), { status: 400 });
+
+  const factor = 1 + percentage / 100;
+  let q = db.collection('contracts').where('ownerId', '==', ownerId).where('active', '==', true);
+  if (contractId) q = db.collection('contracts').doc(contractId);
+
+  const snap = contractId
+    ? await db.collection('contracts').doc(contractId).get().then(d => ({ docs: d.exists ? [d] : [] }))
+    : await q.get();
+
+  if (snap.docs.length === 0) return { ok: true, updated: 0 };
+
+  const batch = db.batch();
+  const updates = [];
+
+  for (const d of snap.docs) {
+    const data = d.data();
+    if (data.ownerId !== ownerId) continue; // sanidade
+    const newRent = Math.round(data.baseRent * factor * 100) / 100;
+    batch.update(d.ref, {
+      baseRent:        newRent,
+      lastAdjustment:  { percentage, appliedAt: new Date(), oldRent: data.baseRent }
+    });
+    updates.push({ contractId: d.id, oldRent: data.baseRent, newRent });
+  }
+
+  await batch.commit();
+  return { ok: true, updated: updates.length, contracts: updates };
+}
+
 // ── HANDLER ──────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -996,6 +1031,7 @@ export default async function handler(req, res) {
     if (step === 'notify-upcoming')   return res.status(200).json(await handleNotifyUpcoming(db, req.body));
     if (step === 'send-receipt')      return res.status(200).json(await handleSendReceipt(db, req.body));
     if (step === 'close-contract')    return res.status(200).json(await handleCloseContract(db, req.body));
+    if (step === 'adjust-rent')       return res.status(200).json(await handleAdjustRent(db, req.body));
     return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {
