@@ -416,6 +416,56 @@
     }).join('');
   }
 
+  window.notifyAllOverdue = async () => {
+    if (overdueCharges.length === 0) { showToast('Nenhum inadimplente para notificar.', 'info'); return; }
+    if (!confirm(`Enviar push de cobrança para ${overdueCharges.length} inquilino(s) inadimplente(s)?`)) return;
+    const btn = $('btn-notify-all-overdue');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    try {
+      const r = await fetch('/api/locarpay-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step: 'send-push',
+          ownerId: currentOwnerId,
+          title: 'Aluguel em atraso ⚠️',
+          message: 'Você possui uma cobrança vencida. Regularize agora pelo app LocarPay.'
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro');
+      showToast(`Push enviado para ${data.sent || 0} inquilino(s).`, 'success');
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = '📢 Notificar Todos'; }
+  };
+
+  window.exportOverdueCSV = () => {
+    if (overdueCharges.length === 0) { showToast('Nenhum inadimplente para exportar.', 'info'); return; }
+    const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const fmtDate = secs => secs ? new Date(secs * 1000).toLocaleDateString('pt-BR') : '—';
+    const rows = [['Inquilino', 'E-mail', 'Valor', 'Vencimento', 'Dias em Atraso', 'Multa Aplicada']];
+    overdueCharges.forEach(c => {
+      const dueD = c.dueDate?.seconds ? new Date(c.dueDate.seconds * 1000) : null;
+      const daysLate = dueD ? Math.floor((Date.now() - dueD) / 86400000) : '';
+      const tenant = tenants.find(t => t.id === c.tenantId);
+      rows.push([
+        tenant?.name || c.tenantId,
+        tenant?.email || '',
+        (c.totalAmount || c.baseRent || 0).toFixed(2).replace('.', ','),
+        fmtDate(c.dueDate?.seconds),
+        daysLate,
+        (c.multaAplicada || 0).toFixed(2).replace('.', ',')
+      ]);
+    });
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `inadimplentes_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    showToast('CSV exportado.', 'success');
+  };
+
   window.markChargePaid = async (chargeId) => {
     if (!confirm('Marcar esta cobrança como paga manualmente?')) return;
     try {
@@ -1476,6 +1526,8 @@
       <span id="overdue-count" style="font-size:13px;color:#888;align-self:center"></span>
       <span id="overdue-total" style="font-size:13px;color:#ef9a9a;font-weight:600;align-self:center"></span>
       <button class="btn btn-secondary" onclick="loadOverdue()">↻ Atualizar</button>
+      <button class="btn btn-secondary" id="btn-notify-all-overdue" onclick="notifyAllOverdue()" title="Envia push de cobrança para todos os inadimplentes">📢 Notificar Todos</button>
+      <button class="btn btn-secondary" onclick="exportOverdueCSV()" title="Exporta lista de inadimplentes em CSV">⬇ Exportar CSV</button>
     </div>
     <table>
       <thead>
