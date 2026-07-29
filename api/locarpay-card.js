@@ -731,9 +731,18 @@ async function handleSendPush(db, body) {
     const token = userSnap.data().fcmToken;
     if (!token) return { ok: true, sent: 0, reason: 'sem_fcm_token' };
 
+    const pendingSnap = await db.collection('charges')
+      .where('tenantId', '==', tenantId)
+      .where('status', 'in', ['pending', 'overdue'])
+      .orderBy('dueDate', 'asc')
+      .limit(1)
+      .get();
+    const chargeId = pendingSnap.docs[0]?.id ?? '';
+
     await getMessaging().send({
       token,
       notification: { title: title || 'LocarPay', body: message || 'Você tem uma cobrança pendente.' },
+      data: chargeId ? { chargeId } : {},
       android: { priority: 'high' }
     });
     return { ok: true, sent: 1 };
@@ -841,6 +850,7 @@ async function handleNotifyUpcoming(db, body) {
           title: `Vencimento em ${diff} dia${diff !== 1 ? 's' : ''}`,
           body: `Sua cobrança de ${fmt.format(info.amount)} vence em ${dateStr}. Pague agora pelo app.`
         },
+        data: info.chargeIds[0] ? { chargeId: info.chargeIds[0] } : {},
         android: { priority: 'high' }
       });
       // Marca cobranças como notificadas hoje
