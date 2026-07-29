@@ -357,6 +357,16 @@
       return;
     }
 
+    // Verifica limite de inquilinos do plano
+    if (!isMaster && currentOwnerData) {
+      const maxTenants = currentOwnerData.maxTenants ?? (currentOwnerData.plan === 'pro' ? 50 : 10);
+      const tenantsSnap = await getDocs(query(collection(db, 'users'), where('ownerId', '==', currentOwnerId), where('role', '==', 'tenant')));
+      if (tenantsSnap.size >= maxTenants) {
+        showToast(`Limite de ${maxTenants} inquilinos atingido. Faça upgrade do plano para adicionar mais.`, 'error');
+        return;
+      }
+    }
+
     $('tenant-save').disabled = true;
     $('tenant-save').textContent = 'Salvando...';
 
@@ -480,6 +490,42 @@
     notifyTrialByEmail();
   }
 
+  async function notifyOverdue() {
+    const btn = $('btn-notify-overdue');
+    btn.disabled = true;
+    btn.textContent = 'Processando...';
+    try {
+      // 1. Marca cobranças vencidas
+      const markResp = await fetch('/api/locarpay-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'mark-overdue', ownerId: currentOwnerId })
+      });
+      const markData = await markResp.json();
+      const marked = markData.updated ?? 0;
+
+      // 2. Envia push para inquilinos com cobranças pendentes/vencidas
+      const pushResp = await fetch('/api/locarpay-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'send-push', ownerId: currentOwnerId })
+      });
+      const pushData = await pushResp.json();
+      const sent = pushData.sent ?? 0;
+
+      const msg = marked > 0
+        ? `${marked} cobrança(s) marcadas como vencidas. ${sent} notificação(ões) enviadas.`
+        : `Nenhuma nova vencida. ${sent} notificação(ões) enviadas.`;
+      showToast(msg, 'success');
+      await renderMetrics();
+    } catch (e) {
+      showToast('Erro ao notificar: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Notificar vencimentos';
+    }
+  }
+
   function notifyTrialByEmail() {
     if (!currentOwnerId) return;
     fetch('/api/locarpay-owner', {
@@ -554,6 +600,7 @@
   $('tab-owners').addEventListener('click',  () => { setTab('owners');  loadOwners(); });
 
   $('btn-add-tenant').addEventListener('click', () => { $('modal-tenant').style.display = 'flex'; $('t-name').focus(); });
+  $('btn-notify-overdue').addEventListener('click', notifyOverdue);
   $('tenant-cancel').addEventListener('click',  () => { $('modal-tenant').style.display = 'none'; resetTenantForm(); });
   $('tenant-save').addEventListener('click', saveTenant);
 
@@ -768,6 +815,7 @@
     <div class="section-header">
       <h2>Inquilinos</h2>
       <button class="btn" id="btn-add-tenant">+ Novo Inquilino</button>
+      <button class="btn btn-secondary" id="btn-notify-overdue" title="Marca cobranças vencidas e envia push para inquilinos em atraso">Notificar vencimentos</button>
     </div>
     <table>
       <thead>
