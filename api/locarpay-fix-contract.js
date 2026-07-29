@@ -1,5 +1,12 @@
 // POST /api/locarpay-fix-contract  { contractId, tenantEmail }
-// Busca na Assinafy o documento/assignment do inquilino e atualiza o Firestore
+// GET  /api/locarpay-fix-contract?contractId=xxx  → proxia PDF do contrato via Assinafy
+
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+
+function initFirebase() {
+  if (!getApps().length) initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
+}
 
 const FB_PROJECT = 'locarpayapp';
 const FB_API_KEY = process.env.LOCARPAY_FIREBASE_API_KEY;
@@ -49,23 +56,27 @@ async function handleSetOwnerSigned(req, res) {
 }
 
 // GET /api/locarpay-fix-contract?contractId=xxx
-// Baixa o PDF do contrato via backend (proxied) — a API key da Assinafy nunca vai ao cliente
+// Baixa o PDF do contrato via backend (proxied) — API key da Assinafy nunca vai ao cliente
 async function handleGetContractPdf(req, res) {
   const { contractId } = req.query;
   if (!contractId) return res.status(400).json({ error: 'contractId obrigatório' });
   try {
-    const contractDoc = await fsGet(`contracts/${contractId}`);
-    if (!contractDoc?.fields) return res.status(404).json({ error: 'Contrato não encontrado' });
+    initFirebase();
+    const db = getFirestore();
 
-    const configDoc = await fsGet('config/assinafy');
-    const apiKey = configDoc?.fields?.apiKey?.stringValue;
+    const contractSnap = await db.collection('contracts').doc(contractId).get();
+    if (!contractSnap.exists) return res.status(404).json({ error: 'Contrato não encontrado' });
+    const contract = contractSnap.data();
+
+    const configSnap = await db.collection('config').doc('assinafy').get();
+    const apiKey = configSnap.data()?.apiKey;
     if (!apiKey) return res.status(500).json({ error: 'Configuração Assinafy não encontrada' });
 
-    // Resolve signed URL (usa cache do Firestore ou busca na Assinafy)
-    let signedUrl = contractDoc.fields.signedFileUrl?.stringValue || null;
+    // Resolve signed URL (usa cache ou busca na Assinafy)
+    let signedUrl = contract.signedFileUrl || null;
 
     if (!signedUrl) {
-      const assinafyDocId = contractDoc.fields.assinafyDocumentId?.stringValue;
+      const assinafyDocId = contract.assinafyDocumentId;
       if (!assinafyDocId) return res.status(404).json({ error: 'Contrato ainda não enviado para assinatura digital' });
 
       const accounts = await assinafyGet(apiKey, 'accounts');
@@ -87,20 +98,20 @@ async function handleGetContractPdf(req, res) {
 
       if (!signedUrl) return res.status(404).json({ error: 'Contrato assinado não encontrado na Assinafy' });
 
-      await fsPatch(`contracts/${contractId}`, { signedFileUrl: { stringValue: signedUrl } });
+      await db.collection('contracts').doc(contractId).update({ signedFileUrl: signedUrl });
     }
 
-    // Proxia o PDF — a API key nunca sai do servidor
+    // Proxia o PDF com autenticação — API key nunca sai do servidor
     const pdfResp = await fetch(signedUrl, {
       headers: { 'X-Api-Key': apiKey, 'Accept': 'application/pdf,*/*' }
     });
 
     if (!pdfResp.ok) {
-      // URL expirou? Limpa o cache e tenta novamente na próxima chamada
       if (pdfResp.status === 401 || pdfResp.status === 403) {
-        await fsPatch(`contracts/${contractId}`, { signedFileUrl: { stringValue: '' } });
+        // URL expirou — limpa cache para forçar nova busca
+        await db.collection('contracts').doc(contractId).update({ signedFileUrl: '' });
       }
-      return res.status(502).json({ error: `Erro ao baixar PDF da Assinafy: HTTP ${pdfResp.status}` });
+      return res.status(502).json({ error: `Erro ao baixar PDF: HTTP ${pdfResp.status}` });
     }
 
     const bytes = Buffer.from(await pdfResp.arrayBuffer());
