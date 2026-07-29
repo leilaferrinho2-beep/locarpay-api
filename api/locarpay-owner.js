@@ -1,5 +1,5 @@
 // POST /api/locarpay-owner
-// step:"register"     → { name, email, phone?, cpfCnpj?, address?, addressNumber?, province?, postalCode?, plan?, firebaseUid? }
+// step:"register"     → { name, email, phone?, cpfCnpj?, companyType?, address?, addressNumber?, province?, postalCode?, plan?, firebaseUid? }
 // step:"setup-asaas"  → { ownerId } → (re)cria subconta Asaas para owner existente
 // step:"migrate"      → { secret, ownerId } → backfill ownerId em docs legados (requer MIGRATE_SECRET)
 // step:"get"          → { ownerId } → retorna dados públicos do owner
@@ -44,10 +44,14 @@ async function createAsaasSubaccount(masterKey, ownerData) {
   const cpfCnpj = (ownerData.cpfCnpj || ownerData.cnpj || '').replace(/\D/g, '');
   const phone   = (ownerData.phone || '').replace(/\D/g, '');
 
+  // companyType: MEI | LIMITED | INDIVIDUAL | ASSOCIATION
+  const companyType = ownerData.companyType || (cpfCnpj.length === 14 ? 'LIMITED' : undefined);
+
   const body = {
     name:          ownerData.name,
     email:         ownerData.email,
     cpfCnpj:       cpfCnpj || undefined,
+    companyType:   companyType,
     mobilePhone:   phone || undefined,
     address:       ownerData.address       || undefined,
     addressNumber: ownerData.addressNumber || undefined,
@@ -70,7 +74,7 @@ async function createAsaasSubaccount(masterKey, ownerData) {
 
 async function handleRegister(db, body) {
   const {
-    name, email, phone, cpfCnpj, cnpj,
+    name, email, phone, cpfCnpj, cnpj, companyType,
     address, addressNumber, province, postalCode,
     plan = 'trial', firebaseUid
   } = body;
@@ -95,6 +99,7 @@ async function handleRegister(db, body) {
     email,
     phone:         phone         || '',
     cpfCnpj:       (cpfCnpj || cnpj || '').replace(/\D/g, ''),
+    companyType:   companyType   || '',
     address:       address       || '',
     addressNumber: addressNumber || '',
     province:      province      || '',
