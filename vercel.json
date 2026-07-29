@@ -15,5 +15,11 @@
         { "key": "Access-Control-Allow-Origin", "value": "*" }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/locarpay-owner",
+      "schedule": "0 11 * * *"
+    }
   ]
 }
