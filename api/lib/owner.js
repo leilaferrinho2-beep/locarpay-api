@@ -1,0 +1,79 @@
+// Utilitários para resolução de owner em contexto SaaS
+
+/**
+ * Retorna o documento do owner a partir do ownerId.
+ * Inclui asaasApiKey, assinafyApiKey, plano, etc.
+ */
+export async function getOwnerById(db, ownerId) {
+  if (!ownerId) throw new Error('ownerId não informado');
+  const snap = await db.collection('owners').doc(ownerId).get();
+  if (!snap.exists) throw new Error(`Owner não encontrado: ${ownerId}`);
+  return { id: snap.id, ...snap.data() };
+}
+
+/**
+ * Resolve o ownerId a partir de um chargeId ou contractId.
+ * Primeiro tenta o campo ownerId do documento. Fallback: owner padrão.
+ */
+export async function resolveOwnerFromCharge(db, chargeId) {
+  const snap = await db.collection('charges').doc(chargeId).get();
+  if (!snap.exists) throw new Error('Cobrança não encontrada');
+  const ownerId = snap.data().ownerId || await getDefaultOwnerId(db);
+  return { charge: snap.data(), chargeDocId: snap.id, ownerId };
+}
+
+export async function resolveOwnerFromContract(db, contractId) {
+  const snap = await db.collection('contracts').doc(contractId).get();
+  if (!snap.exists) throw new Error('Contrato não encontrado');
+  const ownerId = snap.data().ownerId || await getDefaultOwnerId(db);
+  return { contract: snap.data(), ownerId };
+}
+
+/**
+ * Fallback para dados antigos sem ownerId: retorna o primeiro owner cadastrado.
+ * Remove quando todos os dados estiverem migrados.
+ */
+let _defaultOwnerId = null;
+export async function getDefaultOwnerId(db) {
+  if (_defaultOwnerId) return _defaultOwnerId;
+  const snap = await db.collection('owners').orderBy('createdAt').limit(1).get();
+  if (snap.empty) throw new Error('Nenhum owner cadastrado');
+  _defaultOwnerId = snap.docs[0].id;
+  return _defaultOwnerId;
+}
+
+/**
+ * Busca owner pelo email (usado no login do painel admin).
+ */
+export async function getOwnerByEmail(db, email) {
+  const snap = await db.collection('owners')
+    .where('email', '==', email).limit(1).get();
+  if (snap.empty) return null;
+  return { id: snap.docs[0].id, ...snap.docs[0].data() };
+}
+
+/**
+ * Lê a config Asaas do owner (com fallback para /config/asaas legado).
+ */
+export async function getAsaasKey(db, ownerId) {
+  try {
+    const owner = await getOwnerById(db, ownerId);
+    if (owner.asaasApiKey) return owner.asaasApiKey;
+  } catch (_) {}
+  // fallback legado
+  const snap = await db.collection('config').doc('asaas').get();
+  return snap.data()?.apiKey;
+}
+
+/**
+ * Lê a config Assinafy do owner.
+ */
+export async function getAssinafyKey(db, ownerId) {
+  try {
+    const owner = await getOwnerById(db, ownerId);
+    if (owner.assinafyApiKey) return owner.assinafyApiKey;
+  } catch (_) {}
+  // fallback legado
+  const snap = await db.collection('config').doc('assinafy').get();
+  return snap.data()?.apiKey;
+}

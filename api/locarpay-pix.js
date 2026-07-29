@@ -4,6 +4,7 @@
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore }                  from 'firebase-admin/firestore';
+import { getAsaasKey, getDefaultOwnerId } from './lib/owner.js';
 
 function initFirebase() {
   if (getApps().length) return;
@@ -76,15 +77,22 @@ export default async function handler(req, res) {
     if (!tenantId || !chargeId) return res.status(400).json({ error: 'tenantId e chargeId obrigatórios' });
 
     // Lê dados do Firestore
-    const [userSnap, chargeSnap, configSnap] = await Promise.all([
+    const [userSnap, chargeSnap] = await Promise.all([
       db.collection('users').doc(tenantId).get(),
       db.collection('charges').doc(chargeId).get(),
-      db.collection('config').doc('asaas').get()
     ]);
 
     if (!userSnap.exists) return res.status(404).json({ error: 'Inquilino não encontrado' });
 
-    const apiKey = configSnap.data()?.apiKey;
+    // Resolve owner: usa ownerId da cobrança ou fallback para o primeiro owner
+    const ownerId = chargeSnap.exists
+      ? (chargeSnap.data().ownerId || await getDefaultOwnerId(db))
+      : await getDefaultOwnerId(db);
+
+    const [apiKey, configSnap] = await Promise.all([
+      getAsaasKey(db, ownerId),
+      db.collection('owners').doc(ownerId).get(),
+    ]);
     if (!apiKey) return res.status(500).json({ error: 'Chave Asaas não configurada' });
 
     const user = userSnap.data();
@@ -167,10 +175,10 @@ export default async function handler(req, res) {
     const value = charge.totalAmount || charge.baseRent || 5;
 
     // Configurações de atraso (lidas do Firestore ou padrão)
-    const configData = configSnap.data() || {};
-    const finePercentage    = configData.finePercentage    ?? 2;    // multa 2% padrão
-    const interestRate      = configData.interestRate      ?? 1;    // juros 1%/mês padrão
-    const cardFeePercentage = configData.cardFeePercentage ?? 2.99; // taxa cartão 2.99%
+    const configData = (configSnap.exists ? configSnap.data() : {}) || {};
+    const finePercentage    = configData.finePercentage    ?? 2;
+    const interestRate      = configData.interestRate      ?? 1;
+    const cardFeePercentage = configData.cardFeePercentage ?? 2.99;
 
     // Cria cobrança PIX no Asaas com configuração de juros/multa
     const asaasCharge = await asaasPost('/payments', {
