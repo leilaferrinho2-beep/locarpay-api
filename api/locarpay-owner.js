@@ -146,6 +146,53 @@ async function handleRegister(db, body) {
     await docRef.update(updates);
   }
 
+  // Registra webhook de pagamento na subconta (fire-and-forget)
+  if (updates.asaasApiKey) {
+    handleSetupPaymentWebhook(db, { ownerId: docRef.id }).catch(() => {});
+  }
+
+  // E-mail de boas-vindas (fire-and-forget)
+  try {
+    const trialFmt = trialEndsAt.toDate().toLocaleDateString('pt-BR');
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.titan.email', port: 587, secure: false,
+      auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
+    });
+    await transporter.sendMail({
+      from:    'LocarPay <denis@dlftech.com.br>',
+      to:      email,
+      subject: 'Bem-vindo ao LocarPay! 🎉 Sua conta está pronta',
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#fff">
+          <div style="margin-bottom:24px">
+            <span style="background:#2e7d32;color:#fff;font-weight:800;font-size:18px;padding:6px 14px;border-radius:8px">LocarPay</span>
+          </div>
+          <h2 style="color:#1a1a1a;margin-bottom:8px">Sua conta está pronta, ${name.split(' ')[0]}! 🎉</h2>
+          <p style="color:#555;line-height:1.7;margin-bottom:20px">
+            Seu trial de <strong>14 dias grátis</strong> foi ativado. Você tem acesso completo ao LocarPay até <strong>${trialFmt}</strong>.
+          </p>
+          <div style="background:#f0f7f0;border-radius:10px;padding:20px;margin-bottom:24px">
+            <h3 style="color:#2e7d32;font-size:14px;margin-bottom:12px">📋 Primeiros passos</h3>
+            <ol style="color:#555;line-height:2;padding-left:20px;margin:0">
+              <li>Acesse o painel em <a href="https://locarpay-api.vercel.app/admin" style="color:#2e7d32">locarpay-api.vercel.app/admin</a></li>
+              <li>Cadastre seus inquilinos com nome, e-mail e valor do aluguel</li>
+              <li>Gere contratos digitais (assinatura eletrônica inclusa)</li>
+              <li>Ative as cobranças automáticas mensais com PIX</li>
+            </ol>
+          </div>
+          <a href="https://locarpay-api.vercel.app/admin" style="display:inline-block;background:#4CAF50;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:700;font-size:15px;margin-bottom:24px">
+            Acessar painel agora →
+          </a>
+          <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+          <p style="color:#aaa;font-size:12px">
+            Dúvidas? Responda este e-mail ou acesse o painel em qualquer momento.<br>
+            ID da sua conta: <code style="font-size:11px;color:#888">${docRef.id}</code>
+          </p>
+        </div>
+      `
+    });
+  } catch (_) {} // falha no e-mail não bloqueia cadastro
+
   return {
     ownerId:    docRef.id,
     trialEndsAt: trialEndsAt.toDate().toISOString(),
@@ -171,16 +218,26 @@ async function handleSetupAsaas(db, body) {
 
   const subaccount = await createAsaasSubaccount(masterKey, ownerData);
 
+  const newApiKey = subaccount.apiKey || '';
   await ownerSnap.ref.update({
-    asaasApiKey:       subaccount.apiKey   || '',
+    asaasApiKey:       newApiKey,
     asaasSubaccountId: subaccount.walletId || subaccount.id || '',
   });
+
+  // Registra webhook de pagamento na subconta recém-criada
+  let webhookResult = null;
+  if (newApiKey) {
+    try {
+      webhookResult = await handleSetupPaymentWebhook(db, { ownerId });
+    } catch (_) {}
+  }
 
   return {
     ok: true,
     ownerId,
     asaasSubaccountId: subaccount.walletId || subaccount.id,
     asaasConfigured:   true,
+    webhookConfigured: !!webhookResult?.ok,
   };
 }
 
@@ -456,6 +513,59 @@ async function handleNotifyTrial(db, body) {
 // Chamado pelo Vercel Cron (GET) todo dia às 08:00 BRT (11:00 UTC)
 // Executa para todos os owners ativos: mark-overdue, generate-charges, notify-upcoming
 // No dia 1: envia relatório mensal. Para trial: verifica notificação de expiração.
+// Registra webhook de pagamento na subconta Asaas do owner
+// URL: https://locarpay-api.vercel.app/payment-webhook
+async function handleSetupPaymentWebhook(db, body) {
+  const { ownerId } = body;
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatório'), { status: 400 });
+
+  const ownerSnap = await db.collection('owners').doc(ownerId).get();
+  if (!ownerSnap.exists) throw Object.assign(new Error('Owner não encontrado'), { status: 404 });
+
+  const apiKey = ownerSnap.data().asaasApiKey;
+  if (!apiKey) throw Object.assign(new Error('Owner sem chave Asaas configurada'), { status: 400 });
+
+  const webhookUrl = 'https://locarpay-api.vercel.app/payment-webhook';
+  const events = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_OVERDUE', 'PAYMENT_DELETED'];
+
+  // Checa webhooks existentes
+  const listResp = await fetch('https://api.asaas.com/v3/webhooks', {
+    headers: { 'access_token': apiKey }
+  });
+  const listJson = await listResp.json();
+  const existing = (listJson.data || []).find(w => w.url === webhookUrl);
+
+  if (existing) {
+    const updResp = await fetch(`https://api.asaas.com/v3/webhooks/${existing.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
+      body: JSON.stringify({ url: webhookUrl, enabled: true, events })
+    });
+    const upd = await updResp.json();
+    await ownerSnap.ref.update({ paymentWebhookId: upd.id || existing.id });
+    return { ok: true, action: 'updated', webhookId: upd.id || existing.id };
+  }
+
+  const createResp = await fetch('https://api.asaas.com/v3/webhooks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
+    body: JSON.stringify({
+      name: 'LocarPay Pagamentos',
+      url: webhookUrl,
+      email: ownerSnap.data().email,
+      enabled: true,
+      interrupted: false,
+      type: 'PAYMENT',
+      sendType: 'NON_SEQUENTIALLY',
+      events
+    })
+  });
+  const created = await createResp.json();
+  if (!createResp.ok) throw new Error(`Asaas webhook: ${JSON.stringify(created)}`);
+  await ownerSnap.ref.update({ paymentWebhookId: created.id });
+  return { ok: true, action: 'created', webhookId: created.id };
+}
+
 async function handleCronDaily(db) {
   const BASE = 'https://locarpay-api.vercel.app/api/locarpay-card';
   const OWNER_URL = 'https://locarpay-api.vercel.app/api/locarpay-owner';
@@ -574,7 +684,8 @@ export default async function handler(req, res) {
     if (step === 'activate-plan')  return res.status(200).json(await handleActivatePlan(db, body));
     if (step === 'billing-status') return res.status(200).json(await handleBillingStatus(db, body));
     if (step === 'notify-trial')   return res.status(200).json(await handleNotifyTrial(db, body));
-    if (step === 'setup-webhook')  return res.status(200).json(await handleSetupWebhook(db, body));
+    if (step === 'setup-webhook')          return res.status(200).json(await handleSetupWebhook(db, body));
+    if (step === 'setup-payment-webhook')  return res.status(200).json(await handleSetupPaymentWebhook(db, body));
     return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {
