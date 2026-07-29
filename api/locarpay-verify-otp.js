@@ -49,9 +49,14 @@ export default async function handler(req, res) {
       uid = newUser.uid;
     }
 
-    // Role: admin se tiver licença ativa, senão tenant
-    const licenseDoc = await db.collection('licenses').doc(email.toLowerCase()).get();
-    const hasLicense = licenseDoc.exists && licenseDoc.data().active === true;
+    // Role: admin se tiver licença ativa OU estiver em owners, senão tenant
+    const [licenseDoc, ownerSnap] = await Promise.all([
+      db.collection('licenses').doc(email.toLowerCase()).get(),
+      db.collection('owners').where('email', '==', email.toLowerCase()).limit(1).get()
+    ]);
+    const hasLicense  = licenseDoc.exists && licenseDoc.data().active === true;
+    const ownerDoc    = ownerSnap.empty ? null : ownerSnap.docs[0];
+    const ownerFromDb = ownerDoc?.data() || null;
 
     // Busca documento do usuário — pode ter sido criado com ID diferente do UID (pelo admin)
     let userRole = 'tenant';
@@ -82,19 +87,23 @@ export default async function handler(req, res) {
       userRole = userDoc.data().role || 'tenant';
     }
 
-    const role = hasLicense ? 'admin' : userRole;
+    const isAdmin = hasLicense || !!ownerDoc;
+    const role = isAdmin ? 'admin' : userRole;
 
-    // Resolve ownerId do inquilino (para o app saber a qual imobiliária pertence)
+    // ownerId: para owners é o próprio doc ID; para tenants busca no users
     let ownerId = null;
-    try {
-      const userSnap = await db.collection('users').doc(uid).get();
-      ownerId = userSnap.data()?.ownerId || null;
-      // Fallback: busca pelo email se o doc do uid não tiver ownerId
-      if (!ownerId) {
-        const q = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get();
-        if (!q.empty) ownerId = q.docs[0].data().ownerId || null;
-      }
-    } catch (_) {}
+    if (ownerDoc) {
+      ownerId = ownerDoc.id;
+    } else {
+      try {
+        const userSnap = await db.collection('users').doc(uid).get();
+        ownerId = userSnap.data()?.ownerId || null;
+        if (!ownerId) {
+          const q = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get();
+          if (!q.empty) ownerId = q.docs[0].data().ownerId || null;
+        }
+      } catch (_) {}
+    }
 
     const customToken = await auth.createCustomToken(uid, { role, ownerId });
     return res.status(200).json({ ok: true, customToken, role, ownerId });
