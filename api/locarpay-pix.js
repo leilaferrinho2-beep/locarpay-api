@@ -4,7 +4,7 @@
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore }                  from 'firebase-admin/firestore';
-import { getAsaasKey, getDefaultOwnerId } from '../lib/owner.js';
+import { getAsaasKey, getDefaultOwnerId, checkOwnerPlanActive } from '../lib/owner.js';
 
 function initFirebase() {
   if (getApps().length) return;
@@ -88,6 +88,15 @@ export default async function handler(req, res) {
     const ownerId = chargeSnap.exists
       ? (chargeSnap.data().ownerId || await getDefaultOwnerId(db))
       : await getDefaultOwnerId(db);
+
+    // Verifica plano ativo
+    const planCheck = await checkOwnerPlanActive(db, ownerId);
+    if (!planCheck.active) {
+      return res.status(402).json({
+        error: 'Plano expirado. Acesse o painel LocarPay para renovar a assinatura.',
+        reason: planCheck.reason
+      });
+    }
 
     // Validação cruzada: inquilino deve pertencer ao mesmo owner da cobrança
     const userOwnerId = userSnap.data().ownerId;
