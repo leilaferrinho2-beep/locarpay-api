@@ -760,29 +760,36 @@ async function handleGenerateCharges(db, body) {
           to:      tenantEmail,
           subject: `Nova cobrança de aluguel — ${fmt.format(baseRent)}`,
           html: `
-            <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#fff">
-              <div style="margin-bottom:24px">
-                <span style="background:#1B5E20;color:#fff;font-weight:800;font-size:18px;padding:6px 14px;border-radius:8px">LocarPay</span>
+            <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#fff">
+              <div style="background:#1B5E20;padding:20px 28px;border-radius:12px 12px 0 0">
+                <span style="color:#fff;font-weight:800;font-size:20px">LocarPay</span>
               </div>
-              <h2 style="color:#1a1a1a;margin-bottom:8px">Nova cobrança gerada</h2>
-              <p style="color:#555;line-height:1.7;margin-bottom:20px">
-                Uma nova cobrança de aluguel foi gerada para o mês de <strong>${monthStr}</strong>.
-              </p>
-              <div style="background:#f5f5f5;border-radius:10px;padding:20px;margin-bottom:24px">
-                <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-                  <span style="color:#777">Valor</span>
-                  <span style="font-weight:700;color:#1a1a1a">${fmt.format(baseRent)}</span>
+              <div style="padding:28px 28px 8px">
+                <p style="color:#888;font-size:13px;margin:0 0 6px">NOVA COBRANÇA — ${monthStr.toUpperCase()}</p>
+                <h2 style="color:#1a1a1a;margin:0 0 20px;font-size:24px">${fmt.format(baseRent)}</h2>
+                <div style="background:#f8f8f8;border-radius:10px;padding:18px 20px;margin-bottom:24px">
+                  <table style="width:100%;border-collapse:collapse">
+                    <tr>
+                      <td style="color:#777;font-size:14px;padding:4px 0">Referência</td>
+                      <td style="font-weight:600;color:#1a1a1a;text-align:right;font-size:14px">${monthStr}</td>
+                    </tr>
+                    <tr>
+                      <td style="color:#777;font-size:14px;padding:4px 0">Vencimento</td>
+                      <td style="font-weight:600;color:#c62828;text-align:right;font-size:14px">${dueFmt}</td>
+                    </tr>
+                    <tr>
+                      <td style="color:#777;font-size:14px;padding:4px 0">Valor total</td>
+                      <td style="font-weight:700;color:#1B5E20;text-align:right;font-size:15px">${fmt.format(baseRent)}</td>
+                    </tr>
+                  </table>
                 </div>
-                <div style="display:flex;justify-content:space-between">
-                  <span style="color:#777">Vencimento</span>
-                  <span style="font-weight:700;color:#c62828">${dueFmt}</span>
+                <div style="text-align:center;margin-bottom:24px">
+                  <p style="color:#444;font-size:14px;margin-bottom:12px">Abra o app LocarPay para gerar o QR Code PIX e pagar em segundos.</p>
+                  <span style="display:inline-block;background:#1B5E20;color:#fff;font-weight:700;font-size:15px;padding:12px 32px;border-radius:8px">Pagar via LocarPay</span>
                 </div>
+                <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+                <p style="color:#bbb;font-size:11px;text-align:center">Pague até ${dueFmt} para evitar multas e juros. Mensagem automática do LocarPay.</p>
               </div>
-              <p style="color:#555;line-height:1.7;margin-bottom:20px">
-                Abra o app <strong>LocarPay</strong> para pagar via PIX ou cartão de crédito com apenas alguns toques.
-              </p>
-              <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-              <p style="color:#aaa;font-size:12px">Pagamento antecipado evita multas e juros por atraso.</p>
             </div>
           `
         });
