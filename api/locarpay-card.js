@@ -62,7 +62,7 @@ async function handleInit(db, body, apiKey) {
   if (!tenantId || !chargeId)
     throw Object.assign(new Error('tenantId e chargeId obrigatórios'), { status: 400 });
 
-  let holderName, number, expiryMonth, expiryYear, ccv, postalCode, addressNumber;
+  let holderName, number, expiryMonth, expiryYear, ccv, holderDocument;
   let usingSavedCard = false;
   let savedCardFallback = null;
   let savedToken = null;
@@ -72,24 +72,22 @@ async function handleInit(db, body, apiKey) {
     const savedSnap = await db.collection('users').doc(tenantId).collection('savedCards').doc(savedCardId).get();
     if (!savedSnap.exists) throw Object.assign(new Error('Cartão salvo não encontrado'), { status: 404 });
     const sc = savedSnap.data();
-    holderName   = sc.holderName;
-    expiryMonth  = sc.expiryMonth;
-    expiryYear   = sc.expiryYear;
-    savedToken   = sc.cardToken || null;
+    holderName    = sc.holderName;
+    expiryMonth   = sc.expiryMonth;
+    expiryYear    = sc.expiryYear;
+    holderDocument = sc.holderDocument || '';
+    savedToken    = sc.cardToken || null;
     savedCardFallback = sc.cardFallback || null;
     usingSavedCard = true;
-    // Se temos token, não precisamos de number/ccv
     if (!savedToken && !savedCardFallback)
       throw Object.assign(new Error('Dados do cartão salvo incompletos'), { status: 400 });
     if (savedCardFallback) {
-      number      = savedCardFallback.number;
-      ccv         = savedCardFallback.ccv;
-      postalCode  = savedCardFallback.postalCode;
-      addressNumber = savedCardFallback.addressNumber;
+      number = savedCardFallback.number;
+      ccv    = savedCardFallback.ccv;
     }
   } else {
     if (!card) throw Object.assign(new Error('card obrigatório'), { status: 400 });
-    ({ holderName, number, expiryMonth, expiryYear, ccv, postalCode, addressNumber } = card);
+    ({ holderName, number, expiryMonth, expiryYear, ccv, holderDocument } = card);
     if (!holderName || !number || !expiryMonth || !expiryYear || !ccv)
       throw Object.assign(new Error('Dados do cartão incompletos'), { status: 400 });
   }
@@ -129,12 +127,15 @@ async function handleInit(db, body, apiKey) {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const dueDate = tomorrow.toISOString().slice(0, 10);
 
+  // Usa o CPF digitado no formulário (titular do cartão) como prioridade; fallback para CPF do perfil
+  const effectiveCpf = (holderDocument || '').replace(/\D/g, '') || cpf;
+
   const holderInfoBase = {
     name:          holderName,
     email,
-    cpfCnpj:       cpf,
-    postalCode:    (postalCode || '').replace(/\D/g, '') || '00000000',
-    addressNumber: addressNumber || 'SN',
+    cpfCnpj:       effectiveCpf,
+    postalCode:    '00000000',
+    addressNumber: 'SN',
     phone:         phone || '11999999999'
   };
 
@@ -189,10 +190,9 @@ async function handleInit(db, body, apiKey) {
     lastFour,
     cardBrand,
     holderName,
+    holderDocument: effectiveCpf,
     expiryMonth:    expMonth,
     expiryYear:     expYear,
-    postalCode:     (postalCode || '').replace(/\D/g, ''),
-    addressNumber:  addressNumber || 'SN',
     verified:       false,
     createdAt:      FieldValue.serverTimestamp(),
     expiresAt:      new Date(Date.now() + 24 * 60 * 60 * 1000)
@@ -202,12 +202,10 @@ async function handleInit(db, body, apiKey) {
   if (!cardToken) {
     verData.cardFallback = savedCardFallback || {
       holderName,
-      number:        number.replace(/\D/g, ''),
-      expiryMonth:   expMonth,
-      expiryYear:    expYear,
-      ccv,
-      postalCode:    (postalCode || '').replace(/\D/g, ''),
-      addressNumber: addressNumber || 'SN'
+      number:      number.replace(/\D/g, ''),
+      expiryMonth: expMonth,
+      expiryYear:  expYear,
+      ccv
     };
   }
 
@@ -292,8 +290,8 @@ async function handleConfirm(db, body) {
         name:    ver.holderName,
         email:   emailConfirm,
         cpfCnpj: cpfConfirm,
-        postalCode:    ver.postalCode || '00000000',
-        addressNumber: ver.addressNumber || 'SN',
+        postalCode:    '00000000',
+        addressNumber: 'SN',
         phone:   phoneConfirm
       }
     }, apiKey);
@@ -317,8 +315,8 @@ async function handleConfirm(db, body) {
         name:          fb.holderName,
         email:         emailConfirm,
         cpfCnpj:       cpfConfirm,
-        postalCode:    fb.postalCode || '00000000',
-        addressNumber: fb.addressNumber || 'SN',
+        postalCode:    '00000000',
+        addressNumber: 'SN',
         phone:         phoneConfirm
       }
     }, apiKey);
@@ -345,7 +343,8 @@ async function handleConfirm(db, body) {
   // Salvar cartão se solicitado
   if (body.saveCard && paid) {
     const savedCardData = {
-      holderName:  ver.cardFallback?.holderName || ver.holderName,
+      holderName:    ver.cardFallback?.holderName || ver.holderName,
+      holderDocument: ver.holderDocument || '',
       lastFour,
       brand,
       expiryMonth: ver.cardFallback?.expiryMonth || ver.expiryMonth,
