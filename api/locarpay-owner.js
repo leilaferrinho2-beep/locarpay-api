@@ -6,6 +6,7 @@
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, Timestamp }       from 'firebase-admin/firestore';
+import nodemailer                         from 'nodemailer';
 
 const PLANS = {
   trial: { maxTenants: 3,  maxProperties: 2,  monthlyPrice: 0   },
@@ -334,6 +335,81 @@ async function handleBillingStatus(db, body) {
   };
 }
 
+async function handleNotifyTrial(db, body) {
+  const { ownerId } = body;
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatório'), { status: 400 });
+
+  const snap = await db.collection('owners').doc(ownerId).get();
+  if (!snap.exists) throw Object.assign(new Error('Owner não encontrado'), { status: 404 });
+  const d = snap.data();
+
+  // Evita reenvio em menos de 20h
+  const lastNotified = d.trialNotifiedAt?.toMillis?.() || 0;
+  if (Date.now() - lastNotified < 20 * 60 * 60 * 1000) {
+    return { ok: true, skipped: true, reason: 'already_notified_recently' };
+  }
+
+  const trialEnd = d.trialEndsAt?.toDate?.();
+  const daysLeft = trialEnd
+    ? Math.ceil((trialEnd.getTime() - Date.now()) / 86400000)
+    : null;
+
+  // Só notifica se trial está expirando em ≤ 5 dias ou já expirou
+  if (daysLeft !== null && daysLeft > 5) {
+    return { ok: true, skipped: true, reason: 'too_early' };
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.titan.email', port: 587, secure: false,
+    auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
+  });
+
+  const subject = daysLeft !== null && daysLeft <= 0
+    ? 'Seu trial LocarPay expirou — ative um plano'
+    : `Seu trial LocarPay expira em ${daysLeft} dia${daysLeft !== 1 ? 's' : ''}`;
+
+  const urgencyMsg = daysLeft !== null && daysLeft <= 0
+    ? 'Seu período de trial <strong>já expirou</strong>. Para continuar usando o LocarPay e receber pagamentos dos seus inquilinos, ative um plano.'
+    : `Seu período de trial expira em <strong>${daysLeft} dia${daysLeft !== 1 ? 's' : ''}</strong>. Ative um plano para não perder o acesso.`;
+
+  await transporter.sendMail({
+    from: 'LocarPay <denis@dlftech.com.br>',
+    to: d.email,
+    subject,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;padding:32px 24px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
+          <div style="background:#2D6A2D;border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff">L</div>
+          <span style="font-size:18px;font-weight:700;color:#1a1a1a">LocarPay</span>
+        </div>
+        <h2 style="color:#1a1a1a;font-size:22px;margin-bottom:12px">${subject}</h2>
+        <p style="color:#555;line-height:1.7;margin-bottom:20px">Olá, <strong>${d.name || d.email}</strong>!</p>
+        <p style="color:#555;line-height:1.7;margin-bottom:28px">${urgencyMsg}</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
+          <div style="background:#f0f7f0;border:1px solid #c8e6c9;border-radius:10px;padding:16px 20px;flex:1;min-width:140px">
+            <div style="font-size:13px;color:#555;margin-bottom:4px">Basic</div>
+            <div style="font-size:24px;font-weight:800;color:#2D6A2D">R$49<span style="font-size:14px;font-weight:400">/mês</span></div>
+            <div style="font-size:12px;color:#888">até 10 inquilinos</div>
+          </div>
+          <div style="background:#f0f7f0;border:2px solid #4CAF50;border-radius:10px;padding:16px 20px;flex:1;min-width:140px">
+            <div style="font-size:13px;color:#555;margin-bottom:4px">Pro ⭐</div>
+            <div style="font-size:24px;font-weight:800;color:#2D6A2D">R$99<span style="font-size:14px;font-weight:400">/mês</span></div>
+            <div style="font-size:12px;color:#888">até 30 inquilinos</div>
+          </div>
+        </div>
+        <a href="https://locarpay-api.vercel.app/admin" style="display:inline-block;background:#4CAF50;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:700;font-size:15px;margin-bottom:24px">
+          Ativar plano agora →
+        </a>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+        <p style="color:#aaa;font-size:12px">Dúvidas? Responda este e-mail ou acesse o painel em locarpay-api.vercel.app/admin</p>
+      </div>
+    `
+  });
+
+  await snap.ref.update({ trialNotifiedAt: Timestamp.now() });
+  return { ok: true, notified: true, email: d.email };
+}
+
 async function handleAsaasWebhook(db, body) {
   const { event, payment } = body || {};
   if (!event || !payment?.subscription) return { ok: true, ignored: true };
@@ -383,6 +459,7 @@ export default async function handler(req, res) {
     if (step === 'get')            return res.status(200).json(await handleGet(db, body));
     if (step === 'activate-plan')  return res.status(200).json(await handleActivatePlan(db, body));
     if (step === 'billing-status') return res.status(200).json(await handleBillingStatus(db, body));
+    if (step === 'notify-trial')   return res.status(200).json(await handleNotifyTrial(db, body));
     return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {

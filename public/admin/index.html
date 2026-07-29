@@ -114,6 +114,7 @@
     tenants   = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     contracts = contractsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderTenants();
+    renderMetrics();
   }
 
   const DOC_LABELS = {
@@ -123,6 +124,42 @@
     holerite: 'Holerite / Renda',
     imposto_renda: 'Imposto de Renda'
   };
+
+  async function renderMetrics() {
+    const totalTenants   = tenants.length;
+    const totalContracts = contracts.length;
+    const totalRent      = contracts.reduce((s, c) => s + (c.baseRent || 0), 0);
+    const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    // Carrega cobranças (usa índice ownerId+status existente)
+    let pendingCount = 0, paidCount = 0;
+    try {
+      if (currentOwnerId) {
+        const [pendSnap, paidSnap] = await Promise.all([
+          getDocs(query(collection(db, 'charges'), where('ownerId', '==', currentOwnerId), where('status', 'in', ['pending','overdue']))),
+          getDocs(query(collection(db, 'charges'), where('ownerId', '==', currentOwnerId), where('status', '==', 'paid')))
+        ]);
+        pendingCount = pendSnap.size;
+        paidCount    = paidSnap.size;
+      }
+    } catch (_) {}
+
+    const cards = [
+      { label: 'Inquilinos',       value: totalTenants,           icon: '👤', color: '#4F86F7' },
+      { label: 'Contratos ativos', value: totalContracts,         icon: '📄', color: '#4CAF50' },
+      { label: 'Pendentes',        value: pendingCount,           icon: '⏳', color: '#FFB74D' },
+      { label: 'Pagas',            value: paidCount,              icon: '✅', color: '#81C784' },
+      { label: 'Aluguel/mês',      value: fmt.format(totalRent),  icon: '💰', color: '#CE93D8' },
+    ];
+
+    $('metrics-row').innerHTML = cards.map(c => `
+      <div class="metric-card">
+        <div class="metric-icon" style="color:${c.color}">${c.icon}</div>
+        <div class="metric-value" style="color:${c.color}">${c.value}</div>
+        <div class="metric-label">${c.label}</div>
+      </div>
+    `).join('');
+  }
 
   function renderTenants() {
     const tbody = $('tenants-tbody');
@@ -427,6 +464,7 @@
       const days = Math.ceil((trialEnd - now) / 86400000);
       if (days <= 5) {
         showBanner('warning', `⚠ Seu trial expira em ${days} dia${days !== 1 ? 's' : ''}. Ative um plano para continuar usando o LocarPay.`);
+        notifyTrialByEmail();
       } else {
         banner.style.display = 'none';
       }
@@ -439,6 +477,16 @@
       return;
     }
     showBanner('error', '⛔ Seu período de trial expirou. Ative um plano para continuar.');
+    notifyTrialByEmail();
+  }
+
+  function notifyTrialByEmail() {
+    if (!currentOwnerId) return;
+    fetch('/api/locarpay-owner', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step: 'notify-trial', ownerId: currentOwnerId })
+    }).catch(() => {});
   }
 
   function showBanner(type, msg) {
@@ -633,6 +681,11 @@
   .doc-placeholder { width: 100%; aspect-ratio: 4/3; background: #1a1d2e; border: 2px dashed #3a3d52; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 36px; color: #444; }
   .doc-label { font-size: 12px; color: #888; margin-top: 6px; }
 
+  .metric-card { background: #1a1d2e; border: 1px solid #2a2d3e; border-radius: 12px; padding: 20px 16px; text-align: center; }
+  .metric-icon { font-size: 22px; margin-bottom: 8px; }
+  .metric-value { font-size: 26px; font-weight: 800; letter-spacing: -1px; margin-bottom: 4px; }
+  .metric-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+
   .plan-banner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 32px; font-size: 13px; font-weight: 500; flex-wrap: wrap; }
   .plan-banner-warning { background: #2a2000; border-bottom: 1px solid #5a4000; color: #FFD54F; }
   .plan-banner-error   { background: #2a0a0a; border-bottom: 1px solid #5a1010; color: #ef9a9a; }
@@ -711,6 +764,7 @@
 
   <!-- Painel: Inquilinos -->
   <div class="panel" id="panel-tenants" style="display:block">
+    <div id="metrics-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:24px"></div>
     <div class="section-header">
       <h2>Inquilinos</h2>
       <button class="btn" id="btn-add-tenant">+ Novo Inquilino</button>
