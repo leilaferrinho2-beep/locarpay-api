@@ -28,6 +28,7 @@
   onAuthStateChanged(auth, user => {
     if (user) {
       showScreen('dashboard');
+      loadContract(user.uid);
       loadCharges(user.uid);
     } else {
       showScreen('login');
@@ -86,6 +87,33 @@
   $('btn-back-email').onclick = () => showScreen('login');
 
   $('btn-logout').onclick = () => signOut(auth);
+
+  // ── Dashboard: carregar contrato ─────────────────────────────────────────
+  async function loadContract(uid) {
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'contracts'),
+        where('tenantId', '==', uid),
+        where('active', '==', true)
+      ));
+      if (snap.empty) return;
+      const contract = snap.docs[0].data();
+      const fmtTs = ts => ts?.seconds ? new Date(ts.seconds * 1000).toLocaleDateString('pt-BR') : '—';
+      const status = contract.assinafyStatus === 'signed' ? '✅ Assinado'
+        : contract.assinafyStatus === 'pending' ? '⏳ Aguardando assinatura'
+        : contract.assinafyStatus === 'manual' ? '📋 Contrato sem assinatura digital' : '—';
+      const endDate = contract.endDate ? fmtTs(contract.endDate) : '—';
+      const startDate = contract.startDate ? fmtTs(contract.startDate) : '—';
+      $('contract-info').innerHTML = `
+        <h3 class="section-title">Meu Contrato</h3>
+        <div class="card card-pending">
+          <div class="card-row"><span class="card-label">STATUS</span><span class="card-meta">${status}</span></div>
+          <div class="card-row"><span class="card-label">IMÓVEL</span><span class="card-meta">${contract.propertyDescription || '—'}</span></div>
+          <div class="card-row"><span class="card-label">ALUGUEL</span><span class="card-amount" style="font-size:16px">${fmt.format(contract.baseRent || 0)}</span></div>
+          <div class="card-row"><span class="card-meta">Início: ${startDate}</span><span class="card-meta">Término: ${endDate}</span></div>
+        </div>`;
+    } catch (_) {}
+  }
 
   // ── Dashboard: carregar cobranças ─────────────────────────────────────────
   async function loadCharges(uid) {
@@ -295,6 +323,7 @@
 <!-- ── Screen: Dashboard ─────────────────────────────────────────── -->
 <div class="screen" id="screen-dashboard">
   <div class="dashboard">
+    <div id="contract-info"></div>
     <div id="charges-list"><p class="loading">Carregando...</p></div>
   </div>
 </div>
