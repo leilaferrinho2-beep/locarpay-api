@@ -2,70 +2,86 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isAuthenticated() {
-      return request.auth != null;
-    }
+    function isAuth()   { return request.auth != null; }
+    function myEmail()  { return request.auth.token.email; }
+    function isMaster() { return isAuth() && myEmail() == 'contatotransgu@gmail.com'; }
 
-    function isMaster() {
-      return request.auth != null
-          && request.auth.token.email == 'contatotransgu@gmail.com';
-    }
-
-    // Owners podem ler o próprio documento (match por email)
-    function isOwnOwnerDoc(ownerData) {
-      return isAuthenticated()
-          && ownerData.email == request.auth.token.email;
-    }
-
-    // ── owners ─────────────────────────────────────────────────
-    // Master acesso total; owner lê o próprio doc; criação apenas pelo servidor
+    // ── owners ─────────────────────────────────────────────────────────────
+    // Apenas o próprio owner lê o seu doc; apenas master (server) escreve
     match /owners/{ownerId} {
-      allow read: if isMaster() || isOwnOwnerDoc(resource.data);
-      allow write: if isMaster();
+      allow read:   if isMaster() || (isAuth() && resource.data.get('email','') == myEmail());
+      allow write:  if isMaster();
     }
 
-    // ── users ───────────────────────────────────────────────────
-    // Authenticated (admin panel Google + app Firebase Auth)
+    // ── users ───────────────────────────────────────────────────────────────
+    // Leitura: qualquer autenticado (owner panel lista tenants por ownerId)
+    // Escrita: cria → autenticado; atualiza → próprio user OU master; deleta → master
+    // TODO: custom claim 'ownerId' para isolar leitura entre owners
     match /users/{userId} {
-      allow read, write: if isAuthenticated();
+      allow read:   if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth() && (
+        resource.data.get('email', '') == myEmail() || isMaster()
+      );
+      allow delete: if isMaster();
+
+      // Cartões salvos: somente o próprio inquilino (email) ou master
       match /savedCards/{cardId} {
-        allow read, write: if isAuthenticated();
+        allow read, write: if isAuth() &&
+          get(/databases/$(database)/documents/users/$(userId)).data.get('email','') == myEmail()
+          || isMaster();
       }
     }
 
-    // ── contracts ───────────────────────────────────────────────
+    // ── contracts ────────────────────────────────────────────────────────────
+    // Leitura: autenticado (tenant lê o próprio via tenantEmail, owner lista os seus)
+    // Escrita: autenticado (owner panel cria/fecha contratos)
     match /contracts/{contractId} {
-      allow read, write: if isAuthenticated();
+      allow read:   if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth();
+      allow delete: if isMaster();
     }
 
-    // ── charges ─────────────────────────────────────────────────
+    // ── charges ──────────────────────────────────────────────────────────────
+    // Leitura: autenticado (tenant vê as próprias por tenantEmail, owner lista as suas)
+    // Cria/atualiza: autenticado; deleta: master
     match /charges/{chargeId} {
-      allow read, write: if isAuthenticated();
+      allow read:   if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth() && (
+        resource.data.get('tenantEmail', '') == myEmail() || isMaster()
+      );
+      allow delete: if isMaster();
     }
 
-    // ── cardVerifications (temporário, expira em 24h) ───────────
+    // ── cardVerifications ────────────────────────────────────────────────────
+    // Apenas o servidor (Admin SDK) escreve; cliente só lê (para polling de status)
     match /cardVerifications/{verId} {
-      allow read, write: if isAuthenticated();
+      allow read:  if isAuth();
+      allow write: if false; // Admin SDK bypasses rules
     }
 
-    // ── termsAuditLog (LGPD) ────────────────────────────────────
+    // ── termsAuditLog (LGPD) ────────────────────────────────────────────────
+    // Imutável após criação — preserva integridade do audit trail
     match /termsAuditLog/{logId} {
-      allow read:   if isMaster();
-      allow create: if isAuthenticated();
+      allow read:             if isMaster();
+      allow create:           if isAuth();
+      allow update, delete:   if false;
     }
 
-    // ── config (chaves API) ─────────────────────────────────────
-    // Apenas servidor (Admin SDK) — client nunca acessa diretamente
+    // ── config ───────────────────────────────────────────────────────────────
+    // Chaves API (Asaas, Assinafy) — NUNCA acessível pelo cliente
     match /config/{docId} {
-      allow read, write: if isMaster();
+      allow read, write: if false; // somente Admin SDK
     }
 
-    // ── licenses (legado) ───────────────────────────────────────
+    // ── licenses (legado) ────────────────────────────────────────────────────
     match /licenses/{licId} {
       allow read, write: if isMaster();
     }
 
-    // ── default: nega tudo que não foi explicitamente permitido ─
+    // ── default: nega tudo não declarado ─────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }
