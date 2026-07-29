@@ -452,6 +452,64 @@ async function handleNotifyTrial(db, body) {
   return { ok: true, notified: true, email: d.email };
 }
 
+// ── CRON DIÁRIO ──────────────────────────────────────────────────────────────
+// Chamado pelo Vercel Cron (GET) todo dia às 08:00 BRT (11:00 UTC)
+// Executa para todos os owners ativos: mark-overdue, generate-charges, notify-upcoming
+// No dia 1: envia relatório mensal. Para trial: verifica notificação de expiração.
+async function handleCronDaily(db) {
+  const BASE = 'https://locarpay-api.vercel.app/api/locarpay-card';
+  const OWNER_URL = 'https://locarpay-api.vercel.app/api/locarpay-owner';
+
+  const post = (url, body) => fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(r => r.json()).catch(e => ({ error: e.message }));
+
+  const now = new Date();
+  const dayOfMonth = now.getUTCDate();
+  const isFirstOfMonth = dayOfMonth === 1;
+  const isEndOfMonth   = dayOfMonth >= 26;
+
+  const ownersSnap = await db.collection('owners').get();
+  const results = {};
+
+  await Promise.all(ownersSnap.docs.map(async ownerDoc => {
+    const ownerId = ownerDoc.id;
+    const d = ownerDoc.data();
+    if (d.status === 'suspended') return;
+
+    const ops = [];
+
+    // 1. Marca cobranças vencidas + calcula multa/juros
+    ops.push(post(BASE, { step: 'mark-overdue', ownerId }));
+
+    // 2. Gera cobranças: mês atual nos primeiros 3 dias, próximo mês nos últimos 5
+    if (dayOfMonth <= 3)  ops.push(post(BASE, { step: 'generate-charges', ownerId, monthOffset: 0 }));
+    if (isEndOfMonth)     ops.push(post(BASE, { step: 'generate-charges', ownerId, monthOffset: 1 }));
+
+    // 3. Avisa vencimentos em 3 dias
+    ops.push(post(BASE, { step: 'notify-upcoming', ownerId, daysAhead: 3 }));
+
+    // 4. Relatório mensal no dia 1 (mês anterior)
+    if (isFirstOfMonth) {
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const monthStr = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+      ops.push(post(BASE, { step: 'monthly-report', ownerId, month: monthStr }));
+    }
+
+    // 5. Notifica trial expirando (a cada até 20h, controlado internamente)
+    if (d.status === 'trial' || !d.status) {
+      ops.push(post(OWNER_URL, { step: 'notify-trial', ownerId }));
+    }
+
+    const settled = await Promise.all(ops);
+    results[ownerId] = settled;
+  }));
+
+  return { ok: true, ran: now.toISOString(), owners: ownersSnap.size, results };
+}
+
 async function handleAsaasWebhook(db, body) {
   const { event, payment } = body || {};
   if (!event || !payment?.subscription) return { ok: true, ignored: true };
@@ -481,9 +539,23 @@ async function handleAsaasWebhook(db, body) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  // Vercel Cron: GET com header x-vercel-cron
+  if (req.method === 'GET') {
+    if (!req.headers['x-vercel-cron']) return res.status(401).json({ error: 'Unauthorized' });
+    try {
+      initFirebase();
+      const db = getFirestore();
+      return res.status(200).json(await handleCronDaily(db));
+    } catch (e) {
+      console.error('cron-daily error:', e.message);
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {

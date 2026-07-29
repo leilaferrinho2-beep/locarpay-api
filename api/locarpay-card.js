@@ -615,9 +615,27 @@ async function handleSyncStatus(db, body) {
     } catch (_) {}
   }));
 
-  // Para cada pagamento confirmado, gera cobrança do próximo mês se ainda não existe
+  // Para cada pagamento confirmado: gera próxima cobrança + notifica tenant por push
   if (newlyPaid.length > 0) {
     await handleGenerateCharges(db, { ownerId, monthOffset: 1 }).catch(() => {});
+
+    // Push de confirmação para cada tenant que pagou
+    await Promise.all(newlyPaid.map(async ({ chargeId }) => {
+      try {
+        const chargeSnap = await db.collection('charges').doc(chargeId).get();
+        if (!chargeSnap.exists) return;
+        const tenantId = chargeSnap.data().tenantId;
+        if (!tenantId) return;
+        const userSnap = await db.collection('users').doc(tenantId).get();
+        const token = userSnap.data()?.fcmToken;
+        if (!token) return;
+        await getMessaging().send({
+          token,
+          notification: { title: '✅ Pagamento confirmado!', body: 'Seu aluguel foi recebido. Obrigado!' },
+          android: { priority: 'high' }
+        });
+      } catch (_) {}
+    }));
   }
 
   return { ok: true, reset: toReset.length, confirmed: newlyPaid.length };
@@ -644,6 +662,7 @@ async function handleGenerateCharges(db, body) {
   const month    = target.getMonth(); // 0-indexed
 
   let created = 0;
+  const newCharges = [];
   const batch = db.batch();
 
   await Promise.all(contractsSnap.docs.map(async contractDoc => {
@@ -688,10 +707,57 @@ async function handleGenerateCharges(db, body) {
       monthRef:     monthStr,
       generatedAt:  new Date()
     });
+    newCharges.push({ tenantEmail: tenantEmail || '', baseRent, dueDate, monthStr });
     created++;
   }));
 
-  if (created > 0) await batch.commit();
+  if (created > 0) {
+    await batch.commit();
+    // Notifica inquilinos por e-mail sobre a nova cobrança (fire-and-forget)
+    const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.titan.email', port: 587, secure: false,
+      auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
+    });
+    await Promise.all(newCharges.map(async ({ tenantEmail, baseRent, dueDate, monthStr }) => {
+      if (!tenantEmail) return;
+      const dueFmt = dueDate.toLocaleDateString('pt-BR');
+      try {
+        await transporter.sendMail({
+          from:    'LocarPay <denis@dlftech.com.br>',
+          to:      tenantEmail,
+          subject: `Nova cobrança de aluguel — ${fmt.format(baseRent)}`,
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#fff">
+              <div style="margin-bottom:24px">
+                <span style="background:#1B5E20;color:#fff;font-weight:800;font-size:18px;padding:6px 14px;border-radius:8px">LocarPay</span>
+              </div>
+              <h2 style="color:#1a1a1a;margin-bottom:8px">Nova cobrança gerada</h2>
+              <p style="color:#555;line-height:1.7;margin-bottom:20px">
+                Uma nova cobrança de aluguel foi gerada para o mês de <strong>${monthStr}</strong>.
+              </p>
+              <div style="background:#f5f5f5;border-radius:10px;padding:20px;margin-bottom:24px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+                  <span style="color:#777">Valor</span>
+                  <span style="font-weight:700;color:#1a1a1a">${fmt.format(baseRent)}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between">
+                  <span style="color:#777">Vencimento</span>
+                  <span style="font-weight:700;color:#c62828">${dueFmt}</span>
+                </div>
+              </div>
+              <p style="color:#555;line-height:1.7;margin-bottom:20px">
+                Abra o app <strong>LocarPay</strong> para pagar via PIX ou cartão de crédito com apenas alguns toques.
+              </p>
+              <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+              <p style="color:#aaa;font-size:12px">Pagamento antecipado evita multas e juros por atraso.</p>
+            </div>
+          `
+        });
+      } catch (_) {} // falha de e-mail não bloqueia a geração
+    }));
+  }
+
   return { ok: true, created };
 }
 
@@ -713,8 +779,33 @@ async function handleMarkOverdue(db, body) {
 
   if (overdue.length === 0) return { ok: true, updated: 0 };
 
+  const nowMs = Date.now();
   const batch = db.batch();
-  overdue.forEach(d => batch.update(d.ref, { status: 'overdue' }));
+
+  overdue.forEach(d => {
+    const data   = d.data();
+    const dueSecs = data.dueDate?.seconds ?? data.dueDate?._seconds ?? 0;
+    const dueDateMs = dueSecs * 1000;
+    const diasAtraso = Math.max(1, Math.floor((nowMs - dueDateMs) / 86400000));
+
+    // Aplica multa 2% (uma única vez) e juros 0.033%/dia
+    const baseRent = data.baseRent || data.totalAmount || 0;
+    const multaJaAplicada = (data.multaAplicada || 0) > 0;
+    const multa  = multaJaAplicada ? (data.multaAplicada || 0) : baseRent * 0.02;
+    const juros  = baseRent * 0.00033 * diasAtraso;
+
+    const extrasTotal = (data.extras || []).reduce((s, e) => s + (e.value || 0), 0);
+    const totalAmount = baseRent + extrasTotal + multa + juros;
+
+    batch.update(d.ref, {
+      status:         'overdue',
+      multaAplicada:  multa,
+      jurosAplicado:  juros,
+      diasAtraso,
+      totalAmount:    Math.round(totalAmount * 100) / 100
+    });
+  });
+
   await batch.commit();
   return { ok: true, updated: overdue.length };
 }
