@@ -6,7 +6,7 @@
 <title>LocarPay — Painel Admin</title>
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { getAuth, signInWithPopup, signInWithRedirect, signInWithCustomToken, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
   import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, serverTimestamp, query, where, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
   const MASTER_EMAIL = 'contatotransgu@gmail.com';
@@ -1292,6 +1292,15 @@
     if ($('login-error') && e.code !== 'auth/no-auth-event') $('login-error').textContent = e.message;
   });
 
+  // Login via OTP token vindo da página de cadastro
+  const pendingToken = sessionStorage.getItem('lp_custom_token');
+  if (pendingToken) {
+    sessionStorage.removeItem('lp_custom_token');
+    signInWithCustomToken(auth, pendingToken).catch(e => {
+      if ($('login-error')) $('login-error').textContent = 'Token inválido. Solicite um novo código.';
+    });
+  }
+
   $('btn-login').addEventListener('click', async () => {
     try {
       await signInWithPopup(auth, provider);
@@ -1305,6 +1314,49 @@
   });
 
   $('btn-logout').addEventListener('click', () => signOut(auth));
+
+  // OTP login
+  let otpEmail = '';
+  async function sendOtp(email) {
+    $('login-error').textContent = '';
+    const btn = $('btn-send-otp');
+    btn.textContent = 'Enviando...'; btn.disabled = true;
+    try {
+      const r = await fetch('/api/locarpay-send-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email }) });
+      const d = await r.json();
+      if (!r.ok) { $('login-error').textContent = d.error || 'Erro ao enviar código'; return; }
+      otpEmail = email;
+      $('otp-sent-to').textContent = email;
+      $('otp-email-step').style.display = 'none';
+      $('otp-code-step').style.display = 'block';
+      $('otp-code-input').focus();
+    } catch(e) { $('login-error').textContent = 'Erro de conexão'; }
+    finally { btn.textContent = 'Entrar com código por e-mail'; btn.disabled = false; }
+  }
+
+  $('btn-send-otp').addEventListener('click', () => {
+    const email = $('otp-email-input').value.trim();
+    if (!email) { $('login-error').textContent = 'Informe seu e-mail.'; return; }
+    sendOtp(email);
+  });
+  $('otp-email-input').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-send-otp').click(); });
+  $('btn-resend-otp').addEventListener('click', () => sendOtp(otpEmail));
+
+  $('btn-verify-otp').addEventListener('click', async () => {
+    const code = $('otp-code-input').value.trim();
+    if (!code) { $('login-error').textContent = 'Informe o código.'; return; }
+    const btn = $('btn-verify-otp');
+    btn.textContent = 'Verificando...'; btn.disabled = true;
+    $('login-error').textContent = '';
+    try {
+      const r = await fetch('/api/locarpay-verify-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email: otpEmail, otp: code }) });
+      const d = await r.json();
+      if (!r.ok) { $('login-error').textContent = d.error || 'Código inválido'; return; }
+      await signInWithCustomToken(auth, d.customToken);
+    } catch(e) { $('login-error').textContent = 'Erro de conexão'; }
+    finally { btn.textContent = 'Verificar código'; btn.disabled = false; }
+  });
+  $('otp-code-input').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-verify-otp').click(); });
 
   $('tab-tenants').addEventListener('click', () => { setTab('tenants'); loadTenants(); });
   $('tab-owners').addEventListener('click',  () => { setTab('owners');  loadOwners(); });
@@ -1515,7 +1567,19 @@
       </svg>
       Continuar com Google
     </button>
-    <div class="lr-divider"><span>acesso restrito</span></div>
+    <div class="lr-divider"><span>ou</span></div>
+    <!-- OTP Login -->
+    <div id="otp-email-step">
+      <input id="otp-email-input" type="email" placeholder="Seu e-mail cadastrado" style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid #1a2030;background:#0d1420;color:#e0e6f0;font-size:14px;box-sizing:border-box;margin-bottom:10px;outline:none;">
+      <button id="btn-send-otp" style="width:100%;padding:12px;border-radius:10px;border:1px solid #2563eb;background:transparent;color:#4F86F7;font-size:14px;font-weight:600;cursor:pointer;">Entrar com código por e-mail</button>
+    </div>
+    <div id="otp-code-step" style="display:none">
+      <div style="font-size:13px;color:#7a90a8;margin-bottom:10px;">Código enviado para <span id="otp-sent-to" style="color:#4F86F7"></span></div>
+      <input id="otp-code-input" type="text" inputmode="numeric" maxlength="6" placeholder="000000" style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid #2563eb;background:#0d1420;color:#e0e6f0;font-size:22px;letter-spacing:8px;text-align:center;box-sizing:border-box;margin-bottom:10px;outline:none;">
+      <button id="btn-verify-otp" style="width:100%;padding:12px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Verificar código</button>
+      <div style="text-align:center;margin-top:10px"><button id="btn-resend-otp" style="background:none;border:none;color:#4F86F7;font-size:12px;cursor:pointer;text-decoration:underline;">Reenviar código</button></div>
+    </div>
+    <div class="lr-divider" style="margin:20px 0 12px"><span>acesso restrito</span></div>
     <div class="lr-note">Apenas imobiliárias cadastradas na plataforma têm acesso.</div>
     <div id="login-error"></div>
   </div>

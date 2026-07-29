@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LocarPay — Cadastre-se grátis</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f1117;
+    color: #e0e0e0;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  .header {
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  .logo {
+    font-size: 20px;
+    font-weight: 900;
+    color: #4CAF50;
+    letter-spacing: -0.5px;
+  }
+  .header-link {
+    font-size: 13px;
+    color: #888;
+    text-decoration: none;
+  }
+  .header-link:hover { color: #ccc; }
+
+  /* ── Hero ── */
+  .hero {
+    text-align: center;
+    padding: 40px 24px 32px;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .badge {
+    display: inline-block;
+    background: #1a3a1a;
+    color: #4CAF50;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 5px 14px;
+    border-radius: 100px;
+    margin-bottom: 20px;
+    border: 1px solid #2D6A2D;
+  }
+  .hero h1 {
+    font-size: clamp(26px, 5vw, 38px);
+    font-weight: 900;
+    line-height: 1.15;
+    color: #f0f0f0;
+    margin-bottom: 14px;
+    letter-spacing: -0.5px;
+  }
+  .hero h1 span { color: #4CAF50; }
+  .hero p {
+    font-size: 15px;
+    color: #888;
+    line-height: 1.7;
+    max-width: 420px;
+    margin: 0 auto 28px;
+  }
+
+  /* ── Features ── */
+  .features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 36px;
+  }
+  .feature-pill {
+    background: #1a1d2e;
+    border: 1px solid #2a2d3e;
+    border-radius: 100px;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .feature-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: #4CAF50; flex-shrink: 0; }
+
+  /* ── Form Card ── */
+  .form-wrap {
+    max-width: 460px;
+    margin: 0 auto;
+    padding: 0 20px 60px;
+  }
+  .form-card {
+    background: #1a1d2e;
+    border: 1px solid #2a2d3e;
+    border-radius: 20px;
+    padding: 32px 28px;
+  }
+  .form-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: #f0f0f0;
+    margin-bottom: 4px;
+  }
+  .form-sub {
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 24px;
+  }
+  .trial-badge {
+    display: inline-block;
+    background: #1B5E20;
+    color: #81C784;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 100px;
+    margin-bottom: 20px;
+  }
+
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #aaa;
+    letter-spacing: 0.3px;
+    margin-bottom: 6px;
+  }
+  .field {
+    margin-bottom: 16px;
+  }
+  input {
+    width: 100%;
+    background: #0f1117;
+    border: 1px solid #2a2d3e;
+    color: #e0e0e0;
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 15px;
+    outline: none;
+    transition: border-color .2s;
+    -webkit-appearance: none;
+  }
+  input:focus { border-color: #4CAF50; }
+  input::placeholder { color: #444; }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .optional-label {
+    font-size: 10px;
+    color: #555;
+    font-weight: 400;
+    margin-left: 4px;
+  }
+
+  .btn-submit {
+    width: 100%;
+    background: #2D6A2D;
+    color: #fff;
+    border: none;
+    padding: 15px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background .2s;
+    letter-spacing: 0.2px;
+  }
+  .btn-submit:hover:not(:disabled) { background: #388E3C; }
+  .btn-submit:disabled { background: #1a3a1a; color: #555; cursor: not-allowed; }
+
+  .terms-note {
+    font-size: 11px;
+    color: #555;
+    text-align: center;
+    margin-top: 14px;
+    line-height: 1.6;
+  }
+
+  .error-msg {
+    background: #2a1010;
+    border: 1px solid #5a1a1a;
+    color: #ef9a9a;
+    font-size: 13px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .error-msg.show { display: block; }
+
+  /* ── Success Screen ── */
+  .success-screen {
+    display: none;
+    text-align: center;
+    padding: 32px 20px;
+  }
+  .success-screen.show { display: block; }
+  .success-icon { font-size: 56px; margin-bottom: 16px; }
+  .success-title {
+    font-size: 22px;
+    font-weight: 900;
+    color: #f0f0f0;
+    margin-bottom: 10px;
+  }
+  .success-sub {
+    font-size: 14px;
+    color: #888;
+    line-height: 1.7;
+    margin-bottom: 28px;
+    max-width: 360px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .steps-list {
+    background: #1a1d2e;
+    border: 1px solid #2a2d3e;
+    border-radius: 14px;
+    padding: 20px;
+    text-align: left;
+    margin-bottom: 24px;
+    max-width: 380px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .step-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid #2a2d3e;
+    font-size: 13px;
+    color: #ccc;
+    line-height: 1.5;
+  }
+  .step-item:last-child { border-bottom: none; }
+  .step-num {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #2D6A2D;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .btn-go-panel {
+    display: inline-block;
+    background: #2D6A2D;
+    color: #fff;
+    text-decoration: none;
+    padding: 14px 32px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 800;
+  }
+  .btn-go-panel:hover { background: #388E3C; }
+  .btn-otp-login {
+    width: 100%;
+    background: transparent;
+    border: 1px solid #2a2d3e;
+    color: #aaa;
+    padding: 13px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color .2s, color .2s;
+  }
+  .btn-otp-login:hover { border-color: #4CAF50; color: #4CAF50; }
+
+  /* ── Footer ── */
+  .footer {
+    text-align: center;
+    padding: 24px;
+    font-size: 12px;
+    color: #444;
+  }
+  .footer a { color: #4CAF50; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <span class="logo">LocarPay</span>
+  <a class="header-link" href="/admin">Já tenho conta →</a>
+</div>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="badge">✦ 14 dias grátis, sem cartão</div>
+  <h1>Gerencie seus aluguéis<br><span>com inteligência</span></h1>
+  <p>Contratos digitais, cobranças automáticas via PIX e relatórios financeiros — tudo num só lugar.</p>
+  <div class="features">
+    <div class="feature-pill"><span class="dot"></span>Contratos com assinatura eletrônica</div>
+    <div class="feature-pill"><span class="dot"></span>PIX automático todo mês</div>
+    <div class="feature-pill"><span class="dot"></span>App iOS e Android</div>
+    <div class="feature-pill"><span class="dot"></span>Notificações de inadimplência</div>
+    <div class="feature-pill"><span class="dot"></span>Relatórios financeiros</div>
+    <div class="feature-pill"><span class="dot"></span>Portal do inquilino</div>
+  </div>
+</div>
+
+<!-- Form -->
+<div class="form-wrap">
+  <div class="form-card" id="form-card">
+    <div class="trial-badge">🎁 Trial de 14 dias grátis</div>
+    <div class="form-title">Criar sua conta</div>
+    <div class="form-sub">Menos de 2 minutos para começar</div>
+
+    <div class="error-msg" id="error-msg"></div>
+
+    <div class="field">
+      <label for="name">Nome completo</label>
+      <input id="name" type="text" placeholder="João Silva" autocomplete="name" required>
+    </div>
+
+    <div class="field">
+      <label for="email">E-mail <small class="optional-label">(use o mesmo e-mail do Google para entrar no painel)</small></label>
+      <input id="email" type="email" placeholder="joao@email.com.br" autocomplete="email" required>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="phone">Telefone <span class="optional-label">opcional</span></label>
+        <input id="phone" type="tel" placeholder="(11) 99999-9999" autocomplete="tel">
+      </div>
+      <div class="field">
+        <label for="cpfcnpj">CPF / CNPJ <span class="optional-label">opcional</span></label>
+        <input id="cpfcnpj" type="text" placeholder="000.000.000-00">
+      </div>
+    </div>
+
+    <button class="btn-submit" id="btn-submit" onclick="submitForm()">Criar conta grátis →</button>
+
+    <p class="terms-note">
+      Ao criar sua conta, você concorda com os termos de uso da plataforma LocarPay.<br>
+      Seus dados são protegidos e nunca serão compartilhados.
+    </p>
+  </div>
+
+  <!-- Success -->
+  <div class="success-screen" id="success-screen">
+    <div class="success-icon">✅</div>
+    <div class="success-title">Conta criada!</div>
+    <p class="success-sub" id="success-sub">
+      Enviamos um e-mail de boas-vindas. Siga os passos abaixo para começar.
+    </p>
+    <div class="steps-list">
+      <div class="step-item">
+        <div class="step-num">1</div>
+        <div>Verifique seu e-mail — enviamos o acesso e instruções</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">2</div>
+        <div>Acesse o painel clicando no botão abaixo e entre com o Google usando o mesmo e-mail</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">3</div>
+        <div>Cadastre seu primeiro inquilino e gere o contrato digital</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">4</div>
+        <div>Ative as cobranças automáticas mensais via PIX</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;max-width:380px;margin:20px auto 0">
+      <a class="btn-go-panel" href="/admin" style="text-align:center">
+        <svg style="width:18px;height:18px;vertical-align:-3px;margin-right:8px" viewBox="0 0 24 24"><path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Entrar com Google
+      </a>
+      <button class="btn-otp-login" id="btn-show-otp" onclick="showOtpSection()">
+        📧 Entrar com código de e-mail
+      </button>
+    </div>
+
+    <!-- OTP Login inline -->
+    <div id="otp-section" style="display:none;max-width:380px;margin:16px auto 0">
+      <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:14px;padding:20px">
+        <div id="otp-step-email">
+          <label style="font-size:12px;font-weight:600;color:#aaa;margin-bottom:6px;display:block">E-mail da sua conta</label>
+          <input id="otp-email" type="email" placeholder="joao@email.com.br" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none;margin-bottom:10px">
+          <p class="error-msg" id="otp-err1" style="font-size:12px;color:#ef9a9a;margin-bottom:8px;display:none"></p>
+          <button onclick="sendAdminOtp()" style="width:100%;background:#2D6A2D;color:#fff;border:none;padding:12px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer" id="btn-send-otp2">Enviar código</button>
+        </div>
+        <div id="otp-step-code" style="display:none">
+          <p style="font-size:13px;color:#888;margin-bottom:12px" id="otp-sent-hint"></p>
+          <label style="font-size:12px;font-weight:600;color:#aaa;margin-bottom:6px;display:block">Código de 6 dígitos</label>
+          <input id="otp-code" type="number" placeholder="000000" maxlength="6" inputmode="numeric" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:18px;font-weight:700;outline:none;letter-spacing:4px;margin-bottom:10px;text-align:center">
+          <p class="error-msg" id="otp-err2" style="font-size:12px;color:#ef9a9a;margin-bottom:8px;display:none"></p>
+          <button onclick="verifyAdminOtp()" style="width:100%;background:#2D6A2D;color:#fff;border:none;padding:12px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer" id="btn-verify-otp2">Verificar e entrar</button>
+          <button onclick="document.getElementById('otp-step-code').style.display='none';document.getElementById('otp-step-email').style.display='block'" style="background:none;border:none;color:#888;font-size:12px;cursor:pointer;margin-top:8px;width:100%">← Voltar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  © 2025 LocarPay · <a href="mailto:suporte@dlftech.com.br">Suporte</a>
+</div>
+
+<script>
+  async function submitForm() {
+    const name    = document.getElementById('name').value.trim();
+    const email   = document.getElementById('email').value.trim().toLowerCase();
+    const phone   = document.getElementById('phone').value.trim();
+    const cpfcnpj = document.getElementById('cpfcnpj').value.trim();
+    const errEl   = document.getElementById('error-msg');
+    const btn     = document.getElementById('btn-submit');
+
+    if (!name) { showError('Informe seu nome completo.'); return; }
+    if (!email || !email.includes('@')) { showError('Informe um e-mail válido.'); return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Criando conta...';
+    errEl.classList.remove('show');
+
+    try {
+      const r = await fetch('/api/locarpay-owner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step: 'register',
+          name, email,
+          phone:   phone   || undefined,
+          cpfCnpj: cpfcnpj || undefined,
+          plan: 'trial'
+        })
+      });
+      const d = await r.json();
+
+      if (r.status === 409) {
+        // E-mail já cadastrado — redireciona para o painel
+        document.getElementById('success-sub').textContent =
+          `O e-mail ${email} já está cadastrado. Acesse o painel com sua conta Google.`;
+        showSuccess();
+        return;
+      }
+      if (!r.ok) throw new Error(d.error || 'Erro ao criar conta.');
+
+      document.getElementById('success-sub').textContent =
+        `Enviamos um e-mail de boas-vindas para ${email}. Siga os passos abaixo para começar.`;
+      showSuccess();
+    } catch (e) {
+      showError(e.message);
+      btn.disabled = false;
+      btn.textContent = 'Criar conta grátis →';
+    }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-msg');
+    el.textContent = msg;
+    el.classList.add('show');
+  }
+
+  function showSuccess() {
+    document.getElementById('form-card').style.display = 'none';
+    document.getElementById('success-screen').classList.add('show');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Enter key
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !document.getElementById('btn-submit').disabled) submitForm();
+  });
+
+  function showOtpSection() {
+    document.getElementById('otp-section').style.display = 'block';
+    document.getElementById('btn-show-otp').style.display = 'none';
+    document.getElementById('otp-email').focus();
+  }
+
+  let pendingOtpEmail = '';
+
+  async function sendAdminOtp() {
+    const email = document.getElementById('otp-email').value.trim().toLowerCase();
+    const errEl = document.getElementById('otp-err1');
+    const btn   = document.getElementById('btn-send-otp2');
+    if (!email.includes('@')) { errEl.textContent = 'Informe um e-mail válido.'; errEl.style.display='block'; return; }
+    errEl.style.display = 'none';
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    try {
+      const r = await fetch('/api/locarpay-send-otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, role: 'admin' })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Erro ao enviar código.');
+      pendingOtpEmail = email;
+      document.getElementById('otp-sent-hint').textContent = `Código enviado para ${email}`;
+      document.getElementById('otp-step-email').style.display = 'none';
+      document.getElementById('otp-step-code').style.display = 'block';
+      document.getElementById('otp-code').focus();
+    } catch (e) {
+      errEl.textContent = e.message;
+      errEl.style.display = 'block';
+    }
+    btn.disabled = false; btn.textContent = 'Enviar código';
+  }
+
+  async function verifyAdminOtp() {
+    const otp   = document.getElementById('otp-code').value.trim();
+    const errEl = document.getElementById('otp-err2');
+    const btn   = document.getElementById('btn-verify-otp2');
+    if (otp.length < 4) { errEl.textContent = 'Informe o código recebido.'; errEl.style.display='block'; return; }
+    errEl.style.display = 'none';
+    btn.disabled = true; btn.textContent = 'Verificando...';
+    try {
+      const r = await fetch('/api/locarpay-verify-otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: pendingOtpEmail, otp })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Código inválido.');
+      // Salva customToken e redireciona — o painel usará para signInWithCustomToken
+      sessionStorage.setItem('lp_custom_token', d.customToken);
+      window.location.href = '/admin';
+    } catch (e) {
+      errEl.textContent = e.message;
+      errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Verificar e entrar';
+    }
+  }
+</script>
+</body>
+</html>

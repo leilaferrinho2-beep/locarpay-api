@@ -71,7 +71,6 @@ async function verificarLicenca(email) {
 }
 
 async function verificarEmailCadastrado(email) {
-  // Endpoint correto para structured query no Firestore REST API
   const url = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents:runQuery?key=${FB_API_KEY}`;
   const resp = await fetch(url, {
     method: 'POST',
@@ -92,12 +91,26 @@ async function verificarEmailCadastrado(email) {
       }
     })
   });
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Firestore query falhou: ${err}`);
-  }
+  if (!resp.ok) return false;
   const data = await resp.json();
-  // runQuery retorna array; cada item tem 'document' se encontrou resultado
+  return Array.isArray(data) && data.some(item => item.document != null);
+}
+
+async function verificarOwner(email) {
+  const url = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents:runQuery?key=${FB_API_KEY}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: 'owners' }],
+        where: { fieldFilter: { field: { fieldPath: 'email' }, op: 'EQUAL', value: { stringValue: email } } },
+        limit: 1
+      }
+    })
+  });
+  if (!resp.ok) return false;
+  const data = await resp.json();
   return Array.isArray(data) && data.some(item => item.document != null);
 }
 
@@ -114,13 +127,14 @@ export default async function handler(req, res) {
   try {
     const emailNorm = email.trim().toLowerCase();
 
-    // Verifica se é admin (licença ativa) ou inquilino cadastrado
-    const [temLicenca, temCadastro] = await Promise.all([
+    // Verifica se é admin (licença, owner) ou inquilino cadastrado
+    const [temLicenca, temCadastro, temOwner] = await Promise.all([
       verificarLicenca(emailNorm),
-      verificarEmailCadastrado(emailNorm)
+      verificarEmailCadastrado(emailNorm),
+      verificarOwner(emailNorm)
     ]);
 
-    if (!temLicenca && !temCadastro) {
+    if (!temLicenca && !temCadastro && !temOwner) {
       return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com o proprietário.' });
     }
 
