@@ -1349,6 +1349,61 @@ async function handleMonthlyReport(db, body) {
   return { ok: true, sentTo: owner.email, month: target, paid: paid.length, pending: pending.length + overdue.length, totalPaid };
 }
 
+// ── CRON DAILY ───────────────────────────────────────────────────────────────
+// Executado automaticamente pelo Vercel Cron às 10:00 BRT todos os dias.
+// Itera todos os owners e executa: mark-overdue, notify-expiry, notify-upcoming.
+// No dia 1 do mês também gera cobranças para todos os owners.
+async function handleCronDaily(db, req) {
+  // Vercel envia o header x-vercel-cron: 1 nos requests de cron
+  const isCron = req.headers?.['x-vercel-cron'] === '1';
+  const cronSecret = process.env.CRON_SECRET;
+  if (!isCron && req.body?.secret !== cronSecret) {
+    throw Object.assign(new Error('Unauthorized'), { status: 401 });
+  }
+
+  const ownersSnap = await db.collection('owners').where('planActive', '==', true).get();
+  if (ownersSnap.empty) return { ok: true, owners: 0 };
+
+  const isFirstOfMonth = new Date().getDate() === 1;
+  const results = { owners: ownersSnap.size, overdue: 0, expiry: 0, charges: 0, errors: [] };
+
+  for (const ownerDoc of ownersSnap.docs) {
+    const ownerId = ownerDoc.id;
+    try {
+      // 1. Marca inadimplentes
+      const od = await handleMarkOverdue(db, { ownerId });
+      results.overdue += od.marked || 0;
+    } catch (e) { results.errors.push(`${ownerId}/overdue: ${e.message}`); }
+
+    try {
+      // 2. Avisa vencimento de contratos
+      const ex = await handleNotifyContractExpiry(db, { ownerId });
+      results.expiry += ex.alerted || 0;
+    } catch (e) { results.errors.push(`${ownerId}/expiry: ${e.message}`); }
+
+    try {
+      // 3. Avisa cobranças vencendo em 3 dias
+      await handleNotifyUpcoming(db, { ownerId });
+    } catch (e) { results.errors.push(`${ownerId}/upcoming: ${e.message}`); }
+
+    if (isFirstOfMonth) {
+      try {
+        // 4. Gera cobranças do mês
+        const now = new Date();
+        const gc = await handleGenerateCharges(db, {
+          ownerId,
+          year: now.getFullYear(),
+          month: now.getMonth() + 1
+        });
+        results.charges += gc.created || 0;
+      } catch (e) { results.errors.push(`${ownerId}/generate: ${e.message}`); }
+    }
+  }
+
+  console.log('cron-daily result:', JSON.stringify(results));
+  return { ok: true, ...results };
+}
+
 // ── NOTIFY CONTRACT EXPIRY ────────────────────────────────────────────────────
 // Verifica contratos ativos cujo endDate está em 30, 15 ou 7 dias e envia
 // email + push ao owner. Idempotente: usa o campo expiryAlertsSent para não
@@ -1750,6 +1805,7 @@ export default async function handler(req, res) {
     if (step === 'asaas-webhook')     return res.status(200).json(await handleAsaasPaymentWebhook(db, req.body));
     if (step === 'annual-receipt')       return res.status(200).json(await handleAnnualReceipt(db, req.body));
     if (step === 'notify-expiry')        return res.status(200).json(await handleNotifyContractExpiry(db, req.body));
+    if (step === 'cron-daily')           return res.status(200).json(await handleCronDaily(db, req));
 
     // Webhook Asaas sem step (evento direto da subconta)
     if (!step && req.body?.event && req.body?.payment) {
