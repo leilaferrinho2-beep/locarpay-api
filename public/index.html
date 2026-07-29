@@ -596,19 +596,19 @@
           <input type="email" id="f-email" placeholder="contato@imobiliaria.com" autocomplete="email">
         </div>
         <div class="form-group">
-          <label for="f-phone">Telefone <span class="form-optional">(opcional)</span></label>
+          <label for="f-phone">Telefone *</label>
           <input type="tel" id="f-phone" placeholder="(11) 9 0000-0000" autocomplete="tel">
         </div>
       </div>
 
-      <div class="section-label form-section-title">Dados fiscais <span class="form-optional" style="text-transform:none;font-size:0.75rem"> — necessário para receber pagamentos</span></div>
+      <div class="section-label form-section-title">Dados fiscais — necessário para receber pagamentos</div>
       <div class="form-row">
         <div class="form-group">
-          <label for="f-cpfcnpj">CNPJ ou CPF <span class="form-optional">(opcional)</span></label>
+          <label for="f-cpfcnpj">CNPJ ou CPF *</label>
           <input type="text" id="f-cpfcnpj" placeholder="00.000.000/0001-00" maxlength="18">
         </div>
         <div class="form-group">
-          <label for="f-companytype">Tipo <span class="form-optional">(opcional)</span></label>
+          <label for="f-companytype">Tipo *</label>
           <select id="f-companytype">
             <option value="">Selecionar</option>
             <option value="MEI">MEI</option>
@@ -619,24 +619,24 @@
         </div>
       </div>
 
-      <div class="section-label form-section-title">Endereço <span class="form-optional" style="text-transform:none;font-size:0.75rem"> — para emissão de cobranças</span></div>
-      <div class="form-group">
-        <label for="f-address">Rua / Logradouro <span class="form-optional">(opcional)</span></label>
-        <input type="text" id="f-address" placeholder="Av. Paulista">
-      </div>
+      <div class="section-label form-section-title">Endereço — para emissão de cobranças</div>
       <div class="form-row">
         <div class="form-group">
-          <label for="f-num">Número <span class="form-optional">(opcional)</span></label>
+          <label for="f-cep">CEP *</label>
+          <input type="text" id="f-cep" placeholder="00000-000" maxlength="9" autocomplete="postal-code">
+        </div>
+        <div class="form-group">
+          <label for="f-num">Número *</label>
           <input type="text" id="f-num" placeholder="1000">
         </div>
-        <div class="form-group">
-          <label for="f-cep">CEP <span class="form-optional">(opcional)</span></label>
-          <input type="text" id="f-cep" placeholder="01310-100" maxlength="9">
-        </div>
+      </div>
+      <div class="form-group">
+        <label for="f-address">Rua / Logradouro *</label>
+        <input type="text" id="f-address" placeholder="Av. Paulista" autocomplete="street-address">
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label for="f-bairro">Bairro <span class="form-optional">(opcional)</span></label>
+          <label for="f-bairro">Bairro *</label>
           <input type="text" id="f-bairro" placeholder="Bela Vista">
         </div>
         <div class="form-group">
@@ -746,7 +746,25 @@
       let v = this.value.replace(/\D/g, '').slice(0, 8);
       if (v.length > 5) v = v.slice(0,5) + '-' + v.slice(5);
       this.value = v;
+      if (v.replace('-','').length === 8) fetchCep(v.replace('-',''));
     });
+  }
+
+  async function fetchCep(cep) {
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.erro) return;
+      const fAddress = document.getElementById('f-address');
+      const fBairro  = document.getElementById('f-bairro');
+      if (d.logradouro && !fAddress.value) fAddress.value = d.logradouro;
+      else if (d.logradouro) fAddress.value = d.logradouro;
+      if (d.bairro && !fBairro.value)   fBairro.value  = d.bairro;
+      else if (d.bairro) fBairro.value = d.bairro;
+      // Foca no campo Número após preencher automaticamente
+      if (d.logradouro) document.getElementById('f-num').focus();
+    } catch (_) {}
   }
 
   maskCpfCnpj(document.getElementById('f-cpfcnpj'));
@@ -792,20 +810,27 @@
     const err = document.getElementById('form-error');
     err.textContent = '';
 
-    const name  = document.getElementById('f-name').value.trim();
-    const email = document.getElementById('f-email').value.trim().toLowerCase();
-    if (!name)  { err.textContent = 'Informe o nome da imobiliária.'; return; }
-    if (!email) { err.textContent = 'Informe o e-mail.'; return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'E-mail inválido.'; return; }
-
+    const name        = document.getElementById('f-name').value.trim();
+    const email       = document.getElementById('f-email').value.trim().toLowerCase();
     const phone       = document.getElementById('f-phone').value.trim();
     const cpfCnpj     = document.getElementById('f-cpfcnpj').value.trim();
     const companyType = document.getElementById('f-companytype').value;
-    const address     = document.getElementById('f-address').value.trim();
-    const num         = document.getElementById('f-num').value.trim();
     const cep         = document.getElementById('f-cep').value.trim();
+    const num         = document.getElementById('f-num').value.trim();
+    const address     = document.getElementById('f-address').value.trim();
     const bairro      = document.getElementById('f-bairro').value.trim();
     const plan        = document.getElementById('f-plan').value;
+
+    if (!name)        { err.textContent = 'Informe o nome da imobiliária.'; return; }
+    if (!email)       { err.textContent = 'Informe o e-mail.'; return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'E-mail inválido.'; return; }
+    if (!phone)       { err.textContent = 'Informe o telefone.'; return; }
+    if (!cpfCnpj)     { err.textContent = 'Informe o CNPJ ou CPF.'; return; }
+    if (!companyType) { err.textContent = 'Selecione o tipo de empresa.'; return; }
+    if (!cep)         { err.textContent = 'Informe o CEP.'; return; }
+    if (!num)         { err.textContent = 'Informe o número do endereço.'; return; }
+    if (!address)     { err.textContent = 'Informe a rua / logradouro.'; return; }
+    if (!bairro)      { err.textContent = 'Informe o bairro.'; return; }
 
     btn.disabled = true;
     btn.textContent = 'Criando conta…';
