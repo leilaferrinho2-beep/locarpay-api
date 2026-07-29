@@ -834,7 +834,7 @@ async function handleSendPush(db, body) {
     await getMessaging().send({
       token,
       notification: { title: title || 'LocarPay', body: message || 'Você tem uma cobrança pendente.' },
-      data: chargeId ? { chargeId } : {},
+      data: chargeId ? { chargeId, type: 'reminder' } : { type: 'reminder' },
       android: { priority: 'high' }
     });
     return { ok: true, sent: 1 };
@@ -942,7 +942,7 @@ async function handleNotifyUpcoming(db, body) {
           title: `Vencimento em ${diff} dia${diff !== 1 ? 's' : ''}`,
           body: `Sua cobrança de ${fmt.format(info.amount)} vence em ${dateStr}. Pague agora pelo app.`
         },
-        data: info.chargeIds[0] ? { chargeId: info.chargeIds[0] } : {},
+        data: info.chargeIds[0] ? { chargeId: info.chargeIds[0], type: 'reminder' } : { type: 'reminder' },
         android: { priority: 'high' }
       });
       // Marca cobranças como notificadas hoje
