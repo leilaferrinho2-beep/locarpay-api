@@ -721,6 +721,26 @@
     btn.disabled = false;
   };
 
+  // ── Relatório mensal ─────────────────────────────────────────
+  async function sendMonthlyReport() {
+    const btn = $('btn-monthly-report');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    try {
+      const now = new Date();
+      const monthRef = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const r = await fetch('/api/locarpay-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'monthly-report', ownerId: currentOwnerId, monthRef })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      if (d.skipped) { showToast('Nenhuma cobrança encontrada para este mês.', 'info'); return; }
+      showToast(`Relatório enviado para ${d.sentTo} — ${d.paid} pago(s), ${d.pending} em aberto.`, 'success');
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Relatório'; }
+  }
+
   // ── Reajuste de aluguel ───────────────────────────────────────
   function openAdjustRent() {
     $('adjust-pct').value = '';
@@ -1047,6 +1067,7 @@
   $('btn-notify-upcoming').addEventListener('click', notifyUpcoming);
   $('btn-notify-overdue').addEventListener('click', notifyOverdue);
   $('tenant-search').addEventListener('input', e => { searchQuery = e.target.value; filterAndRender(); });
+  $('btn-monthly-report').addEventListener('click', sendMonthlyReport);
   $('btn-adjust-rent').addEventListener('click', openAdjustRent);
   $('adjust-save').addEventListener('click', applyAdjustRent);
   $('adjust-cancel').addEventListener('click', () => $('modal-adjust-rent').style.display = 'none');
@@ -1278,6 +1299,7 @@
       <button class="btn btn-secondary" id="btn-generate-charges" title="Gera cobranças do mês atual para todos os contratos ativos">Gerar cobranças</button>
       <button class="btn btn-secondary" id="btn-notify-upcoming" title="Avisa inquilinos com cobrança vencendo em 3 dias">Avisar vencimentos</button>
       <button class="btn btn-secondary" id="btn-notify-overdue" title="Marca cobranças vencidas e envia push para inquilinos em atraso">Notificar vencidos</button>
+      <button class="btn btn-secondary" id="btn-monthly-report" title="Envia relatório mensal por email">Relatório</button>
       <button class="btn btn-secondary" id="btn-adjust-rent" title="Reajuste de aluguel para todos os contratos">Reajuste</button>
       <button class="btn btn-secondary" id="btn-export-csv" title="Exporta todas as cobranças em CSV">Exportar CSV</button>
     </div>

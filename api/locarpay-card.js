@@ -989,6 +989,127 @@ async function handleAdjustRent(db, body) {
   return { ok: true, updated: updates.length, contracts: updates };
 }
 
+// ── MONTHLY REPORT ───────────────────────────────────────────────────────────
+// Envia ao owner um email com resumo do mês: quem pagou, quem deve, total recebido
+async function handleMonthlyReport(db, body) {
+  const { ownerId, monthRef } = body;
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatório'), { status: 400 });
+
+  const ownerSnap = await db.collection('owners').doc(ownerId).get();
+  if (!ownerSnap.exists) throw Object.assign(new Error('Owner não encontrado'), { status: 404 });
+  const owner = ownerSnap.data();
+  if (!owner.email) throw Object.assign(new Error('Owner sem email'), { status: 400 });
+
+  // Determina mês de referência (padrão: mês atual)
+  const now    = new Date();
+  const target = monthRef || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  const snap = await db.collection('charges')
+    .where('ownerId', '==', ownerId)
+    .where('monthRef', '==', target)
+    .get();
+
+  if (snap.empty) return { ok: true, skipped: true, reason: 'sem_cobranças_no_mês' };
+
+  const charges   = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const paid      = charges.filter(c => c.status === 'paid');
+  const pending   = charges.filter(c => c.status === 'pending');
+  const overdue   = charges.filter(c => c.status === 'overdue');
+  const totalPaid = paid.reduce((s, c) => s + (c.totalAmount || 0), 0);
+  const totalDue  = [...pending, ...overdue].reduce((s, c) => s + (c.totalAmount || 0), 0);
+
+  // Busca nomes dos inquilinos
+  const tenantIds = [...new Set(charges.map(c => c.tenantId).filter(Boolean))];
+  const nameMap = {};
+  for (let i = 0; i < tenantIds.length; i += 10) {
+    const slice = tenantIds.slice(i, i + 10);
+    const usersSnap = await db.collection('users').where('__name__', 'in', slice).get();
+    usersSnap.docs.forEach(d => { nameMap[d.id] = d.data().name || d.data().email || d.id; });
+  }
+
+  const fmt = n => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const [year, month] = target.split('-');
+  const monthName = new Date(+year, +month - 1, 1)
+    .toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+
+  const paidRows = paid.map(c =>
+    `<tr><td style="padding:6px 12px">${nameMap[c.tenantId] || c.tenantId}</td>
+     <td style="padding:6px 12px;text-align:right;color:#2D6A2D;font-weight:600">${fmt(c.totalAmount || 0)}</td>
+     <td style="padding:6px 12px;color:#4CAF50">✅ Pago</td></tr>`).join('');
+
+  const overdueRows = overdue.map(c =>
+    `<tr><td style="padding:6px 12px">${nameMap[c.tenantId] || c.tenantId}</td>
+     <td style="padding:6px 12px;text-align:right;color:#c62828;font-weight:600">${fmt(c.totalAmount || 0)}</td>
+     <td style="padding:6px 12px;color:#ef5350">⚠️ Vencida</td></tr>`).join('');
+
+  const pendingRows = pending.map(c =>
+    `<tr><td style="padding:6px 12px">${nameMap[c.tenantId] || c.tenantId}</td>
+     <td style="padding:6px 12px;text-align:right;color:#e65100;font-weight:600">${fmt(c.totalAmount || 0)}</td>
+     <td style="padding:6px 12px;color:#FFB74D">🕐 Pendente</td></tr>`).join('');
+
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.titan.email', port: 587, secure: false,
+    auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
+  });
+
+  await transporter.sendMail({
+    from: 'LocarPay <denis@dlftech.com.br>',
+    to: owner.email,
+    subject: `Relatório de ${monthName} — LocarPay`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;background:#fafafa">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
+          <div style="background:#2D6A2D;border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff">L</div>
+          <span style="font-size:18px;font-weight:700;color:#1a1a1a">LocarPay</span>
+        </div>
+        <h2 style="color:#1a1a1a;margin-bottom:4px">Relatório de ${monthName}</h2>
+        <p style="color:#888;margin-bottom:24px">${owner.name || owner.companyName || 'Proprietário'}</p>
+
+        <!-- KPIs -->
+        <div style="display:flex;gap:12px;margin-bottom:28px;flex-wrap:wrap">
+          <div style="flex:1;min-width:130px;background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:16px;text-align:center">
+            <div style="font-size:11px;color:#888;margin-bottom:4px">TOTAL RECEBIDO</div>
+            <div style="font-size:22px;font-weight:800;color:#2D6A2D">${fmt(totalPaid)}</div>
+            <div style="font-size:12px;color:#aaa">${paid.length} pagamento${paid.length !== 1 ? 's' : ''}</div>
+          </div>
+          <div style="flex:1;min-width:130px;background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:16px;text-align:center">
+            <div style="font-size:11px;color:#888;margin-bottom:4px">A RECEBER</div>
+            <div style="font-size:22px;font-weight:800;color:#e65100">${fmt(totalDue)}</div>
+            <div style="font-size:12px;color:#aaa">${pending.length + overdue.length} em aberto</div>
+          </div>
+          <div style="flex:1;min-width:130px;background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:16px;text-align:center">
+            <div style="font-size:11px;color:#888;margin-bottom:4px">TAXA DE RECEBIMENTO</div>
+            <div style="font-size:22px;font-weight:800;color:#1a1a1a">${charges.length > 0 ? Math.round(paid.length / charges.length * 100) : 0}%</div>
+            <div style="font-size:12px;color:#aaa">${paid.length}/${charges.length} contratos</div>
+          </div>
+        </div>
+
+        <!-- Tabela de cobranças -->
+        <div style="background:#fff;border:1px solid #e8e8e8;border-radius:12px;overflow:hidden">
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <thead>
+              <tr style="background:#f5f5f5">
+                <th style="padding:10px 12px;text-align:left;font-weight:600;color:#555">Inquilino</th>
+                <th style="padding:10px 12px;text-align:right;font-weight:600;color:#555">Valor</th>
+                <th style="padding:10px 12px;font-weight:600;color:#555">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${paidRows}${overdueRows}${pendingRows}
+            </tbody>
+          </table>
+        </div>
+
+        <p style="color:#aaa;font-size:11px;text-align:center;margin-top:24px">
+          Relatório gerado automaticamente pelo LocarPay — ${new Date().toLocaleDateString('pt-BR')}
+        </p>
+      </div>`
+  });
+
+  await ownerSnap.ref.update({ lastReportSentAt: new Date(), lastReportMonth: target });
+  return { ok: true, sentTo: owner.email, month: target, paid: paid.length, pending: pending.length + overdue.length, totalPaid };
+}
+
 // ── HANDLER ──────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1032,6 +1153,7 @@ export default async function handler(req, res) {
     if (step === 'send-receipt')      return res.status(200).json(await handleSendReceipt(db, req.body));
     if (step === 'close-contract')    return res.status(200).json(await handleCloseContract(db, req.body));
     if (step === 'adjust-rent')       return res.status(200).json(await handleAdjustRent(db, req.body));
+    if (step === 'monthly-report')    return res.status(200).json(await handleMonthlyReport(db, req.body));
     return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {
