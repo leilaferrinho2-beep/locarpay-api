@@ -6,6 +6,7 @@ import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getMessaging }                  from 'firebase-admin/messaging';
 import { getAsaasKey, getDefaultOwnerId, checkOwnerPlanActive } from '../lib/owner.js';
+import nodemailer                         from 'nodemailer';
 
 function initFirebase() {
   if (getApps().length) return;
@@ -779,6 +780,106 @@ async function handleSendPush(db, body) {
   return { ok: true, sent, total: tokens.length };
 }
 
+// ── SEND RECEIPT ─────────────────────────────────────────────────────────────
+async function handleSendReceipt(db, body) {
+  const { chargeId, tenantId } = body;
+  if (!chargeId || !tenantId) throw Object.assign(new Error('chargeId e tenantId obrigatórios'), { status: 400 });
+
+  const [chargeSnap, userSnap] = await Promise.all([
+    db.collection('charges').doc(chargeId).get(),
+    db.collection('users').doc(tenantId).get()
+  ]);
+  if (!chargeSnap.exists) throw Object.assign(new Error('Cobrança não encontrada'), { status: 404 });
+  if (!userSnap.exists)  throw Object.assign(new Error('Usuário não encontrado'),  { status: 404 });
+
+  const charge = chargeSnap.data();
+  const user   = userSnap.data();
+  if (!user.email) throw Object.assign(new Error('Inquilino sem e-mail cadastrado'), { status: 400 });
+
+  const ownerSnap = await db.collection('owners').doc(charge.ownerId).get();
+  const ownerName = ownerSnap.exists ? (ownerSnap.data().name || 'Imobiliária') : 'Imobiliária';
+
+  const fmt     = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  const fmtDate = secs => secs ? new Date(secs * 1000).toLocaleDateString('pt-BR') : '—';
+  const total   = charge.totalAmount || charge.baseRent || 0;
+  const paidAt  = charge.paidAt?.seconds ? fmtDate(charge.paidAt.seconds) : new Date().toLocaleDateString('pt-BR');
+  const dueDate = fmtDate(charge.dueDate?.seconds);
+  const monthRef = charge.monthRef || dueDate.slice(3); // MM/AAAA fallback
+
+  const extrasRows = (charge.extras || []).map(e =>
+    `<tr><td style="padding:6px 0;color:#555;border-bottom:1px solid #eee">${e.description}</td>
+     <td style="padding:6px 0;text-align:right;border-bottom:1px solid #eee">${fmt.format(e.value)}</td></tr>`
+  ).join('');
+
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.titan.email', port: 587, secure: false,
+    auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
+  });
+
+  await transporter.sendMail({
+    from: `LocarPay — ${ownerName} <denis@dlftech.com.br>`,
+    to: user.email,
+    subject: `Recibo de pagamento — ${monthRef}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#fafafa">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
+          <div style="background:#2D6A2D;border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff">L</div>
+          <span style="font-size:18px;font-weight:700;color:#1a1a1a">LocarPay</span>
+        </div>
+        <div style="background:#fff;border-radius:12px;padding:28px;border:1px solid #e8e8e8">
+          <div style="text-align:center;margin-bottom:24px">
+            <div style="font-size:40px;margin-bottom:8px">✅</div>
+            <h2 style="color:#1a1a1a;margin:0 0 4px">Pagamento confirmado</h2>
+            <p style="color:#888;margin:0;font-size:14px">Referência: ${monthRef}</p>
+          </div>
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+            <tr><td style="padding:8px 0;color:#555;border-bottom:1px solid #eee">Inquilino</td>
+                <td style="padding:8px 0;text-align:right;font-weight:600;border-bottom:1px solid #eee">${user.name || user.email}</td></tr>
+            <tr><td style="padding:8px 0;color:#555;border-bottom:1px solid #eee">Imóvel</td>
+                <td style="padding:8px 0;text-align:right;border-bottom:1px solid #eee">${charge.propertyDescription || '—'}</td></tr>
+            <tr><td style="padding:8px 0;color:#555;border-bottom:1px solid #eee">Vencimento</td>
+                <td style="padding:8px 0;text-align:right;border-bottom:1px solid #eee">${dueDate}</td></tr>
+            <tr><td style="padding:8px 0;color:#555;border-bottom:1px solid #eee">Aluguel base</td>
+                <td style="padding:8px 0;text-align:right;border-bottom:1px solid #eee">${fmt.format(charge.baseRent || 0)}</td></tr>
+            ${extrasRows}
+            <tr><td style="padding:12px 0;font-weight:700;font-size:16px">Total pago</td>
+                <td style="padding:12px 0;text-align:right;font-weight:800;font-size:18px;color:#2D6A2D">${fmt.format(total)}</td></tr>
+          </table>
+          <p style="color:#888;font-size:12px;text-align:center;margin:0">Pago em ${paidAt} • Gerado por LocarPay</p>
+        </div>
+        <p style="color:#aaa;font-size:11px;text-align:center;margin-top:20px">Este é um comprovante automático. Em caso de dúvidas, entre em contato com ${ownerName}.</p>
+      </div>`
+  });
+
+  await chargeSnap.ref.update({ receiptSentAt: new Date() });
+  return { ok: true, sentTo: user.email };
+}
+
+// ── CLOSE CONTRACT ────────────────────────────────────────────────────────────
+async function handleCloseContract(db, body) {
+  const { contractId, tenantId, ownerId, cancelPendingCharges = true } = body;
+  if (!contractId || !tenantId) throw Object.assign(new Error('contractId e tenantId obrigatórios'), { status: 400 });
+
+  const batch = db.batch();
+
+  // Desativa contrato
+  batch.update(db.collection('contracts').doc(contractId), {
+    active: false, closedAt: new Date(), closedReason: body.reason || 'encerrado pelo administrador'
+  });
+
+  // Cancela cobranças futuras (pending/overdue sem pagamento)
+  if (cancelPendingCharges) {
+    const pendingSnap = await db.collection('charges')
+      .where('contractId', '==', contractId)
+      .where('status', 'in', ['pending', 'overdue'])
+      .get();
+    pendingSnap.docs.forEach(d => batch.update(d.ref, { status: 'cancelled', cancelledAt: new Date() }));
+  }
+
+  await batch.commit();
+  return { ok: true, contractId, pendingCancelled: cancelPendingCharges };
+}
+
 // ── HANDLER ──────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -818,6 +919,8 @@ export default async function handler(req, res) {
     if (step === 'mark-overdue')      return res.status(200).json(await handleMarkOverdue(db, req.body));
     if (step === 'send-push')         return res.status(200).json(await handleSendPush(db, req.body));
     if (step === 'generate-charges')  return res.status(200).json(await handleGenerateCharges(db, req.body));
+    if (step === 'send-receipt')      return res.status(200).json(await handleSendReceipt(db, req.body));
+    if (step === 'close-contract')    return res.status(200).json(await handleCloseContract(db, req.body));
     return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {
