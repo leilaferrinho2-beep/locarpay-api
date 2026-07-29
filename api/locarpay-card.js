@@ -846,6 +846,76 @@ async function handleMarkOverdue(db, body) {
   });
 
   await batch.commit();
+
+  // Envia email de aviso de inadimplência para cada cobrança recém marcada
+  try {
+    const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.titan.email', port: 587, secure: false,
+      auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
+    });
+    await Promise.all(overdue.map(async d => {
+      const data = d.data();
+      const email = data.tenantEmail;
+      if (!email) return;
+      const dueSecs = data.dueDate?.seconds ?? data.dueDate?._seconds ?? 0;
+      const dueFmt = new Date(dueSecs * 1000).toLocaleDateString('pt-BR');
+      const base = data.baseRent || data.totalAmount || 0;
+      const multa = base * 0.02;
+      const diasAtraso = Math.max(1, Math.floor((Date.now() - dueSecs * 1000) / 86400000));
+      const juros = base * 0.00033 * diasAtraso;
+      const total = base + multa + juros;
+      try {
+        await transporter.sendMail({
+          from: 'LocarPay <denis@dlftech.com.br>',
+          to: email,
+          subject: `⚠️ Cobrança vencida — regularize agora`,
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#fff">
+              <div style="background:#b71c1c;padding:20px 28px;border-radius:12px 12px 0 0">
+                <span style="color:#fff;font-weight:800;font-size:20px">LocarPay</span>
+                <span style="color:#ffcdd2;font-size:13px;margin-left:10px">⚠️ Cobrança Vencida</span>
+              </div>
+              <div style="padding:28px 28px 8px">
+                <h2 style="color:#b71c1c;margin:0 0 8px">Sua cobrança está em atraso</h2>
+                <p style="color:#555;font-size:14px;margin-bottom:20px">Regularize o pagamento para evitar o aumento das multas e juros.</p>
+                <div style="background:#fff3f3;border:1px solid #ffcdd2;border-radius:10px;padding:18px 20px;margin-bottom:24px">
+                  <table style="width:100%;border-collapse:collapse">
+                    <tr>
+                      <td style="color:#777;font-size:14px;padding:4px 0">Vencimento</td>
+                      <td style="font-weight:600;color:#b71c1c;text-align:right;font-size:14px">${dueFmt}</td>
+                    </tr>
+                    <tr>
+                      <td style="color:#777;font-size:14px;padding:4px 0">Aluguel base</td>
+                      <td style="font-weight:600;color:#1a1a1a;text-align:right;font-size:14px">${fmt.format(base)}</td>
+                    </tr>
+                    <tr>
+                      <td style="color:#777;font-size:14px;padding:4px 0">Multa (2%)</td>
+                      <td style="font-weight:600;color:#e53935;text-align:right;font-size:14px">+ ${fmt.format(multa)}</td>
+                    </tr>
+                    <tr>
+                      <td style="color:#777;font-size:14px;padding:4px 0">Juros (${diasAtraso} dia${diasAtraso > 1 ? 's' : ''})</td>
+                      <td style="font-weight:600;color:#e53935;text-align:right;font-size:14px">+ ${fmt.format(juros)}</td>
+                    </tr>
+                    <tr style="border-top:1px solid #ffcdd2">
+                      <td style="color:#b71c1c;font-size:15px;font-weight:700;padding:8px 0 4px">Total atual</td>
+                      <td style="font-weight:800;color:#b71c1c;text-align:right;font-size:16px">${fmt.format(total)}</td>
+                    </tr>
+                  </table>
+                </div>
+                <div style="text-align:center;margin-bottom:24px">
+                  <span style="display:inline-block;background:#b71c1c;color:#fff;font-weight:700;font-size:15px;padding:12px 32px;border-radius:8px">Regularizar no LocarPay</span>
+                </div>
+                <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+                <p style="color:#bbb;font-size:11px;text-align:center">Os juros aumentam a cada dia de atraso. Mensagem automática do LocarPay.</p>
+              </div>
+            </div>
+          `
+        });
+      } catch (_) {}
+    }));
+  } catch (_) {}
+
   return { ok: true, updated: overdue.length };
 }
 
