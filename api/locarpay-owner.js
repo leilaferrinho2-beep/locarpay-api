@@ -231,6 +231,136 @@ async function handleGet(db, body) {
   };
 }
 
+const PLAN_PRICES = { trial: 0, basic: 49, pro: 99 };
+
+async function findOrCreateBillingCustomer(masterKey, ownerData) {
+  const search = await fetch(
+    `https://api.asaas.com/v3/customers?email=${encodeURIComponent(ownerData.email)}&limit=1`,
+    { headers: { 'access_token': masterKey } }
+  );
+  const searchJson = await search.json();
+  if (searchJson.data?.length > 0) return searchJson.data[0].id;
+
+  const cpfCnpj = (ownerData.cpfCnpj || '').replace(/\D/g, '');
+  const phone   = (ownerData.phone   || '').replace(/\D/g, '');
+  const body = { name: ownerData.name, email: ownerData.email };
+  if (cpfCnpj) body.cpfCnpj     = cpfCnpj;
+  if (phone)   body.mobilePhone = phone;
+
+  const r = await fetch('https://api.asaas.com/v3/customers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'access_token': masterKey },
+    body: JSON.stringify(body)
+  });
+  const customer = await r.json();
+  if (!r.ok) throw new Error(`Asaas customer: ${JSON.stringify(customer)}`);
+  return customer.id;
+}
+
+async function handleActivatePlan(db, body) {
+  const { ownerId, plan = 'basic', billingType = 'PIX' } = body;
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatório'), { status: 400 });
+
+  const ownerSnap = await db.collection('owners').doc(ownerId).get();
+  if (!ownerSnap.exists) throw Object.assign(new Error('Owner não encontrado'), { status: 404 });
+  const ownerData = ownerSnap.data();
+
+  const masterKey = await getMasterAsaasKey(db);
+  if (!masterKey) throw Object.assign(new Error('Chave master Asaas não configurada'), { status: 500 });
+
+  const value = PLAN_PRICES[plan] ?? 49;
+
+  // Find or create customer in master Asaas account
+  let customerId = ownerData.billingCustomerId
+    || await findOrCreateBillingCustomer(masterKey, ownerData);
+
+  // Cancel existing subscription if any
+  if (ownerData.subscriptionId) {
+    try {
+      await fetch(`https://api.asaas.com/v3/subscriptions/${ownerData.subscriptionId}`, {
+        method: 'DELETE',
+        headers: { 'access_token': masterKey }
+      });
+    } catch (_) {}
+  }
+
+  // Next due date: tomorrow
+  const nextDueDateStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+  const subResp = await fetch('https://api.asaas.com/v3/subscriptions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'access_token': masterKey },
+    body: JSON.stringify({
+      customer:    customerId,
+      billingType,
+      value,
+      nextDueDate: nextDueDateStr,
+      cycle:       'MONTHLY',
+      description: `LocarPay ${plan.charAt(0).toUpperCase() + plan.slice(1)} — ${ownerData.name}`
+    })
+  });
+  const sub = await subResp.json();
+  if (!subResp.ok) throw new Error(`Asaas subscription: ${JSON.stringify(sub)}`);
+
+  const planActiveUntil = Timestamp.fromMillis(Date.now() + 32 * 24 * 60 * 60 * 1000);
+  await ownerSnap.ref.update({
+    plan,
+    status:            'active',
+    billingStatus:     'pending_payment',
+    billingCustomerId: customerId,
+    subscriptionId:    sub.id,
+    planActiveUntil,
+    nextPaymentDueDate: nextDueDateStr
+  });
+
+  return { ok: true, subscriptionId: sub.id, customerId, plan, nextDueDate: nextDueDateStr, value };
+}
+
+async function handleBillingStatus(db, body) {
+  const { ownerId } = body;
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatório'), { status: 400 });
+  const snap = await db.collection('owners').doc(ownerId).get();
+  if (!snap.exists) throw Object.assign(new Error('Owner não encontrado'), { status: 404 });
+  const d = snap.data();
+  return {
+    ownerId: snap.id,
+    plan:               d.plan,
+    status:             d.status,
+    billingStatus:      d.billingStatus      || null,
+    subscriptionId:     d.subscriptionId     || null,
+    planActiveUntil:    d.planActiveUntil?.toDate?.()?.toISOString()  || null,
+    trialEndsAt:        d.trialEndsAt?.toDate?.()?.toISOString()      || null,
+    nextPaymentDueDate: d.nextPaymentDueDate  || null
+  };
+}
+
+async function handleAsaasWebhook(db, body) {
+  const { event, payment } = body || {};
+  if (!event || !payment?.subscription) return { ok: true, ignored: true };
+
+  const snap = await db.collection('owners')
+    .where('subscriptionId', '==', payment.subscription)
+    .limit(1).get();
+  if (snap.empty) return { ok: true, ignored: true };
+
+  const ref = snap.docs[0].ref;
+
+  if (event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') {
+    const planActiveUntil = Timestamp.fromMillis(Date.now() + 32 * 24 * 60 * 60 * 1000);
+    await ref.update({ status: 'active', billingStatus: 'paid', planActiveUntil });
+    return { ok: true, event, action: 'plan_extended' };
+  }
+  if (event === 'PAYMENT_OVERDUE') {
+    await ref.update({ billingStatus: 'overdue' });
+    return { ok: true, event, action: 'marked_overdue' };
+  }
+  if (event === 'PAYMENT_DELETED' || event === 'SUBSCRIPTION_DELETED') {
+    await ref.update({ status: 'suspended', billingStatus: 'cancelled' });
+    return { ok: true, event, action: 'suspended' };
+  }
+  return { ok: true, event, ignored: true };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -241,13 +371,19 @@ export default async function handler(req, res) {
   try {
     initFirebase();
     const db = getFirestore();
-    const { step } = req.body || {};
+    const body = req.body || {};
+    const { step } = body;
 
-    if (step === 'register')    return res.status(201).json(await handleRegister(db, req.body));
-    if (step === 'setup-asaas') return res.status(200).json(await handleSetupAsaas(db, req.body));
-    if (step === 'migrate')     return res.status(200).json(await handleMigrate(db, req.body));
-    if (step === 'get')         return res.status(200).json(await handleGet(db, req.body));
-    return res.status(400).json({ error: 'step inválido (register|setup-asaas|migrate|get)' });
+    // Asaas payment webhook (no step, has event field)
+    if (!step && body.event) return res.status(200).json(await handleAsaasWebhook(db, body));
+
+    if (step === 'register')       return res.status(201).json(await handleRegister(db, body));
+    if (step === 'setup-asaas')    return res.status(200).json(await handleSetupAsaas(db, body));
+    if (step === 'migrate')        return res.status(200).json(await handleMigrate(db, body));
+    if (step === 'get')            return res.status(200).json(await handleGet(db, body));
+    if (step === 'activate-plan')  return res.status(200).json(await handleActivatePlan(db, body));
+    if (step === 'billing-status') return res.status(200).json(await handleBillingStatus(db, body));
+    return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {
     console.error('locarpay-owner error:', e.message);
