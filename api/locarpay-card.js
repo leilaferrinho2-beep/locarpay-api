@@ -619,7 +619,7 @@ async function handleSyncStatus(db, body) {
   if (newlyPaid.length > 0) {
     await handleGenerateCharges(db, { ownerId, monthOffset: 1 }).catch(() => {});
 
-    // Push de confirmação para cada tenant que pagou
+    // Push de confirmação + email de recibo para cada tenant que pagou
     await Promise.all(newlyPaid.map(async ({ chargeId }) => {
       try {
         const chargeSnap = await db.collection('charges').doc(chargeId).get();
@@ -628,13 +628,16 @@ async function handleSyncStatus(db, body) {
         if (!tenantId) return;
         const userSnap = await db.collection('users').doc(tenantId).get();
         const token = userSnap.data()?.fcmToken;
-        if (!token) return;
-        await getMessaging().send({
-          token,
-          notification: { title: '✅ Pagamento confirmado!', body: 'Seu aluguel foi recebido. Obrigado!' },
-          data: { type: 'paid' },
-          android: { priority: 'high' }
-        });
+        if (token) {
+          await getMessaging().send({
+            token,
+            notification: { title: '✅ Pagamento confirmado!', body: 'Seu aluguel foi recebido. Obrigado!' },
+            data: { type: 'paid', chargeId },
+            android: { priority: 'high' }
+          });
+        }
+        // Email de recibo (fire-and-forget)
+        handleSendReceipt(db, { chargeId, tenantId }).catch(() => {});
       } catch (_) {}
     }));
   }
@@ -1259,6 +1262,11 @@ async function handleAsaasPaymentWebhook(db, body) {
       }
     }
   } catch (_) {}
+
+  // Email de recibo para o inquilino (fire-and-forget)
+  if (charge.tenantId) {
+    handleSendReceipt(db, { chargeId: chargeDoc.id, tenantId: charge.tenantId }).catch(() => {});
+  }
 
   // Gera próxima cobrança do mês seguinte
   const ownerId = charge.ownerId;
