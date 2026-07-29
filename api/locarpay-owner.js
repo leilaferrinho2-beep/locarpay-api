@@ -369,7 +369,7 @@ async function handleSetupWebhook(db, body) {
   const createResp = await fetch('https://api.asaas.com/v3/webhooks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': masterKey },
-    body: JSON.stringify({ name: 'LocarPay Billing', url: webhookUrl, email: 'contatotransgu@gmail.com', enabled: true, interrupted: false, sendType: 'NON_SEQUENTIALLY', events })
+    body: JSON.stringify({ name: 'LocarPay Billing', url: webhookUrl, email: 'contatotransgu@gmail.com', enabled: true, interrupted: false, type: 'PAYMENT', sendType: 'NON_SEQUENTIALLY', events })
   });
   const created = await createResp.json();
   if (!createResp.ok) throw new Error(`Asaas webhook create: ${JSON.stringify(created)}`);
