@@ -699,7 +699,7 @@ async function handleGenerateCharges(db, body) {
 
   await Promise.all(contractsSnap.docs.map(async contractDoc => {
     const contract = contractDoc.data();
-    const { tenantId, tenantEmail, baseRent, dueDay = 10, id: contractId } = contract;
+    const { tenantId, tenantEmail, baseRent, dueDay = 10, id: contractId, propertyDescription = '' } = contract;
     if (!tenantId || !baseRent) return;
 
     // dueDate = ano/mês alvo + dia de vencimento
@@ -736,8 +736,9 @@ async function handleGenerateCharges(db, body) {
       pixCopyPaste: '',
       pixQrCode:    '',
       ownerId,
-      monthRef:     monthStr,
-      generatedAt:  new Date()
+      monthRef:            monthStr,
+      propertyDescription: propertyDescription || '',
+      generatedAt:         new Date()
     });
     newCharges.push({ tenantEmail: tenantEmail || '', baseRent, dueDate, monthStr });
     created++;
@@ -1106,8 +1107,10 @@ async function handleSendReceipt(db, body) {
   const user   = userSnap.data();
   if (!user.email) throw Object.assign(new Error('Inquilino sem e-mail cadastrado'), { status: 400 });
 
-  const ownerSnap = await db.collection('owners').doc(charge.ownerId).get();
-  const ownerName = ownerSnap.exists ? (ownerSnap.data().name || 'Imobiliária') : 'Imobiliária';
+  const ownerSnap = charge.ownerId
+    ? await db.collection('owners').doc(charge.ownerId).get()
+    : null;
+  const ownerName = ownerSnap?.exists ? (ownerSnap.data().name || 'Imobiliária') : 'Imobiliária';
 
   const fmt     = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   const fmtDate = secs => secs ? new Date(secs * 1000).toLocaleDateString('pt-BR') : '—';
@@ -1346,6 +1349,146 @@ async function handleMonthlyReport(db, body) {
   return { ok: true, sentTo: owner.email, month: target, paid: paid.length, pending: pending.length + overdue.length, totalPaid };
 }
 
+// ── ANNUAL RECEIPT ───────────────────────────────────────────────────────────
+// Envia comprovante anual de pagamentos para cada inquilino (útil para IR)
+// Parâmetros: { ownerId, year? (padrão: ano atual), tenantId? (opcional — só um) }
+async function handleAnnualReceipt(db, body) {
+  const { ownerId, tenantId } = body;
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatório'), { status: 400 });
+
+  const year = body.year ? parseInt(body.year, 10) : new Date().getFullYear();
+  const startTs = new Date(year, 0, 1);
+  const endTs   = new Date(year + 1, 0, 1);
+
+  const ownerSnap = await db.collection('owners').doc(ownerId).get();
+  const ownerName = ownerSnap.exists ? (ownerSnap.data().name || 'Imobiliária') : 'Imobiliária';
+
+  let q = db.collection('charges')
+    .where('ownerId', '==', ownerId)
+    .where('status', '==', 'paid');
+  if (tenantId) q = q.where('tenantId', '==', tenantId);
+
+  const snap = await q.get();
+  if (snap.empty) return { ok: true, skipped: true, reason: 'sem_pagamentos_no_ano', year };
+
+  // Filtra pelo ano via paidAt (Firestore não suporta between em dois campos distintos)
+  const charges = snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(c => {
+      const paidAt = c.paidAt?.seconds ? new Date(c.paidAt.seconds * 1000) : null;
+      return paidAt && paidAt >= startTs && paidAt < endTs;
+    });
+
+  if (charges.length === 0) return { ok: true, skipped: true, reason: 'sem_pagamentos_no_ano', year };
+
+  // Agrupa por tenantId
+  const byTenant = {};
+  for (const c of charges) {
+    const tid = c.tenantId || c.tenantEmail || 'unknown';
+    if (!byTenant[tid]) byTenant[tid] = [];
+    byTenant[tid].push(c);
+  }
+
+  // Busca dados dos inquilinos
+  const tenantIds = Object.keys(byTenant).filter(id => id !== 'unknown' && !id.includes('@'));
+  const nameMap = {}, emailMap = {};
+  for (let i = 0; i < tenantIds.length; i += 10) {
+    const slice = tenantIds.slice(i, i + 10);
+    const usersSnap = await db.collection('users').where('__name__', 'in', slice).get();
+    usersSnap.docs.forEach(d => {
+      nameMap[d.id]  = d.data().name  || d.data().email || d.id;
+      emailMap[d.id] = d.data().email || '';
+    });
+  }
+
+  const fmt     = n => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const fmtDate = secs => secs ? new Date(secs * 1000).toLocaleDateString('pt-BR') : '—';
+  const months  = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.titan.email', port: 587, secure: false,
+    auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
+  });
+
+  let sent = 0;
+  for (const [tid, tenantCharges] of Object.entries(byTenant)) {
+    const toEmail = emailMap[tid] || (tid.includes('@') ? tid : null);
+    if (!toEmail) continue;
+
+    const tenantName = nameMap[tid] || toEmail;
+    const totalPago  = tenantCharges.reduce((s, c) => s + (c.totalAmount || 0), 0);
+
+    // Ordenar por mês
+    tenantCharges.sort((a, b) => (a.paidAt?.seconds || 0) - (b.paidAt?.seconds || 0));
+
+    const rows = tenantCharges.map((c, i) => {
+      const paidAt = c.paidAt?.seconds ? new Date(c.paidAt.seconds * 1000) : null;
+      const mesRef = paidAt ? `${months[paidAt.getMonth()]}/${year}` : (c.monthRef || '—');
+      const bg = i % 2 === 0 ? '#fff' : '#f9f9f9';
+      return `<tr style="background:${bg}">
+        <td style="padding:8px 12px">${mesRef}</td>
+        <td style="padding:8px 12px">${c.propertyDescription || '—'}</td>
+        <td style="padding:8px 12px;text-align:right;font-weight:600;color:#2D6A2D">${fmt(c.totalAmount || 0)}</td>
+        <td style="padding:8px 12px;color:#777;font-size:12px">${fmtDate(c.paidAt?.seconds)}</td>
+      </tr>`;
+    }).join('');
+
+    await transporter.sendMail({
+      from: `LocarPay — ${ownerName} <denis@dlftech.com.br>`,
+      to: toEmail,
+      subject: `Comprovante anual de aluguéis ${year} — LocarPay`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;background:#fafafa">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
+            <div style="background:#2D6A2D;border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff">L</div>
+            <span style="font-size:18px;font-weight:700;color:#1a1a1a">LocarPay</span>
+          </div>
+          <div style="background:#fff;border-radius:12px;padding:28px;border:1px solid #e8e8e8">
+            <div style="text-align:center;margin-bottom:24px">
+              <div style="font-size:40px;margin-bottom:8px">📋</div>
+              <h2 style="color:#1a1a1a;margin:0 0 4px">Comprovante Anual ${year}</h2>
+              <p style="color:#888;margin:0;font-size:14px">${tenantName}</p>
+            </div>
+
+            <div style="background:#f0f7f0;border-radius:10px;padding:16px;text-align:center;margin-bottom:24px">
+              <div style="font-size:12px;color:#555;margin-bottom:4px">TOTAL PAGO EM ${year}</div>
+              <div style="font-size:28px;font-weight:800;color:#2D6A2D">${fmt(totalPago)}</div>
+              <div style="font-size:12px;color:#777">${tenantCharges.length} pagamento${tenantCharges.length !== 1 ? 's' : ''} realizados</div>
+            </div>
+
+            <table style="width:100%;border-collapse:collapse;font-size:14px;border:1px solid #e8e8e8;border-radius:8px;overflow:hidden">
+              <thead>
+                <tr style="background:#f5f5f5">
+                  <th style="padding:10px 12px;text-align:left;font-weight:600;color:#555">Referência</th>
+                  <th style="padding:10px 12px;text-align:left;font-weight:600;color:#555">Imóvel</th>
+                  <th style="padding:10px 12px;text-align:right;font-weight:600;color:#555">Valor</th>
+                  <th style="padding:10px 12px;text-align:left;font-weight:600;color:#555">Pago em</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+              <tfoot>
+                <tr style="background:#f0f7f0">
+                  <td colspan="2" style="padding:12px;font-weight:700">Total</td>
+                  <td style="padding:12px;text-align:right;font-weight:800;color:#2D6A2D;font-size:16px">${fmt(totalPago)}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+
+            <p style="color:#aaa;font-size:11px;text-align:center;margin-top:24px">
+              Este documento comprova os pagamentos de aluguel realizados em ${year}.<br>
+              Gerado automaticamente por LocarPay — ${new Date().toLocaleDateString('pt-BR')}
+            </p>
+          </div>
+          <p style="color:#aaa;font-size:11px;text-align:center;margin-top:16px">Em caso de dúvidas, entre em contato com ${ownerName}.</p>
+        </div>`
+    });
+    sent++;
+  }
+
+  return { ok: true, year, sent, total: Object.keys(byTenant).length };
+}
+
 // ── ASAAS PAYMENT WEBHOOK ────────────────────────────────────────────────────
 // Recebe eventos PAYMENT_RECEIVED / PAYMENT_CONFIRMED das subcontas dos owners
 // O Asaas envia para /api/locarpay-card com o corpo do evento
@@ -1485,6 +1628,7 @@ export default async function handler(req, res) {
     if (step === 'adjust-rent')       return res.status(200).json(await handleAdjustRent(db, req.body));
     if (step === 'monthly-report')    return res.status(200).json(await handleMonthlyReport(db, req.body));
     if (step === 'asaas-webhook')     return res.status(200).json(await handleAsaasPaymentWebhook(db, req.body));
+    if (step === 'annual-receipt')    return res.status(200).json(await handleAnnualReceipt(db, req.body));
 
     // Webhook Asaas sem step (evento direto da subconta)
     if (!step && req.body?.event && req.body?.payment) {

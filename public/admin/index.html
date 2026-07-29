@@ -928,6 +928,26 @@
     btn.disabled = false;
   };
 
+  // ── Comprovante anual ─────────────────────────────────────────
+  async function sendAnnualReceipt() {
+    const year = prompt('Ano do comprovante:', new Date().getFullYear().toString());
+    if (!year || isNaN(+year)) return;
+    const btn = $('btn-annual-receipt');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    try {
+      const r = await fetch('/api/locarpay-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'annual-receipt', ownerId: currentOwnerId, year: +year })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      if (d.skipped) { showToast(`Nenhum pagamento encontrado em ${year}.`, 'info'); return; }
+      showToast(`Comprovante de ${year} enviado para ${d.sent} inquilino(s).`, 'success');
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Comp. Anual'; }
+  }
+
   // ── Relatório mensal ─────────────────────────────────────────
   async function sendMonthlyReport() {
     const btn = $('btn-monthly-report');
@@ -1276,6 +1296,7 @@
   $('btn-notify-overdue').addEventListener('click', notifyOverdue);
   $('tenant-search').addEventListener('input', e => { searchQuery = e.target.value; filterAndRender(); });
   $('btn-monthly-report').addEventListener('click', sendMonthlyReport);
+  $('btn-annual-receipt').addEventListener('click', sendAnnualReceipt);
   $('btn-adjust-rent').addEventListener('click', openAdjustRent);
   $('adjust-save').addEventListener('click', applyAdjustRent);
   $('adjust-cancel').addEventListener('click', () => $('modal-adjust-rent').style.display = 'none');
@@ -1510,6 +1531,7 @@
       <button class="btn btn-secondary" id="btn-notify-upcoming" title="Avisa inquilinos com cobrança vencendo em 3 dias">Avisar vencimentos</button>
       <button class="btn btn-secondary" id="btn-notify-overdue" title="Marca cobranças vencidas e envia push para inquilinos em atraso">Notificar vencidos</button>
       <button class="btn btn-secondary" id="btn-monthly-report" title="Envia relatório mensal por email">Relatório</button>
+      <button class="btn btn-secondary" id="btn-annual-receipt" title="Envia comprovante anual de pagamentos para todos os inquilinos">Comp. Anual</button>
       <button class="btn btn-secondary" id="btn-adjust-rent" title="Reajuste de aluguel para todos os contratos">Reajuste</button>
       <button class="btn btn-secondary" id="btn-export-csv" title="Exporta todas as cobranças em CSV">Exportar CSV</button>
     </div>
