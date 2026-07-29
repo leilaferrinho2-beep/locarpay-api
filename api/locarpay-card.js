@@ -632,6 +632,7 @@ async function handleSyncStatus(db, body) {
         await getMessaging().send({
           token,
           notification: { title: '✅ Pagamento confirmado!', body: 'Seu aluguel foi recebido. Obrigado!' },
+          data: { type: 'paid' },
           android: { priority: 'high' }
         });
       } catch (_) {}
@@ -1252,6 +1253,7 @@ async function handleAsaasPaymentWebhook(db, body) {
         await getMessaging().send({
           token,
           notification: { title: '✅ Pagamento confirmado!', body: 'Seu aluguel foi recebido. Obrigado!' },
+          data: { type: 'paid', chargeId: chargeDoc.id },
           android: { priority: 'high' }
         });
       }
