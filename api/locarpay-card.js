@@ -780,6 +780,80 @@ async function handleSendPush(db, body) {
   return { ok: true, sent, total: tokens.length };
 }
 
+// ── NOTIFY UPCOMING ──────────────────────────────────────────────────────────
+// Envia push para inquilinos com cobrança vencendo nos próximos N dias
+async function handleNotifyUpcoming(db, body) {
+  const { ownerId, daysAhead = 3 } = body;
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatório'), { status: 400 });
+
+  const nowSecs   = Math.floor(Date.now() / 1000);
+  const limitSecs = nowSecs + daysAhead * 86400;
+
+  const snap = await db.collection('charges')
+    .where('ownerId', '==', ownerId)
+    .where('status', '==', 'pending')
+    .get();
+
+  // Filtra cobranças que vencem dentro de daysAhead dias E que não foram notificadas hoje
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const upcoming = snap.docs.filter(d => {
+    const due = d.data().dueDate;
+    const dueSecs = due?.seconds ?? due?._seconds ?? 0;
+    const lastNotif = d.data().upcomingNotifiedDate;
+    return dueSecs >= nowSecs && dueSecs <= limitSecs && lastNotif !== todayStr;
+  });
+
+  if (upcoming.length === 0) return { ok: true, sent: 0, reason: 'nenhuma_próxima' };
+
+  // Agrupa por tenantId para evitar duplicatas
+  const byTenant = {};
+  upcoming.forEach(d => {
+    const { tenantId, dueDate, totalAmount, baseRent } = d.data();
+    if (!byTenant[tenantId]) byTenant[tenantId] = { chargeIds: [], dueDate, amount: totalAmount || baseRent || 0 };
+    byTenant[tenantId].chargeIds.push(d.id);
+  });
+
+  const tenantIds = Object.keys(byTenant);
+  const tokens = [];
+  for (let i = 0; i < tenantIds.length; i += 10) {
+    const slice = tenantIds.slice(i, i + 10);
+    const usersSnap = await db.collection('users').where('__name__', 'in', slice).get();
+    usersSnap.docs.forEach(d => {
+      const token = d.data().fcmToken;
+      if (token) tokens.push({ token, tenantId: d.id });
+    });
+  }
+
+  if (tokens.length === 0) return { ok: true, sent: 0, reason: 'sem_tokens' };
+
+  const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  let sent = 0;
+
+  await Promise.all(tokens.map(async ({ token, tenantId }) => {
+    const info = byTenant[tenantId];
+    const dueD = info.dueDate?.seconds ? new Date(info.dueDate.seconds * 1000) : null;
+    const diff  = dueD ? Math.ceil((dueD - Date.now()) / 86400000) : daysAhead;
+    const dateStr = dueD ? dueD.toLocaleDateString('pt-BR') : '';
+    try {
+      await getMessaging().send({
+        token,
+        notification: {
+          title: `Vencimento em ${diff} dia${diff !== 1 ? 's' : ''}`,
+          body: `Sua cobrança de ${fmt.format(info.amount)} vence em ${dateStr}. Pague agora pelo app.`
+        },
+        android: { priority: 'high' }
+      });
+      // Marca cobranças como notificadas hoje
+      const batch = db.batch();
+      info.chargeIds.forEach(id => batch.update(db.collection('charges').doc(id), { upcomingNotifiedDate: todayStr }));
+      await batch.commit();
+      sent++;
+    } catch (_) {}
+  }));
+
+  return { ok: true, sent, total: tenantIds.length };
+}
+
 // ── SEND RECEIPT ─────────────────────────────────────────────────────────────
 async function handleSendReceipt(db, body) {
   const { chargeId, tenantId } = body;
@@ -919,6 +993,7 @@ export default async function handler(req, res) {
     if (step === 'mark-overdue')      return res.status(200).json(await handleMarkOverdue(db, req.body));
     if (step === 'send-push')         return res.status(200).json(await handleSendPush(db, req.body));
     if (step === 'generate-charges')  return res.status(200).json(await handleGenerateCharges(db, req.body));
+    if (step === 'notify-upcoming')   return res.status(200).json(await handleNotifyUpcoming(db, req.body));
     if (step === 'send-receipt')      return res.status(200).json(await handleSendReceipt(db, req.body));
     if (step === 'close-contract')    return res.status(200).json(await handleCloseContract(db, req.body));
     return res.status(400).json({ error: 'step inválido' });

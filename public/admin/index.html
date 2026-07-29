@@ -161,45 +161,7 @@
     `).join('');
   }
 
-  function renderTenants() {
-    const tbody = $('tenants-tbody');
-    tbody.innerHTML = '';
-    if (tenants.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhum inquilino cadastrado</td></tr>';
-      return;
-    }
-    const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-    tenants.forEach(t => {
-      const contract  = contracts.find(c => c.tenantId === t.id);
-      const rent      = contract ? fmt.format(contract.baseRent || 0) : '—';
-      const property  = contract?.propertyDescription || '—';
-      const digital   = contract?.requiresDigitalContract;
-      const status    = !contract
-        ? '<span class="badge inactive">Sem contrato</span>'
-        : digital
-          ? '<span class="badge digital">Digital</span>'
-          : '<span class="badge active">Ativo</span>';
-      const docs      = t.docs || {};
-      const docsCount = Object.keys(docs).length;
-      const row = document.createElement('tr');
-      row.innerHTML = `
-        <td>${t.name || '—'}</td>
-        <td style="font-size:12px;color:#888">${t.email || '—'}</td>
-        <td style="font-size:12px">${property}</td>
-        <td>${rent}</td>
-        <td>${status}</td>
-        <td><span class="badge ${docsCount>0?'active':'inactive'}" style="cursor:pointer" onclick="openDocsModal_${t.id}()">📄 ${docsCount}/5</span></td>
-        <td style="white-space:nowrap">
-          <button class="btn-sm" onclick="openEditTenant('${t.id}')">Editar</button>
-          <button class="btn-sm btn-sm-alt" onclick="openExtras('${t.id}')">+Extra</button>
-          <button class="btn-sm" onclick="openHistory('${t.id}')">Histórico</button>
-        </td>
-      `;
-      // docs click via closure
-      window[`openDocsModal_${t.id}`] = () => openDocsModal(t);
-      tbody.appendChild(row);
-    });
-  }
+  function renderTenants() { filterAndRender(); }
 
   async function openDocsModal(tenant) {
     const snap = await getDoc(doc(db, 'users', tenant.id));
@@ -532,6 +494,158 @@
       await loadTenants();
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     finally { $('et-save').disabled = false; $('et-save').textContent = 'Salvar'; }
+  }
+
+  // ── Gráfico de receita mensal ─────────────────────────────────
+  async function renderRevenueChart() {
+    if (!currentOwnerId) return;
+    const snap = await getDocs(query(
+      collection(db, 'charges'),
+      where('ownerId', '==', currentOwnerId),
+      where('status', '==', 'paid')
+    ));
+
+    // Agrupa por monthRef, soma totalAmount
+    const byMonth = {};
+    snap.docs.forEach(d => {
+      const { monthRef, totalAmount, baseRent, dueDate } = d.data();
+      const key = monthRef || (dueDate?.seconds
+        ? new Date(dueDate.seconds * 1000).toISOString().slice(0, 7)
+        : null);
+      if (!key) return;
+      byMonth[key] = (byMonth[key] || 0) + (totalAmount || baseRent || 0);
+    });
+
+    const keys = Object.keys(byMonth).sort().slice(-12); // últimos 12 meses
+    if (keys.length === 0) return;
+
+    $('revenue-chart-wrap').style.display = 'block';
+    const canvas = $('revenue-chart');
+    canvas.width  = canvas.offsetWidth || 600;
+    const ctx     = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const pad = { top: 16, right: 16, bottom: 36, left: 64 };
+    const chartW = W - pad.left - pad.right;
+    const chartH = H - pad.top  - pad.bottom;
+    const maxVal  = Math.max(...keys.map(k => byMonth[k]));
+    const barW    = Math.floor(chartW / keys.length * 0.6);
+    const gap     = Math.floor(chartW / keys.length);
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#1a1d2e';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid lines
+    const gridSteps = 4;
+    ctx.strokeStyle = '#2a2d3e';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#555';
+    ctx.font = '11px system-ui';
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= gridSteps; i++) {
+      const y = pad.top + chartH - (chartH / gridSteps) * i;
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+      const label = ((maxVal / gridSteps) * i).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+      ctx.fillText(`R$${label}`, pad.left - 6, y + 4);
+    }
+
+    // Barras
+    keys.forEach((k, i) => {
+      const val    = byMonth[k];
+      const barH   = maxVal > 0 ? Math.round((val / maxVal) * chartH) : 0;
+      const x      = pad.left + gap * i + (gap - barW) / 2;
+      const y      = pad.top + chartH - barH;
+      const grad   = ctx.createLinearGradient(0, y, 0, y + barH);
+      grad.addColorStop(0, '#4F86F7');
+      grad.addColorStop(1, '#2D6A2D');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.roundRect(x, y, barW, barH, [4, 4, 0, 0]);
+      ctx.fill();
+
+      // Label mês
+      ctx.fillStyle = '#666';
+      ctx.font = '10px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(k.slice(5) + '/' + k.slice(2, 4), x + barW / 2, H - pad.bottom + 14);
+
+      // Valor topo
+      if (barH > 18) {
+        ctx.fillStyle = '#ccc';
+        ctx.font = 'bold 10px system-ui';
+        ctx.fillText('R$' + Math.round(val).toLocaleString('pt-BR'), x + barW / 2, y - 4);
+      }
+    });
+  }
+
+  // ── Busca de inquilinos ───────────────────────────────────────
+  let searchQuery = '';
+  function filterAndRender() {
+    const q = searchQuery.toLowerCase();
+    const filtered = q
+      ? tenants.filter(t => {
+          const c = contracts.find(x => x.tenantId === t.id);
+          return (t.name  || '').toLowerCase().includes(q)
+              || (t.email || '').toLowerCase().includes(q)
+              || (c?.propertyDescription || '').toLowerCase().includes(q);
+        })
+      : tenants;
+
+    const tbody = $('tenants-tbody');
+    tbody.innerHTML = '';
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${q ? 'Nenhum resultado para "' + q + '"' : 'Nenhum inquilino cadastrado'}</td></tr>`;
+      return;
+    }
+    const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    filtered.forEach(t => {
+      const contract  = contracts.find(c => c.tenantId === t.id);
+      const rent      = contract ? fmt.format(contract.baseRent || 0) : '—';
+      const property  = contract?.propertyDescription || '—';
+      const digital   = contract?.requiresDigitalContract;
+      const status    = !contract
+        ? '<span class="badge inactive">Sem contrato</span>'
+        : digital
+          ? '<span class="badge digital">Digital</span>'
+          : '<span class="badge active">Ativo</span>';
+      const docs      = t.docs || {};
+      const docsCount = Object.keys(docs).length;
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${t.name || '—'}</td>
+        <td style="font-size:12px;color:#888">${t.email || '—'}</td>
+        <td style="font-size:12px">${property}</td>
+        <td>${rent}</td>
+        <td>${status}</td>
+        <td><span class="badge ${docsCount>0?'active':'inactive'}" style="cursor:pointer" onclick="openDocsModal_${t.id}()">📄 ${docsCount}/5</span></td>
+        <td style="white-space:nowrap">
+          <button class="btn-sm" onclick="openEditTenant('${t.id}')">Editar</button>
+          <button class="btn-sm btn-sm-alt" onclick="openExtras('${t.id}')">+Extra</button>
+          <button class="btn-sm" onclick="openHistory('${t.id}')">Histórico</button>
+        </td>
+      `;
+      window[`openDocsModal_${t.id}`] = () => openDocsModal(t);
+      tbody.appendChild(row);
+    });
+  }
+
+  // ── Notificação pré-vencimento ────────────────────────────────
+  async function notifyUpcoming() {
+    const btn = $('btn-notify-upcoming');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    try {
+      const r = await fetch('/api/locarpay-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'notify-upcoming', ownerId: currentOwnerId, daysAhead: 3 })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      showToast(d.sent > 0
+        ? `${d.sent} aviso(s) de vencimento enviados.`
+        : 'Nenhuma cobrança vencendo nos próximos 3 dias (ou já avisado hoje).', d.sent > 0 ? 'success' : 'info');
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Avisar vencimentos'; }
   }
 
   // ── Histórico de cobranças ────────────────────────────────────
@@ -885,7 +999,9 @@
 
   $('btn-add-tenant').addEventListener('click', () => { $('modal-tenant').style.display = 'flex'; $('t-name').focus(); });
   $('btn-generate-charges').addEventListener('click', generateCharges);
+  $('btn-notify-upcoming').addEventListener('click', notifyUpcoming);
   $('btn-notify-overdue').addEventListener('click', notifyOverdue);
+  $('tenant-search').addEventListener('input', e => { searchQuery = e.target.value; filterAndRender(); });
   $('btn-export-csv').addEventListener('click', exportCSV);
   $('et-save').addEventListener('click', saveEditTenant);
   $('et-cancel').addEventListener('click', () => $('modal-edit-tenant').style.display = 'none');
@@ -917,6 +1033,7 @@
     renderPlanBanner();
     setTab('tenants');
     await loadTenants();
+    renderRevenueChart();
   });
 </script>
 <style>
@@ -1111,15 +1228,23 @@
       <h2>Inquilinos</h2>
       <button class="btn" id="btn-add-tenant">+ Novo Inquilino</button>
       <button class="btn btn-secondary" id="btn-generate-charges" title="Gera cobranças do mês atual para todos os contratos ativos">Gerar cobranças</button>
-      <button class="btn btn-secondary" id="btn-notify-overdue" title="Marca cobranças vencidas e envia push para inquilinos em atraso">Notificar vencimentos</button>
+      <button class="btn btn-secondary" id="btn-notify-upcoming" title="Avisa inquilinos com cobrança vencendo em 3 dias">Avisar vencimentos</button>
+      <button class="btn btn-secondary" id="btn-notify-overdue" title="Marca cobranças vencidas e envia push para inquilinos em atraso">Notificar vencidos</button>
       <button class="btn btn-secondary" id="btn-export-csv" title="Exporta todas as cobranças em CSV">Exportar CSV</button>
+    </div>
+    <div id="revenue-chart-wrap" style="margin-bottom:28px;display:none">
+      <h3 style="font-size:14px;color:#888;font-weight:500;margin-bottom:12px">Receita mensal (R$)</h3>
+      <canvas id="revenue-chart" height="120" style="width:100%;display:block"></canvas>
+    </div>
+    <div style="margin-bottom:14px">
+      <input id="tenant-search" type="text" placeholder="Buscar por nome, e-mail ou imóvel…" style="width:100%;box-sizing:border-box;background:#1a1d2e;border:1px solid #2a2d3e;border-radius:8px;color:#e0e0e0;padding:9px 14px;font-size:13px;outline:none">
     </div>
     <table>
       <thead>
         <tr><th>Nome</th><th>E-mail</th><th>Imóvel</th><th>Aluguel</th><th>Contrato</th><th>Docs</th><th>Ações</th></tr>
       </thead>
       <tbody id="tenants-tbody">
-        <tr><td colspan="6" class="empty">Carregando...</td></tr>
+        <tr><td colspan="7" class="empty">Carregando...</td></tr>
       </tbody>
     </table>
   </div>
