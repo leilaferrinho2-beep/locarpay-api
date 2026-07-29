@@ -638,6 +638,34 @@ async function handleSyncStatus(db, body) {
         }
         // Email de recibo (fire-and-forget)
         handleSendReceipt(db, { chargeId, tenantId }).catch(() => {});
+
+        // Push ao proprietário
+        const cData = chargeSnap.data();
+        const cOwnerId = cData.ownerId;
+        if (cOwnerId) {
+          try {
+            const [ownerSnap, tSnap] = await Promise.all([
+              db.collection('owners').doc(cOwnerId).get(),
+              db.collection('users').doc(tenantId).get()
+            ]);
+            const ownerEmail = ownerSnap.data()?.email;
+            const tName = tSnap.data()?.name || 'Inquilino';
+            if (ownerEmail) {
+              const ouSnap = await db.collection('users')
+                .where('email', '==', ownerEmail).where('role', '==', 'admin').limit(1).get();
+              const oToken = ouSnap.docs[0]?.data()?.fcmToken;
+              if (oToken) {
+                const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+                await getMessaging().send({
+                  token: oToken,
+                  notification: { title: '💰 Pagamento recebido!', body: `${tName} pagou ${fmt.format(cData.totalAmount || 0)}` },
+                  data: { type: 'admin', chargeId },
+                  android: { priority: 'high' }
+                });
+              }
+            }
+          } catch (_) {}
+        }
       } catch (_) {}
     }));
   }
@@ -1268,8 +1296,40 @@ async function handleAsaasPaymentWebhook(db, body) {
     handleSendReceipt(db, { chargeId: chargeDoc.id, tenantId: charge.tenantId }).catch(() => {});
   }
 
-  // Gera próxima cobrança do mês seguinte
+  // Push de notificação ao proprietário
   const ownerId = charge.ownerId;
+  try {
+    if (ownerId) {
+      const [ownerSnap, tenantSnap] = await Promise.all([
+        db.collection('owners').doc(ownerId).get(),
+        charge.tenantId ? db.collection('users').doc(charge.tenantId).get() : Promise.resolve(null)
+      ]);
+      const ownerEmail = ownerSnap.data()?.email;
+      const tenantName = tenantSnap?.data()?.name || 'Inquilino';
+      if (ownerEmail) {
+        const ownerUserSnap = await db.collection('users')
+          .where('email', '==', ownerEmail)
+          .where('role', '==', 'admin')
+          .limit(1)
+          .get();
+        const ownerToken = ownerUserSnap.docs[0]?.data()?.fcmToken;
+        if (ownerToken) {
+          const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+          await getMessaging().send({
+            token: ownerToken,
+            notification: {
+              title: '💰 Pagamento recebido!',
+              body: `${tenantName} pagou ${fmt.format(charge.totalAmount || 0)}`
+            },
+            data: { type: 'admin', chargeId: chargeDoc.id },
+            android: { priority: 'high' }
+          });
+        }
+      }
+    }
+  } catch (_) {}
+
+  // Gera próxima cobrança do mês seguinte
   if (ownerId) {
     await handleGenerateCharges(db, { ownerId, monthOffset: 1 }).catch(() => {});
   }
