@@ -3,7 +3,8 @@
 // step:"confirm" → { verificationId, amount }   → verifica valor, estorna micro, cobra aluguel
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore, FieldValue }      from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { getMessaging }                  from 'firebase-admin/messaging';
 import { getAsaasKey, getDefaultOwnerId, checkOwnerPlanActive } from '../lib/owner.js';
 
 function initFirebase() {
@@ -598,6 +599,91 @@ async function handleSyncStatus(db, body) {
   return { ok: true, updated: toReset.length, chargeIds: toReset };
 }
 
+// ── MARK OVERDUE ─────────────────────────────────────────────────────────────
+// Marca como 'overdue' cobranças pendentes com vencimento no passado
+async function handleMarkOverdue(db, body) {
+  const { ownerId } = body;
+  const nowSecs = Math.floor(Date.now() / 1000);
+
+  let q = db.collection('charges').where('status', '==', 'pending');
+  if (ownerId) q = q.where('ownerId', '==', ownerId);
+
+  const snap = await q.get();
+  const overdue = snap.docs.filter(d => {
+    const due = d.data().dueDate;
+    const dueSecs = due?.seconds ?? due?._seconds ?? 0;
+    return dueSecs > 0 && dueSecs < nowSecs;
+  });
+
+  if (overdue.length === 0) return { ok: true, updated: 0 };
+
+  const batch = db.batch();
+  overdue.forEach(d => batch.update(d.ref, { status: 'overdue' }));
+  await batch.commit();
+  return { ok: true, updated: overdue.length };
+}
+
+// ── SEND PUSH ─────────────────────────────────────────────────────────────────
+// Envia notificação FCM para um ou todos os inquilinos com cobranças pendentes/vencidas
+async function handleSendPush(db, body) {
+  const { tenantId, ownerId, title, message, topic } = body;
+
+  // Notificação para um inquilino específico
+  if (tenantId) {
+    const userSnap = await db.collection('users').doc(tenantId).get();
+    if (!userSnap.exists) throw Object.assign(new Error('Usuário não encontrado'), { status: 404 });
+    const token = userSnap.data().fcmToken;
+    if (!token) return { ok: true, sent: 0, reason: 'sem_fcm_token' };
+
+    await getMessaging().send({
+      token,
+      notification: { title: title || 'LocarPay', body: message || 'Você tem uma cobrança pendente.' },
+      android: { priority: 'high' }
+    });
+    return { ok: true, sent: 1 };
+  }
+
+  // Notificação em massa: todos inquilinos do owner com cobrança pendente/vencida
+  if (!ownerId) throw Object.assign(new Error('tenantId ou ownerId obrigatório'), { status: 400 });
+
+  const chargesSnap = await db.collection('charges')
+    .where('ownerId', '==', ownerId)
+    .where('status', 'in', ['pending', 'overdue'])
+    .get();
+
+  const tenantIds = [...new Set(chargesSnap.docs.map(d => d.data().tenantId).filter(Boolean))];
+  if (tenantIds.length === 0) return { ok: true, sent: 0 };
+
+  // Busca tokens em lotes de 10 (limite Firestore whereIn)
+  const tokens = [];
+  for (let i = 0; i < tenantIds.length; i += 10) {
+    const batch = tenantIds.slice(i, i + 10);
+    const usersSnap = await db.collection('users').where('__name__', 'in', batch).get();
+    usersSnap.docs.forEach(d => {
+      const t = d.data().fcmToken;
+      if (t) tokens.push(t);
+    });
+  }
+
+  if (tokens.length === 0) return { ok: true, sent: 0, reason: 'sem_tokens' };
+
+  const defaultTitle = title || 'LocarPay — Cobrança pendente';
+  const defaultBody  = message || 'Você tem uma cobrança de aluguel aguardando pagamento. Acesse o app para pagar.';
+
+  // Envia em lotes de 500 (limite FCM multicast)
+  let sent = 0;
+  for (let i = 0; i < tokens.length; i += 500) {
+    const chunk = tokens.slice(i, i + 500);
+    const resp = await getMessaging().sendEachForMulticast({
+      tokens: chunk,
+      notification: { title: defaultTitle, body: defaultBody },
+      android: { priority: 'high' }
+    });
+    sent += resp.successCount;
+  }
+  return { ok: true, sent, total: tokens.length };
+}
+
 // ── HANDLER ──────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -634,6 +720,8 @@ export default async function handler(req, res) {
     if (step === 'sync-customers') return res.status(200).json(await handleSyncCustomers(db, req.body));
     if (step === 'check-terms')    return res.status(200).json(await handleCheckTerms(db, req.body));
     if (step === 'accept-terms')   return res.status(200).json(await handleAcceptTerms(db, req.body, req));
+    if (step === 'mark-overdue')   return res.status(200).json(await handleMarkOverdue(db, req.body));
+    if (step === 'send-push')      return res.status(200).json(await handleSendPush(db, req.body));
     return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {
