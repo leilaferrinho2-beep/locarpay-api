@@ -335,6 +335,48 @@ async function handleBillingStatus(db, body) {
   };
 }
 
+async function handleSetupWebhook(db, body) {
+  const { secret } = body;
+  if (secret !== process.env.MIGRATE_SECRET) throw Object.assign(new Error('Não autorizado'), { status: 403 });
+
+  const masterKey = await getMasterAsaasKey(db);
+  if (!masterKey) throw Object.assign(new Error('Chave master Asaas não encontrada'), { status: 500 });
+
+  const webhookUrl = 'https://locarpay-api.vercel.app/billing-webhook';
+  const events = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_OVERDUE', 'SUBSCRIPTION_DELETED'];
+
+  // Lista webhooks existentes para evitar duplicata
+  const listResp = await fetch('https://api.asaas.com/v3/webhooks', {
+    headers: { 'access_token': masterKey }
+  });
+  const listJson = await listResp.json();
+  const existing = (listJson.data || []).find(w => w.url === webhookUrl);
+
+  if (existing) {
+    // Atualiza para garantir que os eventos estão corretos
+    const updResp = await fetch(`https://api.asaas.com/v3/webhooks/${existing.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'access_token': masterKey },
+      body: JSON.stringify({ url: webhookUrl, enabled: true, events })
+    });
+    const upd = await updResp.json();
+    if (!updResp.ok) throw new Error(`Asaas webhook update: ${JSON.stringify(upd)}`);
+    await db.collection('config').doc('asaas-webhook').set({ webhookId: upd.id, url: webhookUrl, events, updatedAt: Timestamp.now() });
+    return { ok: true, action: 'updated', webhookId: upd.id, url: webhookUrl, events };
+  }
+
+  // Cria novo webhook
+  const createResp = await fetch('https://api.asaas.com/v3/webhooks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'access_token': masterKey },
+    body: JSON.stringify({ url: webhookUrl, email: 'contatotransgu@gmail.com', enabled: true, interrupted: false, events })
+  });
+  const created = await createResp.json();
+  if (!createResp.ok) throw new Error(`Asaas webhook create: ${JSON.stringify(created)}`);
+  await db.collection('config').doc('asaas-webhook').set({ webhookId: created.id, url: webhookUrl, events, createdAt: Timestamp.now() });
+  return { ok: true, action: 'created', webhookId: created.id, url: webhookUrl, events };
+}
+
 async function handleNotifyTrial(db, body) {
   const { ownerId } = body;
   if (!ownerId) throw Object.assign(new Error('ownerId obrigatório'), { status: 400 });
@@ -460,6 +502,7 @@ export default async function handler(req, res) {
     if (step === 'activate-plan')  return res.status(200).json(await handleActivatePlan(db, body));
     if (step === 'billing-status') return res.status(200).json(await handleBillingStatus(db, body));
     if (step === 'notify-trial')   return res.status(200).json(await handleNotifyTrial(db, body));
+    if (step === 'setup-webhook')  return res.status(200).json(await handleSetupWebhook(db, body));
     return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {
