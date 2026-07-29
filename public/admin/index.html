@@ -188,31 +188,107 @@
     renderOwners();
   }
 
+  function billingBadge(o) {
+    const now = Date.now();
+    const trialMs = o.trialEndsAt ? o.trialEndsAt.seconds * 1000 : 0;
+    const activeMs = o.planActiveUntil ? o.planActiveUntil.seconds * 1000 : 0;
+
+    if (o.status === 'active' && activeMs > now)
+      return `<span class="badge active">✓ Ativo — ${o.plan}</span>`;
+    if (o.billingStatus === 'overdue')
+      return `<span class="badge inactive">⚠ Em atraso</span>`;
+    if (o.status === 'suspended')
+      return `<span class="badge inactive">✗ Suspenso</span>`;
+    if (trialMs > now)
+      return `<span class="badge digital">Trial até ${new Date(trialMs).toLocaleDateString('pt-BR')}</span>`;
+    if (trialMs && trialMs < now)
+      return `<span class="badge inactive">Trial expirado</span>`;
+    return `<span class="badge inactive">—</span>`;
+  }
+
   function renderOwners() {
     const tbody = $('owners-tbody');
     tbody.innerHTML = '';
     if (allOwners.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhuma imobiliária cadastrada</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhuma imobiliária cadastrada</td></tr>';
       return;
     }
     allOwners.forEach(o => {
-      const trialEnd = o.trialEndsAt ? new Date(o.trialEndsAt.seconds * 1000).toLocaleDateString('pt-BR') : '—';
-      const planBadge = `<span class="badge ${o.status==='active'?'active':o.status==='trial'?'digital':'inactive'}">${o.plan || 'trial'}</span>`;
       const asaasBadge = o.asaasApiKey ? '✅' : '⬜';
       const row = document.createElement('tr');
       row.innerHTML = `
         <td>${o.name || '—'}</td>
-        <td>${o.email || '—'}</td>
-        <td>${planBadge}</td>
+        <td style="font-size:12px;color:#888">${o.email || '—'}</td>
+        <td>${billingBadge(o)}</td>
         <td>${asaasBadge} Asaas</td>
-        <td>${trialEnd}</td>
-        <td class="actions">
-          <button class="btn-sm" onclick="switchOwner('${o.id}')">Ver dados</button>
+        <td style="font-size:12px;color:#888">${o.nextPaymentDueDate || '—'}</td>
+        <td class="actions" style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn-sm" onclick="switchOwner('${o.id}')">Inquilinos</button>
+          <button class="btn-sm" style="color:#4CAF50;border-color:#2a4a2a" onclick="openBillingModal('${o.id}')">Plano</button>
         </td>
       `;
       tbody.appendChild(row);
     });
   }
+
+  window.openBillingModal = (ownerId) => {
+    const o = allOwners.find(x => x.id === ownerId);
+    if (!o) return;
+    $('billing-owner-name').textContent = o.name || ownerId;
+    $('billing-owner-id').textContent   = ownerId;
+    $('billing-plan-select').value      = o.plan || 'basic';
+    $('billing-status-info').textContent = billingStatusText(o);
+    $('billing-error').textContent = '';
+    $('billing-save').disabled = false;
+    $('billing-save').textContent = 'Ativar / Atualizar Plano';
+    $('modal-billing').style.display = 'flex';
+  };
+
+  function billingStatusText(o) {
+    const lines = [];
+    if (o.plan)            lines.push(`Plano atual: ${o.plan}`);
+    if (o.status)          lines.push(`Status: ${o.status}`);
+    if (o.billingStatus)   lines.push(`Cobrança: ${o.billingStatus}`);
+    if (o.subscriptionId)  lines.push(`Sub Asaas: ${o.subscriptionId}`);
+    if (o.planActiveUntil) lines.push(`Ativo até: ${new Date(o.planActiveUntil.seconds*1000).toLocaleDateString('pt-BR')}`);
+    return lines.join(' · ') || 'Sem cobrança configurada';
+  }
+
+  window.saveBilling = async () => {
+    const ownerId = $('billing-owner-id').textContent;
+    const plan    = $('billing-plan-select').value;
+    const btn     = $('billing-save');
+    $('billing-error').textContent = '';
+    btn.disabled = true; btn.textContent = 'Ativando...';
+    try {
+      const resp = await fetch('/api/locarpay-owner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'activate-plan', ownerId, plan })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Erro ao ativar plano');
+      showToast(`Plano ${plan} ativado! Sub: ${data.subscriptionId}`, 'success');
+      $('modal-billing').style.display = 'none';
+      await loadOwners();
+    } catch (e) {
+      $('billing-error').textContent = e.message;
+      btn.disabled = false; btn.textContent = 'Ativar / Atualizar Plano';
+    }
+  };
+
+  window.suspendOwner = async () => {
+    const ownerId = $('billing-owner-id').textContent;
+    if (!confirm('Suspender esta imobiliária? O plano será cancelado.')) return;
+    try {
+      await updateDoc(doc(db, 'owners', ownerId), { status: 'suspended', billingStatus: 'cancelled' });
+      showToast('Imobiliária suspensa', 'info');
+      $('modal-billing').style.display = 'none';
+      await loadOwners();
+    } catch (e) {
+      showToast('Erro: ' + e.message, 'error');
+    }
+  };
 
   window.switchOwner = async (ownerId) => {
     currentOwnerId   = ownerId;
@@ -365,7 +441,7 @@
   $('tenant-cancel').addEventListener('click',  () => { $('modal-tenant').style.display = 'none'; resetTenantForm(); });
   $('tenant-save').addEventListener('click', saveTenant);
 
-  [$('modal-tenant'), $('modal-docs')].forEach(m => {
+  [$('modal-tenant'), $('modal-docs'), $('modal-billing')].forEach(m => {
     m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
   });
   $('docs-modal-close').addEventListener('click', () => { $('modal-docs').style.display = 'none'; });
@@ -571,7 +647,7 @@
     </div>
     <table>
       <thead>
-        <tr><th>Nome</th><th>E-mail</th><th>Plano</th><th>Asaas</th><th>Trial até</th><th>Ação</th></tr>
+        <tr><th>Nome</th><th>E-mail</th><th>Billing</th><th>Asaas</th><th>Próx. cobrança</th><th>Ações</th></tr>
       </thead>
       <tbody id="owners-tbody">
         <tr><td colspan="6" class="empty">Carregando...</td></tr>
@@ -579,6 +655,28 @@
     </table>
   </div>
 </section>
+
+<!-- Modal: Billing / Plano -->
+<div id="modal-billing" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Gestão de Plano</h3>
+    <p style="font-size:13px;color:#888;margin-bottom:4px">Imobiliária: <strong id="billing-owner-name" style="color:#e0e0e0"></strong></p>
+    <p style="font-size:11px;color:#555;margin-bottom:16px" id="billing-status-info"></p>
+    <input type="hidden" id="billing-owner-id">
+    <label>Plano</label>
+    <select id="billing-plan-select">
+      <option value="basic">Basic — R$49/mês</option>
+      <option value="pro">Pro — R$99/mês</option>
+    </select>
+    <p style="font-size:12px;color:#555;margin-top:8px">Gera cobrança mensal via PIX no Asaas. O inquilino recebe link de pagamento por e-mail.</p>
+    <div id="billing-error" style="color:#ef5350;font-size:13px;margin-top:10px"></div>
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="document.getElementById('modal-billing').style.display='none'">Cancelar</button>
+      <button class="btn-outline" style="color:#ef5350;border-color:#3a1a1a" onclick="suspendOwner()">Suspender</button>
+      <button class="btn" id="billing-save" onclick="saveBilling()">Ativar / Atualizar Plano</button>
+    </div>
+  </div>
+</div>
 
 <!-- Blocked -->
 <section id="blocked-section" style="display:none;flex-direction:column;gap:12px">
