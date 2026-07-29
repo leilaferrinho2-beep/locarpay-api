@@ -1388,15 +1388,18 @@ async function handleCronDaily(db, req) {
 
     if (isFirstOfMonth) {
       try {
-        // 4. Gera cobranças do mês
-        const now = new Date();
-        const gc = await handleGenerateCharges(db, {
-          ownerId,
-          year: now.getFullYear(),
-          month: now.getMonth() + 1
-        });
+        // 4. Gera cobranças do mês corrente (monthOffset=0)
+        const gc = await handleGenerateCharges(db, { ownerId, monthOffset: 0 });
         results.charges += gc.created || 0;
       } catch (e) { results.errors.push(`${ownerId}/generate: ${e.message}`); }
+
+      try {
+        // 5. Envia relatório do mês anterior
+        const prev = new Date();
+        prev.setDate(0); // último dia do mês anterior
+        const prevRef = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+        await handleMonthlyReport(db, { ownerId, monthRef: prevRef });
+      } catch (e) { results.errors.push(`${ownerId}/report: ${e.message}`); }
     }
   }
 
@@ -1415,6 +1418,14 @@ async function handleNotifyContractExpiry(db, body) {
   const ownerSnap = await db.collection('owners').doc(ownerId).get();
   if (!ownerSnap.exists) throw Object.assign(new Error('Owner não encontrado'), { status: 404 });
   const owner = ownerSnap.data();
+
+  // Busca FCM token do owner via users (role=admin)
+  let ownerFcmToken = null;
+  if (owner.email) {
+    const ownerUserSnap = await db.collection('users')
+      .where('email', '==', owner.email).where('role', '==', 'admin').limit(1).get();
+    ownerFcmToken = ownerUserSnap.docs[0]?.data()?.fcmToken || null;
+  }
 
   const now       = Date.now();
   const thresholds = [7, 15, 30]; // dias antes do vencimento
@@ -1500,10 +1511,10 @@ async function handleNotifyContractExpiry(db, body) {
     }
 
     // Push ao owner
-    if (owner.fcmToken) {
+    if (ownerFcmToken) {
       try {
         await getMessaging().send({
-          token: owner.fcmToken,
+          token: ownerFcmToken,
           notification: {
             title: `⚠️ Contrato vence em ${daysLeft} dia${daysLeft !== 1 ? 's' : ''}`,
             body: `${tenantName} — ${contract.propertyDescription || 'Imóvel'}`
