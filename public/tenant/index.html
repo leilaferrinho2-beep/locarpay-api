@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LocarPay — Área do Inquilino</title>
+<script type="module">
+  import { initializeApp }                    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getAuth, signInWithCustomToken, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { getFirestore, collection, query, where, getDocs, orderBy } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+  const app  = initializeApp({
+    apiKey:    "AIzaSyDTd-f-QTKNhixlYCDVHI5pGe9H8hxwON4",
+    authDomain:"locarpayapp.firebaseapp.com",
+    projectId: "locarpayapp"
+  });
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  const $ = id => document.getElementById(id);
+  const fmt    = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  const fmtDate = d => d?.toDate ? d.toDate().toLocaleDateString('pt-BR') : (d ? new Date(d.seconds*1000).toLocaleDateString('pt-BR') : '—');
+
+  let step = 'email';
+  let pendingEmail = '';
+
+  // ── Auth state ───────────────────────────────────────────────────────────
+  onAuthStateChanged(auth, user => {
+    if (user) {
+      showScreen('dashboard');
+      loadCharges(user.uid);
+    } else {
+      showScreen('login');
+    }
+  });
+
+  // ── Screens ──────────────────────────────────────────────────────────────
+  function showScreen(name) {
+    ['login','otp','dashboard'].forEach(s => {
+      $('screen-'+s).style.display = s === name ? 'block' : 'none';
+    });
+  }
+
+  // ── Login: enviar OTP ─────────────────────────────────────────────────────
+  $('btn-send-otp').onclick = async () => {
+    const email = $('input-email').value.trim().toLowerCase();
+    if (!email.includes('@')) { showError('email-error', 'Informe um e-mail válido.'); return; }
+    $('btn-send-otp').disabled = true; $('btn-send-otp').textContent = 'Enviando...';
+    showError('email-error', '');
+    try {
+      const r = await fetch('/api/locarpay-send-otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Erro'); }
+      pendingEmail = email;
+      $('otp-hint').textContent = `Código enviado para ${email}`;
+      showScreen('otp');
+    } catch (e) {
+      showError('email-error', e.message);
+    }
+    $('btn-send-otp').disabled = false; $('btn-send-otp').textContent = 'Receber código';
+  };
+
+  // ── Login: verificar OTP ──────────────────────────────────────────────────
+  $('btn-verify-otp').onclick = async () => {
+    const otp = $('input-otp').value.trim();
+    if (otp.length < 4) { showError('otp-error', 'Informe o código.'); return; }
+    $('btn-verify-otp').disabled = true; $('btn-verify-otp').textContent = 'Verificando...';
+    showError('otp-error', '');
+    try {
+      const r = await fetch('/api/locarpay-verify-otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: pendingEmail, otp })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Código inválido');
+      await signInWithCustomToken(auth, d.customToken);
+      // onAuthStateChanged vai cuidar do redirect
+    } catch (e) {
+      showError('otp-error', e.message);
+    }
+    $('btn-verify-otp').disabled = false; $('btn-verify-otp').textContent = 'Entrar';
+  };
+
+  $('btn-back-email').onclick = () => showScreen('login');
+
+  $('btn-logout').onclick = () => signOut(auth);
+
+  // ── Dashboard: carregar cobranças ─────────────────────────────────────────
+  async function loadCharges(uid) {
+    $('charges-list').innerHTML = '<p class="loading">Carregando cobranças...</p>';
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'charges'),
+        where('tenantId', '==', uid)
+      ));
+      const charges = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a,b) => (b.dueDate?.seconds||0) - (a.dueDate?.seconds||0));
+
+      if (charges.length === 0) {
+        $('charges-list').innerHTML = '<p class="empty">Nenhuma cobrança encontrada.</p>';
+        return;
+      }
+
+      const pending = charges.filter(c => c.status === 'pending' || c.status === 'overdue');
+      const paid    = charges.filter(c => c.status === 'paid');
+
+      let html = '';
+
+      if (pending.length > 0) {
+        html += '<h3 class="section-title">Em aberto</h3>';
+        pending.forEach(c => {
+          const isOverdue = c.status === 'overdue';
+          const diaAtraso = c.diasAtraso || 0;
+          html += `
+            <div class="card ${isOverdue ? 'card-overdue' : 'card-pending'}">
+              <div class="card-row">
+                <span class="card-label">${isOverdue ? '⚠️ VENCIDA' : '🕐 PENDENTE'}</span>
+                <span class="card-amount">${fmt.format(c.totalAmount || c.baseRent || 0)}</span>
+              </div>
+              <div class="card-row">
+                <span class="card-meta">Ref.: ${c.monthRef || '—'}</span>
+                <span class="card-meta ${isOverdue ? 'text-red' : ''}">Venc.: ${fmtDate(c.dueDate)}</span>
+              </div>
+              ${isOverdue && diaAtraso > 0 ? `<div class="card-row"><span class="card-meta text-red">${diaAtraso} dia${diaAtraso>1?'s':''} de atraso · multa aplicada</span></div>` : ''}
+              ${c.pixCopyPaste ? `
+                <div class="pix-section">
+                  <p class="pix-label">PIX Copia e Cola</p>
+                  <div class="pix-code">${c.pixCopyPaste}</div>
+                  <button class="btn-pix" onclick="copyPix('${c.id}','${c.pixCopyPaste.replace(/'/g,"\\'")}')">Copiar código PIX</button>
+                </div>
+              ` : `<p class="pix-hint">Abra o app LocarPay para gerar o QR Code PIX.</p>`}
+            </div>`;
+        });
+      }
+
+      if (paid.length > 0) {
+        html += '<h3 class="section-title">Histórico de pagamentos</h3>';
+        paid.slice(0, 12).forEach(c => {
+          html += `
+            <div class="card card-paid">
+              <div class="card-row">
+                <span class="card-label">✅ PAGO</span>
+                <span class="card-amount">${fmt.format(c.totalAmount || c.baseRent || 0)}</span>
+              </div>
+              <div class="card-row">
+                <span class="card-meta">Ref.: ${c.monthRef || '—'}</span>
+                <span class="card-meta">Venc.: ${fmtDate(c.dueDate)}</span>
+              </div>
+            </div>`;
+        });
+      }
+
+      $('charges-list').innerHTML = html;
+    } catch (e) {
+      $('charges-list').innerHTML = `<p class="empty">Erro ao carregar: ${e.message}</p>`;
+    }
+  }
+
+  window.copyPix = (id, code) => {
+    navigator.clipboard.writeText(code).then(() => {
+      const btn = document.querySelector(`button[onclick*="${id}"]`);
+      if (btn) { const orig = btn.textContent; btn.textContent = 'Copiado! ✓'; setTimeout(() => btn.textContent = orig, 2000); }
+    });
+  };
+
+  function showError(id, msg) { $(id).textContent = msg; }
+</script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f1117;
+    color: #e0e0e0;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    background: #1a1d2e;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #2a2d3e;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .logo { font-size: 18px; font-weight: 800; color: #4CAF50; letter-spacing: -0.3px; }
+  .btn-logout { background: transparent; border: 1px solid #2a2d3e; color: #888; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .btn-logout:hover { color: #ccc; border-color: #3a3d4e; }
+
+  /* Screens */
+  .screen { display: none; }
+  .login-wrap {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 48px 24px 24px;
+    max-width: 420px; margin: 0 auto;
+  }
+  .login-logo { font-size: 28px; font-weight: 900; color: #4CAF50; margin-bottom: 8px; }
+  .login-sub { color: #888; font-size: 14px; margin-bottom: 32px; text-align: center; }
+  .input-label { font-size: 13px; color: #aaa; margin-bottom: 6px; display: block; }
+  .input-field {
+    width: 100%; background: #1a1d2e; border: 1px solid #2a2d3e; color: #e0e0e0;
+    padding: 12px 14px; border-radius: 10px; font-size: 15px; outline: none;
+    transition: border-color .2s;
+  }
+  .input-field:focus { border-color: #4CAF50; }
+  .btn-primary {
+    width: 100%; background: #2D6A2D; color: #fff; border: none;
+    padding: 14px; border-radius: 10px; font-size: 15px; font-weight: 700;
+    cursor: pointer; margin-top: 12px; transition: background .2s;
+  }
+  .btn-primary:hover { background: #3a8a3a; }
+  .btn-primary:disabled { background: #1a3a1a; color: #666; cursor: not-allowed; }
+  .btn-link { background: transparent; border: none; color: #4CAF50; cursor: pointer; font-size: 13px; margin-top: 8px; padding: 4px 0; }
+  .error-msg { color: #ef5350; font-size: 13px; margin-top: 6px; min-height: 18px; }
+  .otp-hint { color: #888; font-size: 13px; margin-bottom: 20px; text-align: center; }
+
+  /* Dashboard */
+  .dashboard { max-width: 560px; margin: 0 auto; padding: 20px 16px 60px; }
+  .section-title { font-size: 12px; font-weight: 700; color: #888; letter-spacing: .5px; text-transform: uppercase; margin: 24px 0 10px; }
+  .card {
+    border-radius: 14px; padding: 16px; margin-bottom: 12px;
+    border: 1px solid transparent;
+  }
+  .card-pending { background: #1a1d2e; border-color: #2a2d3e; }
+  .card-overdue { background: #2a1010; border-color: #5a1a1a; }
+  .card-paid    { background: #111e11; border-color: #1e3a1e; }
+  .card-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .card-label { font-size: 11px; font-weight: 700; color: #aaa; letter-spacing: .5px; }
+  .card-amount { font-size: 20px; font-weight: 800; color: #e0e0e0; }
+  .card-paid .card-amount { color: #81C784; }
+  .card-overdue .card-amount { color: #ef9a9a; }
+  .card-meta { font-size: 13px; color: #777; }
+  .text-red { color: #ef5350 !important; }
+  .pix-section { margin-top: 14px; background: #0f1117; border-radius: 10px; padding: 12px; }
+  .pix-label { font-size: 11px; color: #888; margin-bottom: 6px; font-weight: 600; letter-spacing: .3px; }
+  .pix-code {
+    font-family: monospace; font-size: 11px; color: #aaa; word-break: break-all;
+    background: #1a1d2e; padding: 8px; border-radius: 6px; margin-bottom: 10px;
+    max-height: 60px; overflow: hidden;
+  }
+  .btn-pix {
+    width: 100%; background: #1B5E20; color: #fff; border: none;
+    padding: 10px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;
+    transition: background .2s;
+  }
+  .btn-pix:hover { background: #2D6A2D; }
+  .pix-hint { color: #666; font-size: 12px; margin-top: 10px; text-align: center; }
+  .loading, .empty { color: #666; font-size: 14px; text-align: center; padding: 32px 0; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ───────────────────────────────────────────────────── -->
+<div class="header">
+  <span class="logo">LocarPay</span>
+  <button class="btn-logout" id="btn-logout">Sair</button>
+</div>
+
+<!-- ── Screen: Login ─────────────────────────────────────────────── -->
+<div class="screen" id="screen-login">
+  <div class="login-wrap">
+    <div class="login-logo">L</div>
+    <p class="login-sub">Portal do Inquilino<br>Acesse suas cobranças</p>
+    <label class="input-label" for="input-email">E-mail cadastrado</label>
+    <input class="input-field" id="input-email" type="email" placeholder="seu@email.com.br" autocomplete="email">
+    <p class="error-msg" id="email-error"></p>
+    <button class="btn-primary" id="btn-send-otp">Receber código</button>
+  </div>
+</div>
+
+<!-- ── Screen: OTP ───────────────────────────────────────────────── -->
+<div class="screen" id="screen-otp">
+  <div class="login-wrap">
+    <div class="login-logo">L</div>
+    <p class="otp-hint" id="otp-hint">Código enviado para seu e-mail</p>
+    <label class="input-label" for="input-otp">Código de 6 dígitos</label>
+    <input class="input-field" id="input-otp" type="number" placeholder="000000" maxlength="6" autocomplete="one-time-code" inputmode="numeric">
+    <p class="error-msg" id="otp-error"></p>
+    <button class="btn-primary" id="btn-verify-otp">Entrar</button>
+    <button class="btn-link" id="btn-back-email">← Voltar</button>
+  </div>
+</div>
+
+<!-- ── Screen: Dashboard ─────────────────────────────────────────── -->
+<div class="screen" id="screen-dashboard">
+  <div class="dashboard">
+    <div id="charges-list"><p class="loading">Carregando...</p></div>
+  </div>
+</div>
+
+</body>
+</html>
