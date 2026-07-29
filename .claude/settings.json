@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Browser__navigate",
+      "mcp__Claude_Browser__read_console_messages",
+      "mcp__Claude_Browser__get_page_text",
+      "mcp__Claude_Browser__read_page",
+      "mcp__Claude_Browser__find",
+      "mcp__Claude_Browser__preview_logs",
+      "mcp__Claude_Browser__tabs_context",
+      "mcp__08dbdfb4-c83a-4b64-a56d-051f5ac3ff8b__list_projects",
+      "mcp__08dbdfb4-c83a-4b64-a56d-051f5ac3ff8b__list_deployments",
+      "mcp__08dbdfb4-c83a-4b64-a56d-051f5ac3ff8b__get_runtime_logs",
+      "mcp__08dbdfb4-c83a-4b64-a56d-051f5ac3ff8b__web_fetch_vercel_url",
+      "mcp__08dbdfb4-c83a-4b64-a56d-051f5ac3ff8b__list_teams",
+      "mcp__08dbdfb4-c83a-4b64-a56d-051f5ac3ff8b__get_project"
+    ]
+  }
+}
