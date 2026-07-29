@@ -1211,6 +1211,62 @@ async function handleMonthlyReport(db, body) {
   return { ok: true, sentTo: owner.email, month: target, paid: paid.length, pending: pending.length + overdue.length, totalPaid };
 }
 
+// ── ASAAS PAYMENT WEBHOOK ────────────────────────────────────────────────────
+// Recebe eventos PAYMENT_RECEIVED / PAYMENT_CONFIRMED das subcontas dos owners
+// O Asaas envia para /api/locarpay-card com o corpo do evento
+async function handleAsaasPaymentWebhook(db, body) {
+  const { event, payment } = body || {};
+  if (!event || !payment) return { ok: true, ignored: true };
+
+  const asaasId = payment.id;
+  if (!asaasId) return { ok: true, ignored: true };
+
+  if (!['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'].includes(event)) {
+    return { ok: true, ignored: true, event };
+  }
+
+  // Localiza a cobrança pelo asaasChargeId
+  const snap = await db.collection('charges')
+    .where('asaasChargeId', '==', asaasId)
+    .limit(1)
+    .get();
+
+  if (snap.empty) return { ok: true, notFound: true, asaasId };
+
+  const chargeDoc = snap.docs[0];
+  const charge    = chargeDoc.data();
+
+  // Já marcada como paga — idempotência
+  if (charge.status === 'paid') return { ok: true, alreadyPaid: true };
+
+  // Marca como paga
+  await chargeDoc.ref.update({ status: 'paid', paidAt: new Date() });
+
+  // Push de confirmação ao tenant
+  try {
+    const tenantId = charge.tenantId;
+    if (tenantId) {
+      const userSnap = await db.collection('users').doc(tenantId).get();
+      const token = userSnap.data()?.fcmToken;
+      if (token) {
+        await getMessaging().send({
+          token,
+          notification: { title: '✅ Pagamento confirmado!', body: 'Seu aluguel foi recebido. Obrigado!' },
+          android: { priority: 'high' }
+        });
+      }
+    }
+  } catch (_) {}
+
+  // Gera próxima cobrança do mês seguinte
+  const ownerId = charge.ownerId;
+  if (ownerId) {
+    await handleGenerateCharges(db, { ownerId, monthOffset: 1 }).catch(() => {});
+  }
+
+  return { ok: true, event, chargeId: chargeDoc.id, action: 'marked_paid' };
+}
+
 // ── HANDLER ──────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1255,6 +1311,13 @@ export default async function handler(req, res) {
     if (step === 'close-contract')    return res.status(200).json(await handleCloseContract(db, req.body));
     if (step === 'adjust-rent')       return res.status(200).json(await handleAdjustRent(db, req.body));
     if (step === 'monthly-report')    return res.status(200).json(await handleMonthlyReport(db, req.body));
+    if (step === 'asaas-webhook')     return res.status(200).json(await handleAsaasPaymentWebhook(db, req.body));
+
+    // Webhook Asaas sem step (evento direto da subconta)
+    if (!step && req.body?.event && req.body?.payment) {
+      return res.status(200).json(await handleAsaasPaymentWebhook(db, req.body));
+    }
+
     return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {
