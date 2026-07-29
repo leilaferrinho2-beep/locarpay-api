@@ -116,6 +116,14 @@
     renderTenants();
     renderMetrics();
     renderPlanBar();
+    // Badge de inadimplentes na aba (contagem rápida)
+    if (currentOwnerId) {
+      getDocs(query(collection(db, 'charges'), where('ownerId', '==', currentOwnerId), where('status', '==', 'overdue')))
+        .then(snap => {
+          const n = snap.size;
+          $('tab-overdue').innerHTML = n > 0 ? `⚠ Inadimplentes (${n})` : '⚠ Inadimplentes';
+        }).catch(() => {});
+    }
   }
 
   const DOC_LABELS = {
@@ -365,6 +373,9 @@
         : query(collection(db, 'charges'), where('status', '==', 'overdue'));
       const snap = await getDocs(q);
       overdueCharges = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Atualiza badge na aba
+      const badge = overdueCharges.length > 0 ? ` (${overdueCharges.length})` : '';
+      $('tab-overdue').innerHTML = `⚠ Inadimplentes${badge}`;
       // Sort by dueDate asc (oldest first)
       overdueCharges.sort((a, b) => {
         const sa = a.dueDate?.seconds ?? 0;
