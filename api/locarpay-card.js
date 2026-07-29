@@ -1349,6 +1349,94 @@ async function handleMonthlyReport(db, body) {
   return { ok: true, sentTo: owner.email, month: target, paid: paid.length, pending: pending.length + overdue.length, totalPaid };
 }
 
+// ── ANNUAL RENT ALERT ────────────────────────────────────────────────────────
+// Verifica contratos ativos com 12 meses completos (ou múltiplos) sem reajuste
+// registrado e notifica o owner por email.
+async function handleAnnualRentAlert(db, body) {
+  const { ownerId } = body;
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatório'), { status: 400 });
+
+  const ownerSnap = await db.collection('owners').doc(ownerId).get();
+  if (!ownerSnap.exists) return { ok: true, skipped: true };
+  const owner = ownerSnap.data();
+  if (!owner.email) return { ok: true, skipped: true };
+
+  const now  = Date.now();
+  const snap = await db.collection('contracts')
+    .where('ownerId', '==', ownerId)
+    .where('active', '==', true)
+    .get();
+
+  if (snap.empty) return { ok: true, alerted: 0 };
+
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.titan.email', port: 587, secure: false,
+    auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
+  });
+
+  const fmt = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const fmtMoney = n => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  let alerted = 0;
+  const batch = db.batch();
+
+  for (const doc of snap.docs) {
+    const c = doc.data();
+    if (!c.startDate?.seconds) continue;
+
+    const startMs    = c.startDate.seconds * 1000;
+    const ageMonths  = (now - startMs) / (30.44 * 86_400_000);
+    const lastAlert  = c.lastRentAdjustAlertMonths || 0;
+    const nextAlert  = Math.floor(ageMonths / 12) * 12;
+
+    // Alerta apenas quando atinge múltiplo de 12 e ainda não foi alertado
+    if (nextAlert < 12 || nextAlert <= lastAlert) continue;
+    // Janela: dentro de 5 dias do aniversário do contrato
+    const daysIn = (ageMonths - nextAlert) * 30.44;
+    if (daysIn > 5) continue;
+
+    await transporter.sendMail({
+      from: 'LocarPay <denis@dlftech.com.br>',
+      to: owner.email,
+      subject: `📅 Reajuste anual do contrato — ${c.propertyDescription || 'Imóvel'}`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#fafafa">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
+            <div style="background:#2D6A2D;border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff">L</div>
+            <span style="font-size:18px;font-weight:700;color:#1a1a1a">LocarPay</span>
+          </div>
+          <div style="background:#fff;border-radius:12px;padding:28px;border:1px solid #e8e8e8">
+            <div style="text-align:center;margin-bottom:20px">
+              <div style="font-size:36px">📅</div>
+              <h2 style="color:#1a1a1a;margin:8px 0 4px">Reajuste anual disponível</h2>
+              <p style="color:#888;margin:0;font-size:14px">O contrato completa ${nextAlert} meses</p>
+            </div>
+            <table style="width:100%;border-collapse:collapse">
+              <tr><td style="padding:8px 0;color:#555;border-bottom:1px solid #eee">Imóvel</td>
+                  <td style="padding:8px 0;text-align:right;font-weight:600;border-bottom:1px solid #eee">${c.propertyDescription || '—'}</td></tr>
+              <tr><td style="padding:8px 0;color:#555;border-bottom:1px solid #eee">Início do contrato</td>
+                  <td style="padding:8px 0;text-align:right;border-bottom:1px solid #eee">${fmt.format(new Date(startMs))}</td></tr>
+              <tr><td style="padding:8px 0;color:#555;border-bottom:1px solid #eee">Aluguel atual</td>
+                  <td style="padding:8px 0;text-align:right;font-weight:700;border-bottom:1px solid #eee">${fmtMoney(c.baseRent || 0)}</td></tr>
+              <tr><td style="padding:8px 0;color:#555">Duração</td>
+                  <td style="padding:8px 0;text-align:right">${nextAlert} meses</td></tr>
+            </table>
+            <div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-top:20px;font-size:13px;color:#555">
+              💡 De acordo com a Lei do Inquilinato (Art. 18), o aluguel pode ser reajustado anualmente pelo índice acordado em contrato (IPCA, IGP-M ou INPC).
+              Acesse o app LocarPay → Ações rápidas → Reajuste para aplicar o novo valor.
+            </div>
+          </div>
+          <p style="color:#aaa;font-size:11px;text-align:center;margin-top:20px">LocarPay — ${new Date().toLocaleDateString('pt-BR')}</p>
+        </div>`
+    });
+
+    batch.update(doc.ref, { lastRentAdjustAlertMonths: nextAlert });
+    alerted++;
+  }
+
+  if (alerted > 0) await batch.commit();
+  return { ok: true, alerted };
+}
+
 // ── CRON DAILY ───────────────────────────────────────────────────────────────
 // Executado automaticamente pelo Vercel Cron às 10:00 BRT todos os dias.
 // Itera todos os owners e executa: mark-overdue, notify-expiry, notify-upcoming.
@@ -1385,6 +1473,11 @@ async function handleCronDaily(db, req) {
       // 3. Avisa cobranças vencendo em 3 dias
       await handleNotifyUpcoming(db, { ownerId });
     } catch (e) { results.errors.push(`${ownerId}/upcoming: ${e.message}`); }
+
+    try {
+      // 4. Alerta de reajuste anual para contratos que completam 12 meses
+      await handleAnnualRentAlert(db, { ownerId });
+    } catch (e) { results.errors.push(`${ownerId}/rent-alert: ${e.message}`); }
 
     if (isFirstOfMonth) {
       try {
