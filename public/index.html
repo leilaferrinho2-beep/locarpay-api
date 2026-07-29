@@ -658,15 +658,26 @@
     <div id="modal-success-view" class="success-screen" style="display:none">
       <div class="success-icon">🎉</div>
       <h3>Conta criada com sucesso!</h3>
-      <p>Seu trial de 14 dias está ativo. Acesse o painel para cadastrar seus primeiros inquilinos.</p>
+      <p>Seu trial de 14 dias está ativo. Acesse o painel agora para cadastrar seus primeiros inquilinos.</p>
+
+      <!-- Login rápido após cadastro -->
+      <div id="success-login-box" style="background:#0d1a0d;border:1px solid #2a4a2a;border-radius:12px;padding:20px;margin:20px 0;text-align:left">
+        <div style="font-size:13px;color:#8FAF8F;margin-bottom:12px">Entrar no painel agora:</div>
+        <div id="success-otp-email-step">
+          <button id="btn-success-send-otp" style="width:100%;padding:11px;border-radius:9px;border:1px solid #3A8A3A;background:transparent;color:#69D369;font-size:14px;font-weight:600;cursor:pointer;">Enviar código por e-mail →</button>
+        </div>
+        <div id="success-otp-code-step" style="display:none">
+          <div style="font-size:12px;color:#8FAF8F;margin-bottom:8px">Código enviado! Digite abaixo:</div>
+          <input id="success-otp-input" type="text" inputmode="numeric" maxlength="6" placeholder="000000" style="width:100%;padding:10px;border-radius:8px;border:1px solid #3A8A3A;background:#0B1A0B;color:#E4F0E4;font-size:20px;letter-spacing:6px;text-align:center;box-sizing:border-box;margin-bottom:8px;outline:none;">
+          <button id="btn-success-verify-otp" style="width:100%;padding:11px;border-radius:9px;border:none;background:#3A8A3A;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Entrar no painel</button>
+        </div>
+        <div id="success-otp-error" style="color:#E57373;font-size:12px;margin-top:6px;min-height:16px"></div>
+        <div style="margin-top:10px;text-align:center">
+          <a href="admin" target="_blank" style="font-size:12px;color:#567056;text-decoration:underline">Entrar com Google em vez disso</a>
+        </div>
+      </div>
+
       <div class="success-next">
-        <a class="success-step" href="admin" target="_blank">
-          <span class="success-step-icon">🖥️</span>
-          <span class="success-step-text">
-            <strong>Acessar painel admin</strong>
-            <span>Cadastre inquilinos, imóveis e contratos</span>
-          </span>
-        </a>
         <div class="success-step" style="cursor:default">
           <span class="success-step-icon">📲</span>
           <span class="success-step-text">
@@ -741,6 +752,41 @@
   maskCpfCnpj(document.getElementById('f-cpfcnpj'));
   maskCep(document.getElementById('f-cep'));
 
+  // OTP pós-cadastro
+  document.getElementById('btn-success-send-otp').addEventListener('click', async () => {
+    const email = window._successEmail;
+    if (!email) return;
+    const btn = document.getElementById('btn-success-send-otp');
+    const errEl = document.getElementById('success-otp-error');
+    btn.textContent = 'Enviando…'; btn.disabled = true; errEl.textContent = '';
+    try {
+      const r = await fetch('/api/locarpay-send-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email }) });
+      const d = await r.json();
+      if (!r.ok) { errEl.textContent = d.error || 'Erro ao enviar código'; btn.textContent = 'Enviar código por e-mail →'; btn.disabled = false; return; }
+      document.getElementById('success-otp-email-step').style.display = 'none';
+      document.getElementById('success-otp-code-step').style.display = 'block';
+      document.getElementById('success-otp-input').focus();
+    } catch(e) { errEl.textContent = 'Erro de conexão'; btn.textContent = 'Enviar código por e-mail →'; btn.disabled = false; }
+  });
+
+  document.getElementById('btn-success-verify-otp').addEventListener('click', async () => {
+    const email = window._successEmail;
+    const code = document.getElementById('success-otp-input').value.trim();
+    const errEl = document.getElementById('success-otp-error');
+    const btn = document.getElementById('btn-success-verify-otp');
+    if (!code) { errEl.textContent = 'Digite o código.'; return; }
+    btn.textContent = 'Verificando…'; btn.disabled = true; errEl.textContent = '';
+    try {
+      const r = await fetch('/api/locarpay-verify-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, otp: code }) });
+      const d = await r.json();
+      if (!r.ok) { errEl.textContent = d.error || 'Código inválido'; btn.textContent = 'Entrar no painel'; btn.disabled = false; return; }
+      sessionStorage.setItem('lp_custom_token', d.customToken);
+      window.open('/admin', '_blank');
+    } catch(e) { errEl.textContent = 'Erro de conexão'; btn.textContent = 'Entrar no painel'; btn.disabled = false; }
+  });
+
+  document.getElementById('success-otp-input').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('btn-success-verify-otp').click(); });
+
   async function submitRegister() {
     const btn = document.getElementById('form-submit-btn');
     const err = document.getElementById('form-error');
@@ -793,6 +839,8 @@
       document.getElementById('success-owner-id-value').textContent = data.ownerId || '—';
       document.getElementById('modal-form-view').style.display = 'none';
       document.getElementById('modal-success-view').style.display = 'block';
+      // Guarda email para OTP
+      window._successEmail = email;
 
     } catch (e) {
       err.textContent = 'Erro de conexão. Verifique sua internet e tente novamente.';
