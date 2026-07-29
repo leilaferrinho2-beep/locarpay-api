@@ -30,12 +30,33 @@ async function assinafyGet(apiKey, path) {
   return r.json();
 }
 
+async function handleSetOwnerSigned(req, res) {
+  const { contractId, completed } = req.body || {};
+  if (!contractId) return res.status(400).json({ error: 'contractId obrigatório' });
+  try {
+    const fields = { ownerSigned: { booleanValue: true } };
+    if (completed) fields.assinafyStatus = { stringValue: 'completed' };
+    const mask = Object.keys(fields).map(f => `updateMask.fieldPaths=${f}`).join('&');
+    const r = await fetch(
+      `${FS_BASE}/contracts/${contractId}?key=${FB_API_KEY}&${mask}`,
+      { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) }
+    );
+    if (!r.ok) throw new Error(await r.text());
+    return res.status(200).json({ ok: true, contractId, fields: Object.keys(fields) });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  // Roteamento por step (set-owner-signed foi absorvido aqui)
+  if (req.body?.step === 'set-owner-signed') return handleSetOwnerSigned(req, res);
 
   const { contractId, tenantEmail } = req.body || {};
   if (!contractId || !tenantEmail) return res.status(400).json({ error: 'contractId e tenantEmail obrigatórios' });
