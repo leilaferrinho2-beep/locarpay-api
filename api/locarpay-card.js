@@ -119,26 +119,38 @@ async function handleInit(db, body, apiKey) {
   if (cpf.length !== 11)
     throw Object.assign(new Error('CPF do inquilino não cadastrado. Peça ao administrador.'), { status: 400 });
 
-  // Busca CEP: tenta no perfil do inquilino, depois no owner
+  // Busca owner doc (para CEP e config de taxas)
+  const ownerSnap = await db.collection('owners').doc(ownerId).get();
+  const configData = ownerSnap.exists ? ownerSnap.data() : {};
+
   let postalCode = (user.postalCode || user.cep || '').replace(/\D/g, '');
-  if (postalCode.length !== 8) {
-    try {
-      const ownerSnap = await db.collection('owners').doc(ownerId).get();
-      postalCode = (ownerSnap.data()?.postalCode || '').replace(/\D/g, '');
-    } catch (_) {}
+  if (postalCode.length !== 8) postalCode = (configData.postalCode || '').replace(/\D/g, '');
+  if (postalCode.length !== 8) postalCode = '01310100';
+
+  // Calcula valor real do aluguel (com taxa de cartão e eventuais juros/multa)
+  const cardFeeRate  = (configData.cardFeePercentage ?? 2.99) / 100;
+  const cardFeeFixed = configData.cardFeeFixed ?? 0.49;
+  const charge       = chargeSnap.data();
+  const baseValue    = charge.totalAmount || charge.baseRent || 5;
+  const dueDateObj   = charge.dueDate?.toDate ? charge.dueDate.toDate() : new Date(charge.dueDate?.seconds * 1000);
+  const today        = new Date(); today.setHours(0, 0, 0, 0);
+  const dueDateOnly  = new Date(dueDateObj); dueDateOnly.setHours(0, 0, 0, 0);
+  const diasAtraso   = Math.max(0, Math.floor((today - dueDateOnly) / 86400000));
+  const finePercentage = (configData.finePercentage ?? 2) / 100;
+  const interestRate   = (configData.interestRate   ?? 1) / 100 / 30;
+  let valueComAtraso = baseValue;
+  if (diasAtraso > 0) {
+    valueComAtraso = parseFloat((baseValue * (1 + finePercentage + interestRate * diasAtraso)).toFixed(2));
   }
-  if (postalCode.length !== 8) postalCode = '01310100'; // Av. Paulista SP — CEP válido de último recurso
-
-  const customerId = await findOrCreateCustomer(name, email, cpf, phone, apiKey);
-
-  // Valor aleatório entre R$5,01 e R$9,99 (mínimo Asaas = R$5,00)
-  const microValue = parseFloat((5 + Math.random() * 4.98).toFixed(2));
+  const realValue = parseFloat(((valueComAtraso + cardFeeFixed) / (1 - cardFeeRate)).toFixed(2));
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const dueDate = tomorrow.toISOString().slice(0, 10);
 
-  // Usa o CPF digitado no formulário (titular do cartão) como prioridade; fallback para CPF do perfil
+  const customerId = await findOrCreateCustomer(name, email, cpf, phone, apiKey);
+
+  // Usa CPF digitado no formulário (titular do cartão); fallback para CPF do perfil
   const effectiveCpf = (holderDocument || '').replace(/\D/g, '') || cpf;
 
   const holderInfoBase = {
@@ -153,21 +165,21 @@ async function handleInit(db, body, apiKey) {
   let chargeBody;
   if (savedToken) {
     chargeBody = {
-      customer:    customerId,
-      billingType: 'CREDIT_CARD',
-      value:       microValue,
+      customer:             customerId,
+      billingType:          'CREDIT_CARD',
+      value:                realValue,
       dueDate,
-      description: 'Verificacao de cartao LocarPay',
+      description:          `Aluguel ${dueDate.slice(0, 7)}`,
       creditCardToken:      savedToken,
       creditCardHolderInfo: holderInfoBase
     };
   } else {
     chargeBody = {
-      customer:    customerId,
-      billingType: 'CREDIT_CARD',
-      value:       microValue,
+      customer:             customerId,
+      billingType:          'CREDIT_CARD',
+      value:                realValue,
       dueDate,
-      description: 'Verificacao de cartao LocarPay',
+      description:          `Aluguel ${dueDate.slice(0, 7)}`,
       creditCard: {
         holderName,
         number:      number.replace(/\D/g, ''),
@@ -183,10 +195,8 @@ async function handleInit(db, body, apiKey) {
   const cardToken   = asaasCharge.creditCard?.creditCardToken || savedToken || null;
   const lastFour    = asaasCharge.creditCard?.creditCardNumber?.slice(-4) || '';
   const cardBrand   = asaasCharge.creditCard?.creditCardBrand || '';
-  // Não cancela agora — o inquilino precisa ver o valor no banco para confirmar (anti-fraude)
-  // Cancelamento acontece em handleVerifyAmount (se falhar) ou handleConfirm (após sucesso)
 
-  const verRef = db.collection('cardVerifications').doc();
+  const verRef   = db.collection('cardVerifications').doc();
   const expMonth = expiryMonth ? expiryMonth.padStart(2, '0') : (savedCardFallback?.expiryMonth || '');
   const expYear  = expiryYear  ? (expiryYear.length === 2 ? `20${expiryYear}` : expiryYear) : (savedCardFallback?.expiryYear || '');
 
@@ -198,19 +208,18 @@ async function handleInit(db, body, apiKey) {
     lastFour,
     cardBrand,
     holderName,
-    holderDocument:   effectiveCpf,
-    expiryMonth:      expMonth,
-    expiryYear:       expYear,
-    microValue,                          // valor que o inquilino deve ver no banco
-    asaasPaymentId:   asaasCharge.id,    // usado para estornar após verificação
-    verifyAttempts:   0,
-    amountVerified:   false,
-    verified:         false,
-    createdAt:        FieldValue.serverTimestamp(),
-    expiresAt:        new Date(Date.now() + 30 * 60 * 1000) // 30 min para completar
+    holderDocument: effectiveCpf,
+    expiryMonth:    expMonth,
+    expiryYear:     expYear,
+    realValue,                        // valor real cobrado — inquilino deve confirmar este valor
+    asaasPaymentId: asaasCharge.id,   // se valor errado, estornamos aqui
+    verifyAttempts: 0,
+    amountVerified: false,
+    verified:       false,
+    createdAt:      FieldValue.serverTimestamp(),
+    expiresAt:      new Date(Date.now() + 30 * 60 * 1000)
   };
 
-  // Guarda fallback apenas se não temos token
   if (!cardToken) {
     verData.cardFallback = savedCardFallback || {
       holderName,
@@ -239,8 +248,8 @@ async function cancelOrRefundMicro(asaasPaymentId, apiKey) {
 }
 
 // ── VERIFY AMOUNT ─────────────────────────────────────────────────────────────
-// Inquilino informa o valor que viu no banco; backend valida
-async function handleVerifyAmount(db, body) {
+// Inquilino informa o valor cobrado no cartão; backend valida e marca pagamento como pago
+async function handleVerifyAmount(db, body, req) {
   const { verificationId, userAmount } = body;
   if (!verificationId || userAmount == null)
     throw Object.assign(new Error('verificationId e userAmount obrigatórios'), { status: 400 });
@@ -254,39 +263,58 @@ async function handleVerifyAmount(db, body) {
   if (ver.amountVerified)
     return { ok: true, alreadyVerified: true };
 
+  const chargeSnap = await db.collection('charges').doc(ver.chargeId).get();
+  const ownerId    = chargeSnap.data()?.ownerId || await getDefaultOwnerId(db);
+  const verApiKey  = await getAsaasKey(db, ownerId);
+
   if (new Date() > ver.expiresAt.toDate()) {
-    const ownerId = (await db.collection('charges').doc(ver.chargeId).get()).data()?.ownerId || await getDefaultOwnerId(db);
-    const expApiKey = await getAsaasKey(db, ownerId);
-    await cancelOrRefundMicro(ver.asaasPaymentId, expApiKey);
+    await cancelOrRefundMicro(ver.asaasPaymentId, verApiKey);
     throw Object.assign(new Error('Verificação expirada. Recadastre o cartão.'), { status: 400 });
   }
 
-  const MAX_ATTEMPTS = 3;
-  const attempts = (ver.verifyAttempts || 0) + 1;
-
   const entered  = parseFloat(String(userAmount).replace(',', '.'));
-  const expected = parseFloat(ver.microValue);
-  const match    = Math.abs(entered - expected) <= 0.02; // tolerância de R$0,02
+  const expected = parseFloat(ver.realValue);
+  const match    = Math.abs(entered - expected) <= 0.02;
 
   if (!match) {
-    if (attempts >= MAX_ATTEMPTS) {
-      const ownerId = (await db.collection('charges').doc(ver.chargeId).get()).data()?.ownerId || await getDefaultOwnerId(db);
-      const blockApiKey = await getAsaasKey(db, ownerId);
-      await cancelOrRefundMicro(ver.asaasPaymentId, blockApiKey);
-      await verRef.update({ verifyAttempts: attempts, blocked: true });
-      throw Object.assign(new Error('Número máximo de tentativas atingido. Recadastre o cartão.'), { status: 429 });
-    }
-    await verRef.update({ verifyAttempts: attempts });
-    throw Object.assign(new Error(`Valor incorreto. ${MAX_ATTEMPTS - attempts} tentativa(s) restante(s).`), { status: 422, attemptsLeft: MAX_ATTEMPTS - attempts });
+    // Valor errado → estorna o pagamento real e bloqueia
+    await cancelOrRefundMicro(ver.asaasPaymentId, verApiKey);
+    await verRef.update({ verifyAttempts: (ver.verifyAttempts || 0) + 1, blocked: true });
+    throw Object.assign(new Error('Valor incorreto. O pagamento foi estornado. Recadastre o cartão.'), { status: 422 });
   }
 
-  // Valor correto — marca como verificado (estorno ocorre APÓS pagamento real no handleConfirm)
-  await verRef.update({ verifyAttempts: attempts, amountVerified: true });
+  // Valor correto → marca cobrança como paga no Firestore
+  await Promise.all([
+    db.collection('charges').doc(ver.chargeId).update({
+      asaasChargeId: ver.asaasPaymentId,
+      status:        'paid',
+      paidAt:        FieldValue.serverTimestamp()
+    }),
+    verRef.update({ verifyAttempts: (ver.verifyAttempts || 0) + 1, amountVerified: true }),
+    db.collection('paymentLogs').add({
+      tenantId:       ver.tenantId,
+      chargeId:       ver.chargeId,
+      asaasChargeId:  ver.asaasPaymentId,
+      holderName:     ver.holderName,
+      holderDocument: ver.holderDocument || '',
+      cardLastFour:   ver.lastFour,
+      cardBrand:      ver.cardBrand,
+      amount:         ver.realValue,
+      status:         'paid',
+      paidAt:         FieldValue.serverTimestamp(),
+      userAgent:      req?.headers?.['user-agent'] || '',
+      ip:             req?.headers?.['x-forwarded-for'] || req?.socket?.remoteAddress || '',
+      termoAceito:    true
+    })
+  ]);
+
   return { ok: true, lastFour: ver.lastFour, cardBrand: ver.cardBrand };
 }
 
 // ── CONFIRM ──────────────────────────────────────────────────────────────────
-async function handleConfirm(db, body, req) {
+// O pagamento já foi realizado no handleInit e validado no handleVerifyAmount.
+// Este step apenas finaliza: salva cartão (opcional) e retorna confirmação.
+async function handleConfirm(db, body) {
   const { verificationId } = body;
   if (!verificationId)
     throw Object.assign(new Error('verificationId obrigatório'), { status: 400 });
@@ -297,162 +325,25 @@ async function handleConfirm(db, body, req) {
 
   const ver = verSnap.data();
 
-  if (ver.verified)
-    throw Object.assign(new Error('Cartão já verificado'), { status: 400 });
-
   if (!ver.amountVerified)
-    throw Object.assign(new Error('Confirme o valor da micro-cobrança antes de pagar.'), { status: 400 });
-
-  if (new Date() > ver.expiresAt.toDate())
-    throw Object.assign(new Error('Verificação expirada. Recadastre o cartão.'), { status: 400 });
-
-  // Cobra o aluguel real
-  const chargeSnap = await db.collection('charges').doc(ver.chargeId).get();
-  const charge = chargeSnap.data();
-
-  const ownerId = charge.ownerId || await getDefaultOwnerId(db);
-  const [apiKey, ownerSnap] = await Promise.all([
-    getAsaasKey(db, ownerId),
-    db.collection('owners').doc(ownerId).get(),
-  ]);
-  if (!apiKey) throw Object.assign(new Error('Chave Asaas não configurada'), { status: 500 });
-  const configData = ownerSnap.exists ? ownerSnap.data() : {};
-
-  // Taxa do cartão repassada ao inquilino (padrão 2.99% + R$0.49 fixo)
-  const cardFeeRate  = (configData.cardFeePercentage ?? 2.99) / 100;
-  const cardFeeFixed = configData.cardFeeFixed ?? 0.49;
-
-  // Juros/multa por atraso
-  const baseValue   = charge.totalAmount || charge.baseRent || 5;
-  const dueDateObj  = charge.dueDate?.toDate ? charge.dueDate.toDate() : new Date(charge.dueDate?.seconds * 1000);
-  const today       = new Date(); today.setHours(0, 0, 0, 0);
-  const dueDateOnly = new Date(dueDateObj); dueDateOnly.setHours(0, 0, 0, 0);
-  const diasAtraso  = Math.max(0, Math.floor((today - dueDateOnly) / 86400000));
-
-  const finePercentage = (configData.finePercentage ?? 2) / 100;
-  const interestRate   = (configData.interestRate   ?? 1) / 100 / 30; // ao dia
-
-  let valueComAtraso = baseValue;
-  if (diasAtraso > 0) {
-    valueComAtraso = baseValue * (1 + finePercentage + interestRate * diasAtraso);
-    valueComAtraso = parseFloat(valueComAtraso.toFixed(2));
-  }
-
-  // Adiciona taxa do cartão em cima do valor (com atraso, se houver)
-  const value = parseFloat(((valueComAtraso + cardFeeFixed) / (1 - cardFeeRate)).toFixed(2));
-
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const dueDate  = tomorrow.toISOString().slice(0, 10);
-
-  const userSnap2 = await db.collection('users').doc(ver.tenantId).get();
-  const userData2  = userSnap2.data() || {};
-  // Usa o CPF digitado no formulário (titular do cartão) em vez do CPF do perfil
-  const cpfConfirm   = (ver.holderDocument || userData2.cpf || '').replace(/\D/g, '');
-  const emailConfirm = userData2.email  || '';
-  const phoneConfirm = (userData2.phone || '').replace(/\D/g, '') || '11999999999';
-
-  // CEP: inquilino → owner → fallback válido
-  let postalCodeConfirm = (userData2.postalCode || userData2.cep || '').replace(/\D/g, '');
-  if (postalCodeConfirm.length !== 8) {
-    postalCodeConfirm = (ownerSnap.data()?.postalCode || '').replace(/\D/g, '');
-  }
-  if (postalCodeConfirm.length !== 8) postalCodeConfirm = '01310100';
-
-  let asaasRealCharge;
-  if (ver.cardToken) {
-    // Usa token — sem precisar dos dados do cartão de novo
-    asaasRealCharge = await asaasReq('POST', '/payments', {
-      customer:            ver.customerId,
-      billingType:         'CREDIT_CARD',
-      value,
-      dueDate,
-      description:         `Aluguel ${dueDate.slice(0, 7)}`,
-      creditCardToken:     ver.cardToken,
-      creditCardHolderInfo: {
-        name:    ver.holderName,
-        email:   emailConfirm,
-        cpfCnpj: cpfConfirm,
-        postalCode:    postalCodeConfirm,
-        addressNumber: 'SN',
-        phone:   phoneConfirm
-      }
-    }, apiKey);
-  } else if (ver.cardFallback) {
-    // Fallback: re-envia dados do cartão armazenados temporariamente
-    const fb = ver.cardFallback;
-    asaasRealCharge = await asaasReq('POST', '/payments', {
-      customer:    ver.customerId,
-      billingType: 'CREDIT_CARD',
-      value,
-      dueDate,
-      description: `Aluguel ${dueDate.slice(0, 7)}`,
-      creditCard: {
-        holderName:  fb.holderName,
-        number:      fb.number,
-        expiryMonth: fb.expiryMonth,
-        expiryYear:  fb.expiryYear,
-        ccv:         fb.ccv
-      },
-      creditCardHolderInfo: {
-        name:          fb.holderName,
-        email:         emailConfirm,
-        cpfCnpj:       cpfConfirm,
-        postalCode:    postalCodeConfirm,
-        addressNumber: 'SN',
-        phone:         phoneConfirm
-      }
-    }, apiKey);
-  } else {
-    throw new Error('Dados do cartão não disponíveis. Recadastre o cartão.');
-  }
-
-  const paid = ['CONFIRMED','RECEIVED'].includes(asaasRealCharge.status);
-
-  // Tenta extrair token do cartão da resposta real (para salvar)
-  const realToken = asaasRealCharge.creditCard?.creditCardToken || ver.cardToken || null;
-  const lastFour  = asaasRealCharge.creditCard?.creditCardNumber?.slice(-4) || ver.cardFallback?.number?.slice(-4) || '';
-  const brand     = asaasRealCharge.creditCard?.creditCardBrand || '';
+    throw Object.assign(new Error('Pagamento não verificado.'), { status: 400 });
 
   const ops = [
-    db.collection('charges').doc(ver.chargeId).update({
-      asaasChargeId: asaasRealCharge.id,
-      status:        paid ? 'paid' : 'under_review',
-      ...(paid ? { paidAt: FieldValue.serverTimestamp() } : {})
-    }),
     verRef.update({ verified: true, paidAt: FieldValue.serverTimestamp(), cardFallback: FieldValue.delete() })
   ];
 
-  // Log de auditoria anti-chargeback — mantém evidências de pagamento autorizado
-  ops.push(db.collection('paymentLogs').add({
-    tenantId:       ver.tenantId,
-    chargeId:       ver.chargeId,
-    asaasChargeId:  asaasRealCharge.id,
-    holderName:     ver.holderName,
-    holderDocument: ver.holderDocument || '',
-    cardLastFour:   lastFour,
-    cardBrand:      brand,
-    amount:         value,
-    status:         paid ? 'paid' : 'under_review',
-    paidAt:         FieldValue.serverTimestamp(),
-    userAgent:      req.headers?.['user-agent'] || '',
-    ip:             req.headers?.['x-forwarded-for'] || req.socket?.remoteAddress || '',
-    termoAceito:    true // inquilino assinalou checkbox de autorização antes de confirmar
-  }));
-
-  // Salvar cartão se solicitado
-  if (body.saveCard && paid) {
+  if (body.saveCard) {
     const savedCardData = {
-      holderName:    ver.cardFallback?.holderName || ver.holderName,
+      holderName:     ver.holderName,
       holderDocument: ver.holderDocument || '',
-      lastFour,
-      brand,
-      expiryMonth: ver.cardFallback?.expiryMonth || ver.expiryMonth,
-      expiryYear:  ver.cardFallback?.expiryYear  || ver.expiryYear,
-      createdAt:   FieldValue.serverTimestamp()
+      lastFour:       ver.lastFour,
+      brand:          ver.cardBrand,
+      expiryMonth:    ver.expiryMonth,
+      expiryYear:     ver.expiryYear,
+      createdAt:      FieldValue.serverTimestamp()
     };
-    if (realToken) {
-      savedCardData.cardToken = realToken;
+    if (ver.cardToken) {
+      savedCardData.cardToken = ver.cardToken;
     } else if (ver.cardFallback) {
       savedCardData.cardFallback = ver.cardFallback;
     }
@@ -461,19 +352,11 @@ async function handleConfirm(db, body, req) {
 
   await Promise.all(ops);
 
-  // Estorna a micro-cobrança APÓS o pagamento real confirmar (evita bloqueio por velocidade)
-  if (ver.asaasPaymentId) {
-    cancelOrRefundMicro(ver.asaasPaymentId, apiKey).catch(() => {});
-  }
-
   return {
-    paid,
-    status:     asaasRealCharge.status,
-    message:    paid ? 'Pagamento aprovado!' : 'Pagamento em análise.',
-    baseValue,
-    totalCharged: value,
-    diasAtraso,
-    cardFee: parseFloat((value - valueComAtraso).toFixed(2))
+    paid:         true,
+    status:       'CONFIRMED',
+    message:      'Pagamento aprovado!',
+    totalCharged: ver.realValue
   };
 }
 
@@ -1993,8 +1876,8 @@ export default async function handler(req, res) {
     }
 
     if (step === 'init')           return res.status(200).json(await handleInit(db, req.body, null));
-    if (step === 'verify-amount')  return res.status(200).json(await handleVerifyAmount(db, req.body));
-    if (step === 'confirm')        return res.status(200).json(await handleConfirm(db, req.body, req));
+    if (step === 'verify-amount')  return res.status(200).json(await handleVerifyAmount(db, req.body, req));
+    if (step === 'confirm')        return res.status(200).json(await handleConfirm(db, req.body));
     if (step === 'refund')         return res.status(200).json(await handleRefund(db, req.body));
     if (step === 'preview')        return res.status(200).json(await handlePreview(db, req.body));
     if (step === 'list-saved')     return res.status(200).json(await handleListSaved(db, req.body));
