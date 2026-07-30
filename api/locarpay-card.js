@@ -350,9 +350,17 @@ async function handleConfirm(db, body, req) {
   const dueDate  = tomorrow.toISOString().slice(0, 10);
 
   const userSnap2 = await db.collection('users').doc(ver.tenantId).get();
-  const cpfConfirm = (userSnap2.data()?.cpf || '').replace(/\D/g, '');
-  const emailConfirm = userSnap2.data()?.email || '';
-  const phoneConfirm = (userSnap2.data()?.phone || '').replace(/\D/g, '') || '11999999999';
+  const userData2  = userSnap2.data() || {};
+  const cpfConfirm   = (userData2.cpf   || '').replace(/\D/g, '');
+  const emailConfirm = userData2.email  || '';
+  const phoneConfirm = (userData2.phone || '').replace(/\D/g, '') || '11999999999';
+
+  // CEP: inquilino → owner → fallback válido
+  let postalCodeConfirm = (userData2.postalCode || userData2.cep || '').replace(/\D/g, '');
+  if (postalCodeConfirm.length !== 8) {
+    postalCodeConfirm = (ownerSnap.data()?.postalCode || '').replace(/\D/g, '');
+  }
+  if (postalCodeConfirm.length !== 8) postalCodeConfirm = '01310100';
 
   let asaasRealCharge;
   if (ver.cardToken) {
@@ -368,7 +376,7 @@ async function handleConfirm(db, body, req) {
         name:    ver.holderName,
         email:   emailConfirm,
         cpfCnpj: cpfConfirm,
-        postalCode:    '00000000',
+        postalCode:    postalCodeConfirm,
         addressNumber: 'SN',
         phone:   phoneConfirm
       }
@@ -393,7 +401,7 @@ async function handleConfirm(db, body, req) {
         name:          fb.holderName,
         email:         emailConfirm,
         cpfCnpj:       cpfConfirm,
-        postalCode:    '00000000',
+        postalCode:    postalCodeConfirm,
         addressNumber: 'SN',
         phone:         phoneConfirm
       }
