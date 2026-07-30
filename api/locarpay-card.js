@@ -119,6 +119,16 @@ async function handleInit(db, body, apiKey) {
   if (cpf.length !== 11)
     throw Object.assign(new Error('CPF do inquilino não cadastrado. Peça ao administrador.'), { status: 400 });
 
+  // Busca CEP: tenta no perfil do inquilino, depois no owner
+  let postalCode = (user.postalCode || user.cep || '').replace(/\D/g, '');
+  if (postalCode.length !== 8) {
+    try {
+      const ownerSnap = await db.collection('owners').doc(ownerId).get();
+      postalCode = (ownerSnap.data()?.postalCode || '').replace(/\D/g, '');
+    } catch (_) {}
+  }
+  if (postalCode.length !== 8) postalCode = '01310100'; // Av. Paulista SP — CEP válido de último recurso
+
   const customerId = await findOrCreateCustomer(name, email, cpf, phone, apiKey);
 
   // Valor aleatório entre R$5,01 e R$9,99 (mínimo Asaas = R$5,00)
@@ -135,7 +145,7 @@ async function handleInit(db, body, apiKey) {
     name:          holderName,
     email,
     cpfCnpj:       effectiveCpf,
-    postalCode:    '00000000',
+    postalCode,
     addressNumber: 'SN',
     phone:         phone || '11999999999'
   };
