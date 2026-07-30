@@ -5,7 +5,7 @@ import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
 function initFirebase() {
-  if (!getApps().length) initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
+  if (!getApps().length) initializeApp({ credential: cert(JSON.parse(process.env.LOCARPAY_SERVICE_ACCOUNT)) });
 }
 
 const FB_PROJECT = 'locarpayapp';
@@ -84,17 +84,11 @@ async function handleGetContractPdf(req, res) {
       if (!accountId) return res.status(500).json({ error: 'Conta Assinafy não encontrada' });
 
       try {
-        const docRes = await assinafyGet(apiKey, `accounts/${accountId}/documents/${assinafyDocId}`);
-        signedUrl = docRes.data?.signed_url || docRes.data?.signedUrl || null;
+        // Endpoint correto: /v1/documents/{id} (sem account no path)
+        const docRes = await assinafyGet(apiKey, `documents/${assinafyDocId}`);
+        const artifacts = docRes.data?.artifacts;
+        signedUrl = artifacts?.certificated || artifacts?.bundle || artifacts?.original || null;
       } catch (_) {}
-
-      if (!signedUrl) {
-        const listRes = await assinafyGet(apiKey, `accounts/${accountId}/documents`);
-        const found = (listRes.data || []).find(d =>
-          (d.is_certificated || d.isCertificated) && (d.signed_url || d.signedUrl)
-        );
-        if (found) signedUrl = found.signed_url || found.signedUrl;
-      }
 
       if (!signedUrl) return res.status(404).json({ error: 'Contrato assinado não encontrado na Assinafy' });
 
