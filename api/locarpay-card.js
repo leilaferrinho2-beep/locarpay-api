@@ -1,6 +1,7 @@
 // POST /api/locarpay-card
-// step:"init"    → { tenantId, chargeId, card } → cobra micro-valor, retorna { verificationId }
-// step:"confirm" → { verificationId, amount }   → verifica valor, estorna micro, cobra aluguel
+// step:"init"           → { tenantId, chargeId, card }           → micro-cobrança no cartão, retorna { verificationId }
+// step:"verify-amount"  → { verificationId, userAmount }         → valida valor visto no banco; estorna micro se correto
+// step:"confirm"        → { verificationId, saveCard? }          → cobra aluguel real (exige amountVerified=true)
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
@@ -172,11 +173,8 @@ async function handleInit(db, body, apiKey) {
   const cardToken   = asaasCharge.creditCard?.creditCardToken || savedToken || null;
   const lastFour    = asaasCharge.creditCard?.creditCardNumber?.slice(-4) || '';
   const cardBrand   = asaasCharge.creditCard?.creditCardBrand || '';
-
-  // Cancela a micro-cobrança imediatamente — o cliente nunca vê a cobrança
-  try {
-    await asaasReq('POST', `/payments/${asaasCharge.id}/cancel`, {}, apiKey);
-  } catch (_) { /* se já capturada, tenta estornar */ }
+  // Não cancela agora — o inquilino precisa ver o valor no banco para confirmar (anti-fraude)
+  // Cancelamento acontece em handleVerifyAmount (se falhar) ou handleConfirm (após sucesso)
 
   const verRef = db.collection('cardVerifications').doc();
   const expMonth = expiryMonth ? expiryMonth.padStart(2, '0') : (savedCardFallback?.expiryMonth || '');
@@ -190,12 +188,16 @@ async function handleInit(db, body, apiKey) {
     lastFour,
     cardBrand,
     holderName,
-    holderDocument: effectiveCpf,
-    expiryMonth:    expMonth,
-    expiryYear:     expYear,
-    verified:       false,
-    createdAt:      FieldValue.serverTimestamp(),
-    expiresAt:      new Date(Date.now() + 24 * 60 * 60 * 1000)
+    holderDocument:   effectiveCpf,
+    expiryMonth:      expMonth,
+    expiryYear:       expYear,
+    microValue,                          // valor que o inquilino deve ver no banco
+    asaasPaymentId:   asaasCharge.id,    // usado para estornar após verificação
+    verifyAttempts:   0,
+    amountVerified:   false,
+    verified:         false,
+    createdAt:        FieldValue.serverTimestamp(),
+    expiresAt:        new Date(Date.now() + 30 * 60 * 1000) // 30 min para completar
   };
 
   // Guarda fallback apenas se não temos token
@@ -214,8 +216,63 @@ async function handleInit(db, body, apiKey) {
   return { verificationId: verRef.id, lastFour, cardBrand };
 }
 
+// ── VERIFY AMOUNT ─────────────────────────────────────────────────────────────
+// Inquilino informa o valor que viu no banco; backend valida
+async function handleVerifyAmount(db, body) {
+  const { verificationId, userAmount } = body;
+  if (!verificationId || userAmount == null)
+    throw Object.assign(new Error('verificationId e userAmount obrigatórios'), { status: 400 });
+
+  const verRef  = db.collection('cardVerifications').doc(verificationId);
+  const verSnap = await verRef.get();
+  if (!verSnap.exists) throw Object.assign(new Error('Verificação não encontrada'), { status: 404 });
+
+  const ver = verSnap.data();
+
+  if (ver.amountVerified)
+    return { ok: true, alreadyVerified: true };
+
+  if (new Date() > ver.expiresAt.toDate()) {
+    // Cancela micro-cobrança ao expirar
+    try { await asaasReq('POST', `/payments/${ver.asaasPaymentId}/cancel`, {}, await getAsaasKey(db, null)); } catch (_) {}
+    throw Object.assign(new Error('Verificação expirada. Recadastre o cartão.'), { status: 400 });
+  }
+
+  const MAX_ATTEMPTS = 3;
+  const attempts = (ver.verifyAttempts || 0) + 1;
+
+  const entered  = parseFloat(String(userAmount).replace(',', '.'));
+  const expected = parseFloat(ver.microValue);
+  const match    = Math.abs(entered - expected) <= 0.02; // tolerância de R$0,02
+
+  if (!match) {
+    if (attempts >= MAX_ATTEMPTS) {
+      // Cancela a micro-cobrança e bloqueia
+      try {
+        const ownerId = (await db.collection('charges').doc(ver.chargeId).get()).data()?.ownerId || await getDefaultOwnerId(db);
+        const apiKey = await getAsaasKey(db, ownerId);
+        await asaasReq('POST', `/payments/${ver.asaasPaymentId}/cancel`, {}, apiKey);
+      } catch (_) {}
+      await verRef.update({ verifyAttempts: attempts, blocked: true });
+      throw Object.assign(new Error('Número máximo de tentativas atingido. Recadastre o cartão.'), { status: 429 });
+    }
+    await verRef.update({ verifyAttempts: attempts });
+    throw Object.assign(new Error(`Valor incorreto. ${MAX_ATTEMPTS - attempts} tentativa(s) restante(s).`), { status: 422, attemptsLeft: MAX_ATTEMPTS - attempts });
+  }
+
+  // Valor correto — marca como verificado e cancela a micro-cobrança
+  try {
+    const ownerId = (await db.collection('charges').doc(ver.chargeId).get()).data()?.ownerId || await getDefaultOwnerId(db);
+    const apiKey = await getAsaasKey(db, ownerId);
+    await asaasReq('POST', `/payments/${ver.asaasPaymentId}/cancel`, {}, apiKey);
+  } catch (_) {}
+
+  await verRef.update({ verifyAttempts: attempts, amountVerified: true });
+  return { ok: true, lastFour: ver.lastFour, cardBrand: ver.cardBrand };
+}
+
 // ── CONFIRM ──────────────────────────────────────────────────────────────────
-async function handleConfirm(db, body) {
+async function handleConfirm(db, body, req) {
   const { verificationId } = body;
   if (!verificationId)
     throw Object.assign(new Error('verificationId obrigatório'), { status: 400 });
@@ -228,6 +285,9 @@ async function handleConfirm(db, body) {
 
   if (ver.verified)
     throw Object.assign(new Error('Cartão já verificado'), { status: 400 });
+
+  if (!ver.amountVerified)
+    throw Object.assign(new Error('Confirme o valor da micro-cobrança antes de pagar.'), { status: 400 });
 
   if (new Date() > ver.expiresAt.toDate())
     throw Object.assign(new Error('Verificação expirada. Recadastre o cartão.'), { status: 400 });
@@ -1905,7 +1965,8 @@ export default async function handler(req, res) {
     }
 
     if (step === 'init')           return res.status(200).json(await handleInit(db, req.body, null));
-    if (step === 'confirm')        return res.status(200).json(await handleConfirm(db, req.body));
+    if (step === 'verify-amount')  return res.status(200).json(await handleVerifyAmount(db, req.body));
+    if (step === 'confirm')        return res.status(200).json(await handleConfirm(db, req.body, req));
     if (step === 'refund')         return res.status(200).json(await handleRefund(db, req.body));
     if (step === 'preview')        return res.status(200).json(await handlePreview(db, req.body));
     if (step === 'list-saved')     return res.status(200).json(await handleListSaved(db, req.body));
