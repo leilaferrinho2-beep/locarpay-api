@@ -29,9 +29,7 @@ export default async function handler(req, res) {
   if (!tenantEmail && !contractId) return res.status(400).json({ error: 'tenantEmail ou contractId obrigatório' });
 
   try {
-    let step = 'initAdmin';
-    try { initAdmin(); } catch(e) { return res.status(500).json({ error: e.message, step }); }
-    step = 'getFirestore';
+    initAdmin();
     const db = getFirestore();
 
     let contractSnap;
@@ -80,7 +78,7 @@ export default async function handler(req, res) {
       headers: { 'X-Api-Key': apiKey, 'Accept': 'application/json' }
     });
     const accountId = accountsRes.data?.data?.[0]?.id;
-    if (!accountId) return res.status(200).json({ signed: false, status: 'no_account', _rawAccounts: accountsRes.data });
+    if (!accountId) return res.status(200).json({ signed: false, status: 'no_account' });
 
     // Status geral do documento
     const docRes = await fetchJson(
@@ -122,22 +120,11 @@ export default async function handler(req, res) {
         ownerSigned:   ownerSignedApi || contract.ownerSigned || false,
         tenantSigned:  tenantSignedApi,
         tenantSignUrl: !tenantSignedApi ? (tenantSigner?.sign_url || null) : null,
-        _debug: { signers, ownerSigner, tenantSigner, docStatus, rawDoc: docRes.data, rawAssign: assignRes.data }
+        _debug: { signers, docStatus }
       });
     }
 
-    // Sem assignmentId — tenta checar signers diretamente no documento
-    const docSigners = docRes.data?.data?.signers || [];
-    console.log('[sync-status] docSigners (sem assignmentId):', JSON.stringify(docSigners));
-    if (docSigners.length > 0) {
-      const allSigned = docSigners.every(s => s.signed_at != null || SIGNED_STATUSES.includes((s.status || '').toLowerCase()));
-      if (allSigned) {
-        await contractDoc.ref.update({ assinafyStatus: 'completed', ownerSigned: true });
-        return res.status(200).json({ signed: true, status: 'completed' });
-      }
-    }
-
-    return res.status(200).json({ signed: false, status: docStatus || 'pending', debug: { documentId, assignmentId, docStatus, docSigners } });
+    return res.status(200).json({ signed: false, status: docStatus || 'pending' });
   } catch (e) {
     console.error('[sync-status] erro:', e.message);
     return res.status(500).json({ error: e.message });
