@@ -122,7 +122,7 @@ export default async function handler(req, res) {
         ownerSigned:   ownerSignedApi || contract.ownerSigned || false,
         tenantSigned:  tenantSignedApi,
         tenantSignUrl: !tenantSignedApi ? (tenantSigner?.sign_url || null) : null,
-        _debug: { signers, ownerSigner, tenantSigner, docStatus }
+        _debug: { signers, ownerSigner, tenantSigner, docStatus, rawDoc: docRes.data, rawAssign: assignRes.data }
       });
     }
 
