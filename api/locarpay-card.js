@@ -340,6 +340,23 @@ async function handleConfirm(db, body) {
     verRef.update({ verified: true, paidAt: FieldValue.serverTimestamp(), cardFallback: FieldValue.delete() })
   ];
 
+  // Log de auditoria anti-chargeback — mantém evidências de pagamento autorizado
+  ops.push(db.collection('paymentLogs').add({
+    tenantId:       ver.tenantId,
+    chargeId:       ver.chargeId,
+    asaasChargeId:  asaasRealCharge.id,
+    holderName:     ver.holderName,
+    holderDocument: ver.holderDocument || '',
+    cardLastFour:   lastFour,
+    cardBrand:      brand,
+    amount:         value,
+    status:         paid ? 'paid' : 'under_review',
+    paidAt:         FieldValue.serverTimestamp(),
+    userAgent:      req.headers?.['user-agent'] || '',
+    ip:             req.headers?.['x-forwarded-for'] || req.socket?.remoteAddress || '',
+    termoAceito:    true // inquilino assinalou checkbox de autorização antes de confirmar
+  }));
+
   // Salvar cartão se solicitado
   if (body.saveCard && paid) {
     const savedCardData = {
