@@ -831,6 +831,7 @@
           <button class="btn-sm" onclick="openEditTenant('${t.id}')">Editar</button>
           <button class="btn-sm btn-sm-alt" onclick="openExtras('${t.id}')">+Extra</button>
           <button class="btn-sm" onclick="openHistory('${t.id}')">Histórico</button>
+          <button class="btn-sm" style="background:#c0392b;border-color:#c0392b;color:#fff" onclick="deleteTenant('${t.id}','${(t.name||'').replace(/'/g,'')}')">Excluir</button>
         </td>
       `;
       window[`openDocsModal_${t.id}`] = () => openDocsModal(t);
@@ -856,6 +857,32 @@
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     finally { btn.disabled = false; btn.textContent = 'Avisar vencimentos'; }
   }
+
+  // ── Excluir inquilino ─────────────────────────────────────────
+  window.deleteTenant = async function(tenantId, tenantName) {
+    if (!confirm(`Excluir "${tenantName || tenantId}" e todos os dados relacionados?\n\nEssa ação não pode ser desfeita.`)) return;
+    try {
+      const { deleteDoc, writeBatch } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+      const batch = writeBatch(db);
+
+      // Cobranças do inquilino
+      const chargesSnap = await getDocs(query(collection(db, 'charges'), where('tenantId', '==', tenantId)));
+      chargesSnap.docs.forEach(d => batch.delete(d.ref));
+
+      // Contratos do inquilino
+      const contractsSnap = await getDocs(query(collection(db, 'contracts'), where('tenantId', '==', tenantId)));
+      contractsSnap.docs.forEach(d => batch.delete(d.ref));
+
+      // Documento do usuário
+      batch.delete(doc(db, 'users', tenantId));
+
+      await batch.commit();
+      alert(`Inquilino "${tenantName || tenantId}" excluído.`);
+      await loadTenants();
+    } catch(e) {
+      alert('Erro ao excluir: ' + e.message);
+    }
+  };
 
   // ── Histórico de cobranças ────────────────────────────────────
   async function openHistory(tenantId) {
