@@ -116,7 +116,18 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.status(200).json({ signed: false, status: docStatus || 'pending' });
+    // Sem assignmentId — tenta checar signers diretamente no documento
+    const docSigners = docRes.data?.data?.signers || [];
+    console.log('[sync-status] docSigners (sem assignmentId):', JSON.stringify(docSigners));
+    if (docSigners.length > 0) {
+      const allSigned = docSigners.every(s => s.signed_at != null || SIGNED_STATUSES.includes((s.status || '').toLowerCase()));
+      if (allSigned) {
+        await contractDoc.ref.update({ assinafyStatus: 'completed', ownerSigned: true });
+        return res.status(200).json({ signed: true, status: 'completed' });
+      }
+    }
+
+    return res.status(200).json({ signed: false, status: docStatus || 'pending', debug: { documentId, assignmentId, docStatus, docSigners } });
   } catch (e) {
     console.error('[sync-status] erro:', e.message);
     return res.status(500).json({ error: e.message });
