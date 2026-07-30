@@ -25,21 +25,28 @@ export default async function handler(req, res) {
   if (req.method === 'GET') return res.status(200).json({ ok: true, endpoint: 'locarpay-sync-status' });
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { tenantEmail } = req.body || {};
-  if (!tenantEmail) return res.status(400).json({ error: 'tenantEmail obrigatório' });
-
-  const email = tenantEmail.toLowerCase().trim();
+  const { tenantEmail, contractId } = req.body || {};
+  if (!tenantEmail && !contractId) return res.status(400).json({ error: 'tenantEmail ou contractId obrigatório' });
 
   try {
     initAdmin();
     const db = getFirestore();
 
-    // Busca contrato ativo pelo email do inquilino
-    const contractSnap = await db.collection('contracts')
-      .where('tenantEmail', '==', email)
-      .where('active', '==', true)
-      .limit(1)
-      .get();
+    let contractSnap;
+    if (contractId) {
+      const doc = await db.collection('contracts').doc(contractId).get();
+      contractSnap = doc.exists ? { empty: false, docs: [doc] } : { empty: true };
+    } else {
+      const email = tenantEmail.toLowerCase().trim();
+      const snap = await db.collection('contracts')
+        .where('tenantEmail', '==', email)
+        .where('active', '==', true)
+        .limit(1)
+        .get();
+      contractSnap = snap;
+    }
+
+    const email = contractId ? null : tenantEmail.toLowerCase().trim();
 
     if (contractSnap.empty) {
       return res.status(404).json({ error: 'Contrato não encontrado' });
@@ -112,7 +119,8 @@ export default async function handler(req, res) {
         signed:        false,
         ownerSigned:   ownerSignedApi || contract.ownerSigned || false,
         tenantSigned:  tenantSignedApi,
-        tenantSignUrl: !tenantSignedApi ? (tenantSigner?.sign_url || null) : null
+        tenantSignUrl: !tenantSignedApi ? (tenantSigner?.sign_url || null) : null,
+        _debug: { signers, ownerSigner, tenantSigner, docStatus }
       });
     }
 
