@@ -280,11 +280,7 @@ async function handleVerifyAmount(db, body) {
     throw Object.assign(new Error(`Valor incorreto. ${MAX_ATTEMPTS - attempts} tentativa(s) restante(s).`), { status: 422, attemptsLeft: MAX_ATTEMPTS - attempts });
   }
 
-  // Valor correto — cancela/estorna a micro-cobrança (cancel se pending, refund se já capturada)
-  const ownerId = (await db.collection('charges').doc(ver.chargeId).get()).data()?.ownerId || await getDefaultOwnerId(db);
-  const verApiKey = await getAsaasKey(db, ownerId);
-  await cancelOrRefundMicro(ver.asaasPaymentId, verApiKey);
-
+  // Valor correto — marca como verificado (estorno ocorre APÓS pagamento real no handleConfirm)
   await verRef.update({ verifyAttempts: attempts, amountVerified: true });
   return { ok: true, lastFour: ver.lastFour, cardBrand: ver.cardBrand };
 }
@@ -464,6 +460,11 @@ async function handleConfirm(db, body, req) {
   }
 
   await Promise.all(ops);
+
+  // Estorna a micro-cobrança APÓS o pagamento real confirmar (evita bloqueio por velocidade)
+  if (ver.asaasPaymentId) {
+    cancelOrRefundMicro(ver.asaasPaymentId, apiKey).catch(() => {});
+  }
 
   return {
     paid,
