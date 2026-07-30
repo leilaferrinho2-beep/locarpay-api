@@ -29,7 +29,9 @@ export default async function handler(req, res) {
   if (!tenantEmail && !contractId) return res.status(400).json({ error: 'tenantEmail ou contractId obrigatório' });
 
   try {
-    initAdmin();
+    let step = 'initAdmin';
+    try { initAdmin(); } catch(e) { return res.status(500).json({ error: e.message, step }); }
+    step = 'getFirestore';
     const db = getFirestore();
 
     let contractSnap;
