@@ -80,7 +80,7 @@ export default async function handler(req, res) {
       headers: { 'X-Api-Key': apiKey, 'Accept': 'application/json' }
     });
     const accountId = accountsRes.data?.data?.[0]?.id;
-    if (!accountId) return res.status(200).json({ signed: false, status: 'no_account' });
+    if (!accountId) return res.status(200).json({ signed: false, status: 'no_account', _rawAccounts: accountsRes.data });
 
     // Status geral do documento
     const docRes = await fetchJson(
