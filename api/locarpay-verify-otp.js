@@ -105,6 +105,7 @@ export default async function handler(req, res) {
       } catch (_) {}
     }
 
+    await auth.setCustomUserClaims(uid, { role, ownerId });
     const customToken = await auth.createCustomToken(uid, { role, ownerId });
     return res.status(200).json({ ok: true, customToken, role, ownerId });
   } catch (e) {

@@ -3,28 +3,13 @@
 
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
-const FB_PROJECT = 'locarpayapp';
-const FB_API_KEY = process.env.LOCARPAY_FIREBASE_API_KEY;
-const FS_BASE = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`;
-
-async function salvarOtp(email, otp) {
-  const id = Buffer.from(email).toString('base64').replace(/[^a-zA-Z0-9]/g, '_');
-  const expiresAt = Date.now() + 60 * 60 * 1000; // 1 hora
-  const url = `${FS_BASE}/loginOtps/${id}?key=${FB_API_KEY}`;
-  const resp = await fetch(url, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      fields: {
-        email: { stringValue: email },
-        otp: { stringValue: otp },
-        expiresAt: { integerValue: String(expiresAt) },
-        used: { booleanValue: false }
-      }
-    })
-  });
-  if (!resp.ok) throw new Error('Erro ao salvar OTP no Firestore');
+function initAdmin() {
+  if (getApps().length > 0) return;
+  const serviceAccount = JSON.parse(process.env.LOCARPAY_SERVICE_ACCOUNT);
+  initializeApp({ credential: cert(serviceAccount) });
 }
 
 async function enviarEmail(email, otp) {
@@ -61,59 +46,6 @@ async function enviarEmail(email, otp) {
   });
 }
 
-async function verificarLicenca(email) {
-  const url = `${FS_BASE}/licenses/${encodeURIComponent(email)}?key=${FB_API_KEY}`;
-  const resp = await fetch(url);
-  if (!resp.ok) return false;
-  const data = await resp.json();
-  const active = data?.fields?.active?.booleanValue;
-  return active === true;
-}
-
-async function verificarEmailCadastrado(email) {
-  const url = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents:runQuery?key=${FB_API_KEY}`;
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      structuredQuery: {
-        from: [{ collectionId: 'users' }],
-        where: {
-          compositeFilter: {
-            op: 'AND',
-            filters: [
-              { fieldFilter: { field: { fieldPath: 'email' }, op: 'EQUAL', value: { stringValue: email } } },
-              { fieldFilter: { field: { fieldPath: 'role' }, op: 'EQUAL', value: { stringValue: 'tenant' } } }
-            ]
-          }
-        },
-        limit: 1
-      }
-    })
-  });
-  if (!resp.ok) return false;
-  const data = await resp.json();
-  return Array.isArray(data) && data.some(item => item.document != null);
-}
-
-async function verificarOwner(email) {
-  const url = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents:runQuery?key=${FB_API_KEY}`;
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      structuredQuery: {
-        from: [{ collectionId: 'owners' }],
-        where: { fieldFilter: { field: { fieldPath: 'email' }, op: 'EQUAL', value: { stringValue: email } } },
-        limit: 1
-      }
-    })
-  });
-  if (!resp.ok) return false;
-  const data = await resp.json();
-  return Array.isArray(data) && data.some(item => item.document != null);
-}
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -125,21 +57,34 @@ export default async function handler(req, res) {
   if (!email) return res.status(400).json({ error: 'Email obrigatório' });
 
   try {
+    initAdmin();
+    const db = getFirestore();
+
     const emailNorm = email.trim().toLowerCase();
 
-    // Verifica se é admin (licença, owner) ou inquilino cadastrado
-    const [temLicenca, temCadastro, temOwner] = await Promise.all([
-      verificarLicenca(emailNorm),
-      verificarEmailCadastrado(emailNorm),
-      verificarOwner(emailNorm)
+    // Verifica se é admin (licença, owner) ou inquilino cadastrado — Admin SDK bypassa as regras do Firestore
+    const [licenseDoc, ownerSnap, tenantSnap] = await Promise.all([
+      db.collection('licenses').doc(emailNorm).get(),
+      db.collection('owners').where('email', '==', emailNorm).limit(1).get(),
+      db.collection('users').where('email', '==', emailNorm).limit(1).get()
     ]);
 
-    if (!temLicenca && !temCadastro && !temOwner) {
+    const temLicenca = licenseDoc.exists && licenseDoc.data().active === true;
+    const temOwner   = !ownerSnap.empty;
+    const temCadastro = !tenantSnap.empty; // qualquer role na coleção users
+
+    if (!temLicenca && !temOwner && !temCadastro) {
       return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com o proprietário.' });
     }
 
     const otp = String(Math.floor(100000 + crypto.randomInt(900000)));
-    await salvarOtp(emailNorm, otp);
+    const id = Buffer.from(emailNorm).toString('base64').replace(/[^a-zA-Z0-9]/g, '_');
+    await db.collection('loginOtps').doc(id).set({
+      email: emailNorm,
+      otp,
+      expiresAt: Date.now() + 60 * 60 * 1000,
+      used: false
+    });
     await enviarEmail(email.trim(), otp);
     return res.status(200).json({ ok: true });
   } catch (e) {
