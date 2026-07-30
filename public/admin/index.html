@@ -31,11 +31,12 @@
 
   function $(id) { return document.getElementById(id); }
 
+  const SECTION_DISPLAY = { 'login-section': 'grid', 'dashboard-section': 'flex', 'blocked-section': 'flex' };
   function showSection(id) {
     ['login-section','dashboard-section','blocked-section'].forEach(s => {
       $(s).style.display = 'none';
     });
-    $(id).style.display = id === 'dashboard-section' ? 'flex' : 'block';
+    $(id).style.display = SECTION_DISPLAY[id] || 'block';
   }
 
   function setTab(tab) {
