@@ -7,7 +7,7 @@ import { getFirestore }                  from 'firebase-admin/firestore';
 
 function initAdmin() {
   if (getApps().length > 0) return;
-  initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
+  initializeApp({ credential: cert(JSON.parse(process.env.LOCARPAY_SERVICE_ACCOUNT)) });
 }
 
 const DONE_STATUSES = ['completed', 'signed', 'finished', 'done', 'approved', 'executed', 'manual', 'concluded', 'closed', 'active', 'certificated'];
