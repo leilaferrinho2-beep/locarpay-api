@@ -67,16 +67,16 @@ export default async function handler(req, res) {
     }
 
     // Conta Assinafy
-    const accountsRes = await fetchJson('https://app.assinafy.com.br/api/v1/accounts', {
-      headers: { Authorization: `Bearer ${apiKey}` }
+    const accountsRes = await fetchJson('https://api.assinafy.com.br/v1/accounts', {
+      headers: { 'X-Api-Key': apiKey, 'Accept': 'application/json' }
     });
     const accountId = accountsRes.data?.data?.[0]?.id;
     if (!accountId) return res.status(200).json({ signed: false, status: 'no_account' });
 
     // Status geral do documento
     const docRes = await fetchJson(
-      `https://app.assinafy.com.br/api/v1/accounts/${accountId}/documents/${documentId}`,
-      { headers: { Authorization: `Bearer ${apiKey}` } }
+      `https://api.assinafy.com.br/v1/accounts/${accountId}/documents/${documentId}`,
+      { headers: { 'X-Api-Key': apiKey, 'Accept': 'application/json' } }
     );
     const docStatus = (docRes.data?.data?.status || '').toLowerCase();
     if (DONE_STATUSES.some(s => docStatus.includes(s))) {
@@ -90,8 +90,8 @@ export default async function handler(req, res) {
     // Status individual dos signatários
     if (assignmentId) {
       const assignRes = await fetchJson(
-        `https://app.assinafy.com.br/api/v1/accounts/${accountId}/documents/${documentId}/assignments/${assignmentId}`,
-        { headers: { Authorization: `Bearer ${apiKey}` } }
+        `https://api.assinafy.com.br/v1/accounts/${accountId}/documents/${documentId}/assignments/${assignmentId}`,
+        { headers: { 'X-Api-Key': apiKey, 'Accept': 'application/json' } }
       );
       const signers = assignRes.data?.data?.signers || [];
 
