@@ -1,146 +1,124 @@
 // POST /api/locarpay-sync-status  { tenantEmail }
-// Consulta Assinafy, detecta ownerSigned e atualiza Firestore
+// Verifica status de assinaturas via Assinafy e atualiza Firestore.
+// Usado pelo app do inquilino ao clicar "Verificar assinaturas".
 
-const FB_PROJECT = 'locarpayapp';
-const FB_API_KEY = process.env.LOCARPAY_FIREBASE_API_KEY;
-const FS_BASE = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`;
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getFirestore }                  from 'firebase-admin/firestore';
 
-async function fsQuery(collectionId, field, value) {
-  const r = await fetch(`${FS_BASE}:runQuery?key=${FB_API_KEY}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      structuredQuery: {
-        from: [{ collectionId }],
-        where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: value } } },
-        limit: 1
-      }
-    })
-  });
-  const rows = await r.json();
-  return rows.find(row => row.document)?.document || null;
+function initAdmin() {
+  if (getApps().length > 0) return;
+  initializeApp({ credential: cert(JSON.parse(process.env.LOCARPAY_SERVICE_ACCOUNT)) });
 }
 
-async function fsPatch(path, fields) {
-  const mask = Object.keys(fields).map(f => `updateMask.fieldPaths=${f}`).join('&');
-  const r = await fetch(`${FS_BASE}/${path}?key=${FB_API_KEY}&${mask}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields })
-  });
-  if (!r.ok) throw new Error(`Firestore PATCH: ${await r.text()}`);
-  return r.json();
-}
+const DONE_STATUSES = ['completed', 'signed', 'finished', 'done', 'approved', 'executed', 'manual', 'concluded', 'closed', 'active', 'certificated'];
+const SIGNED_STATUSES = ['signed', 'completed', 'approved', 'finished', 'done', 'concluded', 'active'];
 
-async function assinafyGet(apiKey, path) {
-  const r = await fetch(`https://api.assinafy.com.br/v1/${path}`, {
-    headers: { 'X-Api-Key': apiKey, 'Accept': 'application/json' }
-  });
-  const text = await r.text();
-  try { return JSON.parse(text); } catch { return { raw: text }; }
+async function fetchJson(url, options = {}) {
+  const res = await fetch(url, options);
+  const text = await res.text();
+  try { return { ok: res.ok, status: res.status, data: JSON.parse(text) }; }
+  catch { return { ok: res.ok, status: res.status, data: text }; }
 }
-
-const SIGNED_STATUSES = ['signed', 'completed', 'approved', 'finished', 'done'];
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method === 'GET') return res.status(200).json({ ok: true, endpoint: 'locarpay-sync-status' });
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { tenantEmail } = req.body || {};
   if (!tenantEmail) return res.status(400).json({ error: 'tenantEmail obrigatório' });
 
+  const email = tenantEmail.toLowerCase().trim();
+
   try {
-    // 1. API key Assinafy
-    const configSnap = await fetch(`${FS_BASE}/config/assinafy?key=${FB_API_KEY}`).then(r => r.json());
-    const apiKey = configSnap?.fields?.apiKey?.stringValue;
-    if (!apiKey) return res.status(500).json({ error: 'API key Assinafy não configurada' });
+    initAdmin();
+    const db = getFirestore();
 
-    // 2. Contrato no Firestore
-    const contractDoc = await fsQuery('contracts', 'tenantEmail', tenantEmail);
-    if (!contractDoc) return res.status(404).json({ error: 'Contrato não encontrado' });
+    // Busca contrato ativo pelo email do inquilino
+    const contractSnap = await db.collection('contracts')
+      .where('tenantEmail', '==', email)
+      .where('active', '==', true)
+      .limit(1)
+      .get();
 
-    const contractId = contractDoc.name.split('/').pop();
-    const fields = contractDoc.fields || {};
-    const assinafyDocumentId = fields.assinafyDocumentId?.stringValue || '';
-    const assinafyAssignmentId = fields.assinafyAssignmentId?.stringValue || '';
-    const currentOwnerSigned = fields.ownerSigned?.booleanValue || false;
-
-    const result = { contractId, assinafyDocumentId, assinafyAssignmentId, currentOwnerSigned };
-
-    if (!assinafyDocumentId || !assinafyAssignmentId) {
-      return res.status(200).json({ ...result, error: 'IDs Assinafy não preenchidos no contrato' });
+    if (contractSnap.empty) {
+      return res.status(404).json({ error: 'Contrato não encontrado' });
     }
 
-    // 3. Consulta Assinafy - tenta múltiplos endpoints
-    const accountsResp = await assinafyGet(apiKey, 'accounts');
-    const accountId = accountsResp?.data?.[0]?.id;
-    result.accountId = accountId;
+    const contractDoc = contractSnap.docs[0];
+    const contract    = contractDoc.data();
 
-    const docResp = accountId
-      ? await assinafyGet(apiKey, `accounts/${accountId}/documents/${assinafyDocumentId}`)
-      : null;
-    result.docStatus = docResp?.data?.status;
-    result.rawDocResp = docResp;
+    // Já está marcado como concluído no Firestore
+    if (DONE_STATUSES.includes((contract.assinafyStatus || '').toLowerCase())) {
+      return res.status(200).json({ signed: true, status: contract.assinafyStatus });
+    }
 
-    // Lista todos os documentos
-    const allDocsResp = accountId ? await assinafyGet(apiKey, `accounts/${accountId}/documents`) : null;
-    const allDocs = allDocsResp?.data || [];
-    result.allDocsCount = allDocs.length;
+    const documentId   = contract.assinafyDocumentId;
+    const assignmentId = contract.assinafyAssignmentId;
+    if (!documentId) {
+      return res.status(200).json({ signed: false, status: 'no_document' });
+    }
 
-    // Se o documento do contrato não existe (404), busca na lista pelo email do inquilino
-    if (docResp?.status === 404 && allDocs.length > 0) {
-      const emailLc = tenantEmail.toLowerCase();
-      const found = allDocs.find(doc => {
-        if (!['certificated', 'signed', 'completed'].includes(doc.status?.toLowerCase())) return false;
-        return (doc.assignment?.signers || []).some(s => s.email?.toLowerCase() === emailLc);
-      });
-      if (found) {
-        const signedUrl = found.artifacts?.certificated || found.artifacts?.bundle || found.download_url;
-        result.fixedDocId = found.id;
-        result.fixedSignedUrl = signedUrl;
-        if (signedUrl) {
-          await fsPatch(`contracts/${contractId}`, {
-            assinafyDocumentId: { stringValue: found.id },
-            signedFileUrl: { stringValue: signedUrl },
-            assinafyStatus: { stringValue: found.status }
-          });
-          result.firestoreFixed = true;
-        }
+    // Busca API key da Assinafy (Admin SDK tem acesso a config/)
+    const configDoc = await db.collection('config').doc('assinafy').get();
+    const apiKey    = configDoc.exists ? configDoc.data().apiKey : null;
+    if (!apiKey) {
+      return res.status(200).json({ signed: false, status: 'no_api_key' });
+    }
+
+    // Conta Assinafy
+    const accountsRes = await fetchJson('https://app.assinafy.com.br/api/v1/accounts', {
+      headers: { Authorization: `Bearer ${apiKey}` }
+    });
+    const accountId = accountsRes.data?.data?.[0]?.id;
+    if (!accountId) return res.status(200).json({ signed: false, status: 'no_account' });
+
+    // Status geral do documento
+    const docRes = await fetchJson(
+      `https://app.assinafy.com.br/api/v1/accounts/${accountId}/documents/${documentId}`,
+      { headers: { Authorization: `Bearer ${apiKey}` } }
+    );
+    const docStatus = (docRes.data?.data?.status || '').toLowerCase();
+    if (DONE_STATUSES.some(s => docStatus.includes(s))) {
+      const updates = { assinafyStatus: 'completed', ownerSigned: true };
+      const signedUrl = docRes.data?.data?.signed_url || docRes.data?.data?.signedUrl;
+      if (signedUrl) updates.signedFileUrl = signedUrl;
+      await contractDoc.ref.update(updates);
+      return res.status(200).json({ signed: true, status: 'completed' });
+    }
+
+    // Status individual dos signatários
+    if (assignmentId) {
+      const assignRes = await fetchJson(
+        `https://app.assinafy.com.br/api/v1/accounts/${accountId}/documents/${documentId}/assignments/${assignmentId}`,
+        { headers: { Authorization: `Bearer ${apiKey}` } }
+      );
+      const signers = assignRes.data?.data?.signers || [];
+
+      const ownerSigner  = signers.find(s => s.step === 1) || signers[0];
+      const tenantSigner = signers.find(s => s.step === 2) || signers[1];
+
+      const ownerSignedApi  = ownerSigner?.signed_at  != null || SIGNED_STATUSES.includes((ownerSigner?.status  || '').toLowerCase());
+      const tenantSignedApi = tenantSigner?.signed_at != null || SIGNED_STATUSES.includes((tenantSigner?.status || '').toLowerCase());
+
+      if (ownerSignedApi && tenantSignedApi) {
+        await contractDoc.ref.update({ assinafyStatus: 'completed', ownerSigned: true });
+        return res.status(200).json({ signed: true, status: 'completed' });
       }
+      if (ownerSignedApi && !contract.ownerSigned) {
+        await contractDoc.ref.update({ ownerSigned: true });
+      }
+      return res.status(200).json({
+        signed:        false,
+        ownerSigned:   ownerSignedApi || contract.ownerSigned || false,
+        tenantSigned:  tenantSignedApi,
+        tenantSignUrl: !tenantSignedApi ? (tenantSigner?.sign_url || null) : null
+      });
     }
 
-    const assignListResp = await assinafyGet(apiKey, `documents/${assinafyDocumentId}/assignments`);
-    result.rawAssignList = assignListResp;
-
-    // Tenta com accountId (formato correto)
-    const assignResp = accountId
-      ? await assinafyGet(apiKey, `accounts/${accountId}/documents/${assinafyDocumentId}/assignments/${assinafyAssignmentId}`)
-      : await assinafyGet(apiKey, `documents/${assinafyDocumentId}/assignments/${assinafyAssignmentId}`);
-    result.rawAssignResp = assignResp;
-
-    const signers = assignResp?.data?.signers || [];
-    result.signers = signers.map(s => ({ email: s.email, status: s.status, step: s.step }));
-
-    const tenantEmailLc = tenantEmail.toLowerCase();
-    const ownerSigner = signers.find(s => s.email?.toLowerCase() !== tenantEmailLc);
-    const ownerSignedApi = SIGNED_STATUSES.includes(ownerSigner?.status?.toLowerCase() || '');
-
-    result.ownerSignerStatus = ownerSigner?.status;
-    result.ownerSignedApi = ownerSignedApi;
-
-    // 4. Atualiza Firestore se necessário
-    if (ownerSignedApi && !currentOwnerSigned) {
-      await fsPatch(`contracts/${contractId}`, { ownerSigned: { booleanValue: true } });
-      result.updated = true;
-    } else {
-      result.updated = false;
-    }
-
-    return res.status(200).json(result);
+    return res.status(200).json({ signed: false, status: docStatus || 'pending' });
   } catch (e) {
+    console.error('[sync-status] erro:', e.message);
     return res.status(500).json({ error: e.message });
   }
 }
