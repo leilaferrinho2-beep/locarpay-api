@@ -858,6 +858,44 @@
     finally { btn.disabled = false; btn.textContent = 'Avisar vencimentos'; }
   }
 
+  // ── Limpar cobranças órfãs ────────────────────────────────────
+  async function cleanOrphanCharges() {
+    const btn = $('btn-clean-orphans');
+    btn.disabled = true; btn.textContent = 'Limpando...';
+    try {
+      const { writeBatch } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+
+      // Carrega todos os tenantIds existentes
+      const usersSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'tenant')));
+      const validIds = new Set(usersSnap.docs.map(d => d.id));
+
+      // Carrega todas as cobranças do owner atual
+      const chargesQuery = currentOwnerId
+        ? query(collection(db, 'charges'), where('ownerId', '==', currentOwnerId))
+        : query(collection(db, 'charges'));
+      const chargesSnap = await getDocs(chargesQuery);
+
+      const orphans = chargesSnap.docs.filter(d => !validIds.has(d.data().tenantId));
+      if (orphans.length === 0) { alert('Nenhuma cobrança órfã encontrada.'); return; }
+
+      if (!confirm(`Encontradas ${orphans.length} cobranças de inquilinos removidos. Excluir?`)) return;
+
+      // Deleta em lotes de 500 (limite do Firestore batch)
+      for (let i = 0; i < orphans.length; i += 500) {
+        const batch = writeBatch(db);
+        orphans.slice(i, i + 500).forEach(d => batch.delete(d.ref));
+        await batch.commit();
+      }
+
+      alert(`${orphans.length} cobranças órfãs removidas.`);
+      await loadTenants();
+    } catch(e) {
+      alert('Erro: ' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '🗑 Limpar órfãs';
+    }
+  }
+
   // ── Excluir inquilino ─────────────────────────────────────────
   window.deleteTenant = async function(tenantId, tenantName) {
     if (!confirm(`Excluir "${tenantName || tenantId}" e todos os dados relacionados?\n\nEssa ação não pode ser desfeita.`)) return;
@@ -1488,6 +1526,7 @@
   $('btn-generate-charges').addEventListener('click', generateCharges);
   $('btn-notify-upcoming').addEventListener('click', notifyUpcoming);
   $('btn-notify-overdue').addEventListener('click', notifyOverdue);
+  $('btn-clean-orphans').addEventListener('click', cleanOrphanCharges);
   $('tenant-search').addEventListener('input', e => { searchQuery = e.target.value; filterAndRender(); });
   $('btn-monthly-report').addEventListener('click', sendMonthlyReport);
   $('btn-annual-receipt').addEventListener('click', sendAnnualReceipt);
@@ -1742,6 +1781,7 @@
       <button class="btn btn-secondary" id="btn-generate-charges" title="Gera cobranças do mês atual para todos os contratos ativos">Gerar cobranças</button>
       <button class="btn btn-secondary" id="btn-notify-upcoming" title="Avisa inquilinos com cobrança vencendo em 3 dias">Avisar vencimentos</button>
       <button class="btn btn-secondary" id="btn-notify-overdue" title="Marca cobranças vencidas e envia push para inquilinos em atraso">Notificar vencidos</button>
+      <button class="btn btn-secondary" id="btn-clean-orphans" style="border-color:#c0392b;color:#e57373" title="Exclui cobranças de inquilinos que não existem mais">🗑 Limpar órfãs</button>
       <button class="btn btn-secondary" id="btn-monthly-report" title="Envia relatório mensal por email">Relatório</button>
       <button class="btn btn-secondary" id="btn-annual-receipt" title="Envia comprovante anual de pagamentos para todos os inquilinos">Comp. Anual</button>
       <button class="btn btn-secondary" id="btn-notify-expiry" title="Avisa o owner sobre contratos vencendo em 30 dias">Contratos</button>
