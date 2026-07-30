@@ -351,7 +351,8 @@ async function handleConfirm(db, body, req) {
 
   const userSnap2 = await db.collection('users').doc(ver.tenantId).get();
   const userData2  = userSnap2.data() || {};
-  const cpfConfirm   = (userData2.cpf   || '').replace(/\D/g, '');
+  // Usa o CPF digitado no formulário (titular do cartão) em vez do CPF do perfil
+  const cpfConfirm   = (ver.holderDocument || userData2.cpf || '').replace(/\D/g, '');
   const emailConfirm = userData2.email  || '';
   const phoneConfirm = (userData2.phone || '').replace(/\D/g, '') || '11999999999';
 
