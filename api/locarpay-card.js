@@ -226,6 +226,18 @@ async function handleInit(db, body, apiKey) {
   return { verificationId: verRef.id, lastFour, cardBrand };
 }
 
+// Cancela ou estorna a micro-cobrança — tenta cancel (pending) e depois refund (confirmed)
+async function cancelOrRefundMicro(asaasPaymentId, apiKey) {
+  try {
+    await asaasReq('POST', `/payments/${asaasPaymentId}/cancel`, {}, apiKey);
+    return;
+  } catch (_) {}
+  // Se cancel falhou (pagamento já foi capturado), tenta refund
+  try {
+    await asaasReq('POST', `/payments/${asaasPaymentId}/refund`, {}, apiKey);
+  } catch (_) {}
+}
+
 // ── VERIFY AMOUNT ─────────────────────────────────────────────────────────────
 // Inquilino informa o valor que viu no banco; backend valida
 async function handleVerifyAmount(db, body) {
@@ -243,8 +255,9 @@ async function handleVerifyAmount(db, body) {
     return { ok: true, alreadyVerified: true };
 
   if (new Date() > ver.expiresAt.toDate()) {
-    // Cancela micro-cobrança ao expirar
-    try { await asaasReq('POST', `/payments/${ver.asaasPaymentId}/cancel`, {}, await getAsaasKey(db, null)); } catch (_) {}
+    const ownerId = (await db.collection('charges').doc(ver.chargeId).get()).data()?.ownerId || await getDefaultOwnerId(db);
+    const expApiKey = await getAsaasKey(db, ownerId);
+    await cancelOrRefundMicro(ver.asaasPaymentId, expApiKey);
     throw Object.assign(new Error('Verificação expirada. Recadastre o cartão.'), { status: 400 });
   }
 
@@ -257,12 +270,9 @@ async function handleVerifyAmount(db, body) {
 
   if (!match) {
     if (attempts >= MAX_ATTEMPTS) {
-      // Cancela a micro-cobrança e bloqueia
-      try {
-        const ownerId = (await db.collection('charges').doc(ver.chargeId).get()).data()?.ownerId || await getDefaultOwnerId(db);
-        const apiKey = await getAsaasKey(db, ownerId);
-        await asaasReq('POST', `/payments/${ver.asaasPaymentId}/cancel`, {}, apiKey);
-      } catch (_) {}
+      const ownerId = (await db.collection('charges').doc(ver.chargeId).get()).data()?.ownerId || await getDefaultOwnerId(db);
+      const blockApiKey = await getAsaasKey(db, ownerId);
+      await cancelOrRefundMicro(ver.asaasPaymentId, blockApiKey);
       await verRef.update({ verifyAttempts: attempts, blocked: true });
       throw Object.assign(new Error('Número máximo de tentativas atingido. Recadastre o cartão.'), { status: 429 });
     }
@@ -270,12 +280,10 @@ async function handleVerifyAmount(db, body) {
     throw Object.assign(new Error(`Valor incorreto. ${MAX_ATTEMPTS - attempts} tentativa(s) restante(s).`), { status: 422, attemptsLeft: MAX_ATTEMPTS - attempts });
   }
 
-  // Valor correto — marca como verificado e cancela a micro-cobrança
-  try {
-    const ownerId = (await db.collection('charges').doc(ver.chargeId).get()).data()?.ownerId || await getDefaultOwnerId(db);
-    const apiKey = await getAsaasKey(db, ownerId);
-    await asaasReq('POST', `/payments/${ver.asaasPaymentId}/cancel`, {}, apiKey);
-  } catch (_) {}
+  // Valor correto — cancela/estorna a micro-cobrança (cancel se pending, refund se já capturada)
+  const ownerId = (await db.collection('charges').doc(ver.chargeId).get()).data()?.ownerId || await getDefaultOwnerId(db);
+  const verApiKey = await getAsaasKey(db, ownerId);
+  await cancelOrRefundMicro(ver.asaasPaymentId, verApiKey);
 
   await verRef.update({ verifyAttempts: attempts, amountVerified: true });
   return { ok: true, lastFour: ver.lastFour, cardBrand: ver.cardBrand };
