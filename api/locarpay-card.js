@@ -162,14 +162,17 @@ async function handleInit(db, body, apiKey) {
     phone:         phone || '11999999999'
   };
 
+  // Gera valor aleatório de micro-cobrança para verificação (R$1,00 a R$9,99)
+  const microAmount = parseFloat((1 + Math.random() * 8.99).toFixed(2));
+
   let chargeBody;
   if (savedToken) {
     chargeBody = {
       customer:             customerId,
       billingType:          'CREDIT_CARD',
-      value:                realValue,
+      value:                microAmount,
       dueDate,
-      description:          `Aluguel ${dueDate.slice(0, 7)}`,
+      description:          'Verificação de cartão iLocarPay',
       creditCardToken:      savedToken,
       creditCardHolderInfo: holderInfoBase
     };
@@ -177,9 +180,9 @@ async function handleInit(db, body, apiKey) {
     chargeBody = {
       customer:             customerId,
       billingType:          'CREDIT_CARD',
-      value:                realValue,
+      value:                microAmount,
       dueDate,
-      description:          `Aluguel ${dueDate.slice(0, 7)}`,
+      description:          'Verificação de cartão iLocarPay',
       creditCard: {
         holderName,
         number:      number.replace(/\D/g, ''),
@@ -191,10 +194,10 @@ async function handleInit(db, body, apiKey) {
     };
   }
 
-  const asaasCharge = await asaasReq('POST', '/payments', chargeBody, apiKey);
-  const cardToken   = asaasCharge.creditCard?.creditCardToken || savedToken || null;
-  const lastFour    = asaasCharge.creditCard?.creditCardNumber?.slice(-4) || '';
-  const cardBrand   = asaasCharge.creditCard?.creditCardBrand || '';
+  const microCharge = await asaasReq('POST', '/payments', chargeBody, apiKey);
+  const cardToken   = microCharge.creditCard?.creditCardToken || savedToken || null;
+  const lastFour    = microCharge.creditCard?.creditCardNumber?.slice(-4) || '';
+  const cardBrand   = microCharge.creditCard?.creditCardBrand || '';
 
   const verRef   = db.collection('cardVerifications').doc();
   const expMonth = expiryMonth ? expiryMonth.padStart(2, '0') : (savedCardFallback?.expiryMonth || '');
@@ -211,8 +214,12 @@ async function handleInit(db, body, apiKey) {
     holderDocument: effectiveCpf,
     expiryMonth:    expMonth,
     expiryYear:     expYear,
-    realValue,                        // valor real cobrado — inquilino deve confirmar este valor
-    asaasPaymentId: asaasCharge.id,   // se valor errado, estornamos aqui
+    postalCode,
+    email,
+    phone:          phone || '',
+    microAmount,                         // valor de verificação — inquilino deve confirmar este valor
+    microPaymentId: microCharge.id,      // estornamos aqui após verificação bem-sucedida
+    realValue,                           // valor real do aluguel — cobrado no confirm
     verifyAttempts: 0,
     amountVerified: false,
     verified:       false,
@@ -273,47 +280,28 @@ async function handleVerifyAmount(db, body, req) {
   }
 
   const entered  = parseFloat(String(userAmount).replace(',', '.'));
-  const expected = parseFloat(ver.realValue);
+  const expected = parseFloat(ver.microAmount);
   const match    = Math.abs(entered - expected) <= 0.02;
 
   if (!match) {
-    // Valor errado → estorna o pagamento real e bloqueia
-    await cancelOrRefundMicro(ver.asaasPaymentId, verApiKey);
+    // Valor errado → estorna a micro-cobrança e bloqueia
+    await cancelOrRefundMicro(ver.microPaymentId, verApiKey);
     await verRef.update({ verifyAttempts: (ver.verifyAttempts || 0) + 1, blocked: true });
-    throw Object.assign(new Error('Valor incorreto. O pagamento foi estornado. Recadastre o cartão.'), { status: 422 });
+    throw Object.assign(new Error('Valor incorreto. A micro-cobrança foi estornada. Recadastre o cartão.'), { status: 422 });
   }
 
-  // Valor correto → marca cobrança como paga no Firestore
+  // Valor correto → estorna a micro-cobrança e libera para o confirm cobrar o valor real
   await Promise.all([
-    db.collection('charges').doc(ver.chargeId).update({
-      asaasChargeId: ver.asaasPaymentId,
-      status:        'paid',
-      paidAt:        FieldValue.serverTimestamp()
-    }),
-    verRef.update({ verifyAttempts: (ver.verifyAttempts || 0) + 1, amountVerified: true }),
-    db.collection('paymentLogs').add({
-      tenantId:       ver.tenantId,
-      chargeId:       ver.chargeId,
-      asaasChargeId:  ver.asaasPaymentId,
-      holderName:     ver.holderName,
-      holderDocument: ver.holderDocument || '',
-      cardLastFour:   ver.lastFour,
-      cardBrand:      ver.cardBrand,
-      amount:         ver.realValue,
-      status:         'paid',
-      paidAt:         FieldValue.serverTimestamp(),
-      userAgent:      req?.headers?.['user-agent'] || '',
-      ip:             req?.headers?.['x-forwarded-for'] || req?.socket?.remoteAddress || '',
-      termoAceito:    true
-    })
+    cancelOrRefundMicro(ver.microPaymentId, verApiKey),
+    verRef.update({ verifyAttempts: (ver.verifyAttempts || 0) + 1, amountVerified: true })
   ]);
 
   return { ok: true, lastFour: ver.lastFour, cardBrand: ver.cardBrand };
 }
 
 // ── CONFIRM ──────────────────────────────────────────────────────────────────
-// O pagamento já foi realizado no handleInit e validado no handleVerifyAmount.
-// Este step apenas finaliza: salva cartão (opcional) e retorna confirmação.
+// Micro-cobrança já foi verificada e estornada no verify-amount.
+// Este step cobra o valor real do aluguel, salva cartão (opcional) e retorna confirmação.
 async function handleConfirm(db, body) {
   const { verificationId } = body;
   if (!verificationId)
@@ -326,10 +314,83 @@ async function handleConfirm(db, body) {
   const ver = verSnap.data();
 
   if (!ver.amountVerified)
-    throw Object.assign(new Error('Pagamento não verificado.'), { status: 400 });
+    throw Object.assign(new Error('Cartão não verificado.'), { status: 400 });
+
+  if (ver.verified)
+    throw Object.assign(new Error('Pagamento já processado.'), { status: 400 });
+
+  const chargeSnap = await db.collection('charges').doc(ver.chargeId).get();
+  const ownerId    = chargeSnap.data()?.ownerId || await getDefaultOwnerId(db);
+  const apiKey     = await getAsaasKey(db, ownerId);
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const dueDate = tomorrow.toISOString().slice(0, 10);
+
+  const holderInfoBase = {
+    name:          ver.holderName,
+    email:         ver.email || '',
+    cpfCnpj:       ver.holderDocument || '',
+    postalCode:    ver.postalCode || '01310100',
+    addressNumber: 'SN',
+    phone:         ver.phone || '11999999999'
+  };
+
+  let realChargeBody;
+  if (ver.cardToken) {
+    realChargeBody = {
+      customer:             ver.customerId,
+      billingType:          'CREDIT_CARD',
+      value:                ver.realValue,
+      dueDate,
+      description:          `Aluguel ${dueDate.slice(0, 7)}`,
+      creditCardToken:      ver.cardToken,
+      creditCardHolderInfo: holderInfoBase
+    };
+  } else if (ver.cardFallback) {
+    realChargeBody = {
+      customer:             ver.customerId,
+      billingType:          'CREDIT_CARD',
+      value:                ver.realValue,
+      dueDate,
+      description:          `Aluguel ${dueDate.slice(0, 7)}`,
+      creditCard: {
+        holderName:  ver.holderName,
+        number:      ver.cardFallback.number,
+        expiryMonth: ver.expiryMonth,
+        expiryYear:  ver.expiryYear,
+        ccv:         ver.cardFallback.ccv
+      },
+      creditCardHolderInfo: holderInfoBase
+    };
+  } else {
+    throw Object.assign(new Error('Dados do cartão indisponíveis para cobrança.'), { status: 400 });
+  }
+
+  const realCharge = await asaasReq('POST', '/payments', realChargeBody, apiKey);
 
   const ops = [
-    verRef.update({ verified: true, paidAt: FieldValue.serverTimestamp(), cardFallback: FieldValue.delete() })
+    db.collection('charges').doc(ver.chargeId).update({
+      asaasChargeId: realCharge.id,
+      status:        'paid',
+      paidAt:        FieldValue.serverTimestamp()
+    }),
+    verRef.update({ verified: true, realPaymentId: realCharge.id, paidAt: FieldValue.serverTimestamp(), cardFallback: FieldValue.delete() }),
+    db.collection('paymentLogs').add({
+      tenantId:       ver.tenantId,
+      chargeId:       ver.chargeId,
+      asaasChargeId:  realCharge.id,
+      holderName:     ver.holderName,
+      holderDocument: ver.holderDocument || '',
+      cardLastFour:   ver.lastFour,
+      cardBrand:      ver.cardBrand,
+      amount:         ver.realValue,
+      status:         'paid',
+      paidAt:         FieldValue.serverTimestamp(),
+      userAgent:      '',
+      ip:             '',
+      termoAceito:    true
+    })
   ];
 
   if (body.saveCard) {
@@ -342,11 +403,7 @@ async function handleConfirm(db, body) {
       expiryYear:     ver.expiryYear,
       createdAt:      FieldValue.serverTimestamp()
     };
-    if (ver.cardToken) {
-      savedCardData.cardToken = ver.cardToken;
-    } else if (ver.cardFallback) {
-      savedCardData.cardFallback = ver.cardFallback;
-    }
+    if (ver.cardToken) savedCardData.cardToken = ver.cardToken;
     ops.push(db.collection('users').doc(ver.tenantId).collection('savedCards').add(savedCardData));
   }
 
