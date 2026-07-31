@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LocarPay — Painel Admin</title>
+<title>iLocarPay — Painel Admin</title>
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, signInWithPopup, signInWithRedirect, signInWithCustomToken, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
@@ -442,7 +442,7 @@
           step: 'send-push',
           ownerId: currentOwnerId,
           title: 'Aluguel em atraso ⚠️',
-          message: 'Você possui uma cobrança vencida. Regularize agora pelo app LocarPay.'
+          message: 'Você possui uma cobrança vencida. Regularize agora pelo app iLocarPay.'
         })
       });
       const data = await r.json();
@@ -648,7 +648,7 @@
     if (trialEnd && trialEnd > now) {
       const days = Math.ceil((trialEnd - now) / 86400000);
       if (days <= 5) {
-        showBanner('warning', `⚠ Seu trial expira em ${days} dia${days !== 1 ? 's' : ''}. Ative um plano para continuar usando o LocarPay.`);
+        showBanner('warning', `⚠ Seu trial expira em ${days} dia${days !== 1 ? 's' : ''}. Ative um plano para continuar usando o iLocarPay.`);
         notifyTrialByEmail();
       } else {
         banner.style.display = 'none';
@@ -1695,7 +1695,7 @@
 <body>
 
 <header>
-  <h1>LocarPay Admin</h1>
+  <h1>iLocarPay Admin</h1>
   <div class="header-right">
     <div id="owner-selector-wrap"></div>
     <span class="owner-chip" id="owner-name-badge"></span>
@@ -1872,7 +1872,7 @@
 <section id="blocked-section" style="display:none;flex-direction:column;gap:12px">
   <div style="font-size:48px">🚫</div>
   <h2>Acesso negado</h2>
-  <p style="color:#888">Esta conta não está cadastrada como imobiliária na plataforma LocarPay.</p>
+  <p style="color:#888">Esta conta não está cadastrada como imobiliária na plataforma iLocarPay.</p>
   <button class="btn-outline" onclick="document.getElementById('btn-logout').click()">Sair</button>
 </section>
 
@@ -1898,7 +1898,7 @@
     <div class="toggle-row">
       <div>
         <span>Contrato digital (Assinafy)</span>
-        <small>Requer envio do PDF pelo app LocarPay após cadastro</small>
+        <small>Requer envio do PDF pelo app iLocarPay após cadastro</small>
       </div>
       <label class="switch"><input type="checkbox" id="t-digital"><span class="slider"></span></label>
     </div>
