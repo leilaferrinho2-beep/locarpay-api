@@ -511,6 +511,23 @@
     await loadTenants();
   };
 
+  // ── Máscaras ───────────────────────────────────────────────
+  function maskCpf(v) {
+    return v.replace(/\D/g,'').slice(0,11)
+      .replace(/^(\d{3})(\d)/,'$1.$2')
+      .replace(/^(\d{3})\.(\d{3})(\d)/,'$1.$2.$3')
+      .replace(/\.(\d{3})(\d)/,'.$1-$2');
+  }
+  function maskPhone(v) {
+    const d = v.replace(/\D/g,'').slice(0,11);
+    if (d.length <= 10) return d.replace(/^(\d{2})(\d{4})(\d)/,'($1) $2-$3').replace(/^(\d{2})(\d{1,4})$/,'($1) $2').replace(/^(\d{1,2})$/,'($1');
+    return d.replace(/^(\d{2})(\d{5})(\d{4})$/,'($1) $2-$3');
+  }
+  function applyMask(id, fn) {
+    const el = $(id); if (!el) return;
+    el.addEventListener('input', e => { const s = e.target.selectionStart; e.target.value = fn(e.target.value); });
+  }
+
   // ── CEP lookup ─────────────────────────────────────────────
   (function() {
     const cepInput = () => $('t-cep');
@@ -539,6 +556,11 @@
       inp.addEventListener('input', e => { e.target.value = formatCep(e.target.value); });
       inp.addEventListener('blur',  e => lookupCep(e.target.value));
       inp.addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); lookupCep(e.target.value); } });
+      // Máscaras nos campos do form
+      applyMask('t-cpf',   maskCpf);
+      applyMask('t-phone', maskPhone);
+      applyMask('et-cpf',   maskCpf);
+      applyMask('et-phone', maskPhone);
     });
   })();
 
@@ -547,8 +569,8 @@
   async function saveTenant() {
     const name    = $('t-name').value.trim();
     const email   = $('t-email').value.trim().toLowerCase();
-    const phone   = $('t-phone').value.trim();
-    const cpf     = $('t-cpf').value.trim();
+    const phone   = $('t-phone').value.replace(/\D/g,'');
+    const cpf     = $('t-cpf').value.replace(/\D/g,'');
     const prop    = $('t-property').value.trim();
     const rent    = parseFloat($('t-rent').value.replace(',', '.'));
     const dueDay  = parseInt($('t-due').value);
