@@ -588,7 +588,7 @@
     const email   = $('t-email').value.trim().toLowerCase();
     const phone   = $('t-phone').value.replace(/\D/g,'');
     const cpf     = $('t-cpf').value.replace(/\D/g,'');
-    const prop    = $('t-property').value.trim();
+    const prop    = '';
     const rent    = parseFloat($('t-rent').value.replace(',', '.'));
     const dueDay  = parseInt($('t-due').value);
     const digital = $('t-digital').checked;
@@ -600,7 +600,7 @@
     const uf      = $('t-uf').value.trim();
     const compl   = $('t-complemento').value.trim();
 
-    if (!name || !email || !prop || isNaN(rent) || isNaN(dueDay)) {
+    if (!name || !email || isNaN(rent) || isNaN(dueDay)) {
       showToast('Preencha todos os campos obrigatórios', 'error');
       return;
     }
@@ -2373,8 +2373,6 @@
         <div style="max-width:100px"><input id="t-uf" type="text" placeholder="UF" maxlength="2"></div>
       </div>
     </div>
-    <label style="margin-top:8px">Descrição do imóvel <span>*</span></label>
-    <input id="t-property" type="text" placeholder="Apt 42, Rua das Flores, 100 — Centro">
     <div class="row2">
       <div><label>Aluguel (R$) <span>*</span></label><input id="t-rent" type="number" placeholder="1200" min="0" step="0.01"></div>
       <div><label>Dia do vencimento <span>*</span></label><input id="t-due" type="number" value="10" min="1" max="28"></div>
