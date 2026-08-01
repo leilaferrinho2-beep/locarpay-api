@@ -305,19 +305,6 @@
     }
   };
 
-  window.openBillingModal = (ownerId) => {
-    const o = allOwners.find(x => x.id === ownerId);
-    if (!o) return;
-    $('billing-owner-name').textContent = o.name || ownerId;
-    $('billing-owner-id').textContent   = ownerId;
-    $('billing-plan-select').value      = o.plan || 'basic';
-    $('billing-status-info').textContent = billingStatusText(o);
-    $('billing-error').textContent = '';
-    $('billing-save').disabled = false;
-    $('billing-save').textContent = 'Ativar / Atualizar Plano';
-    $('modal-billing').style.display = 'flex';
-  };
-
   function billingStatusText(o) {
     const lines = [];
     if (o.plan)            lines.push(`Plano atual: ${o.plan}`);
