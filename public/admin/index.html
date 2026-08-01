@@ -1904,8 +1904,23 @@
   });
   $('docs-modal-close').addEventListener('click', () => { $('modal-docs').style.display = 'none'; });
 
+  // Saudação dinâmica: primeira visita vs. retorno
+  (function() {
+    const returning = localStorage.getItem('ilp_visited');
+    const title = $('lr-title');
+    const sub   = $('lr-sub');
+    if (returning) {
+      title.textContent = 'Bem-vindo de volta';
+      sub.textContent   = 'Acesse com sua conta Google para gerenciar inquilinos e contratos.';
+    } else {
+      title.textContent = 'Bem-vindo';
+      sub.textContent   = 'Crie sua conta ou acesse para começar a gerenciar seus aluguéis.';
+    }
+  })();
+
   onAuthStateChanged(auth, async user => {
     if (!user) { showSection('login-section'); return; }
+    localStorage.setItem('ilp_visited', '1');
     $('user-email').textContent = user.email;
 
     const allowed = await resolveOwner(user.email);
@@ -2079,8 +2094,8 @@
   </div>
   <div class="login-right">
     <div class="lr-eyebrow">Painel Administrativo</div>
-    <div class="lr-title">Bem-vindo de volta</div>
-    <div class="lr-sub">Acesse com sua conta Google para gerenciar inquilinos e contratos.</div>
+    <div class="lr-title" id="lr-title">Bem-vindo</div>
+    <div class="lr-sub" id="lr-sub">Acesse com sua conta Google para gerenciar inquilinos e contratos.</div>
     <button class="btn-google" id="btn-login">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
