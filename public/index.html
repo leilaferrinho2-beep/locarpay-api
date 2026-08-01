@@ -9,17 +9,17 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg:        #080c14;
-    --surface:   #0d1120;
-    --card:      #111827;
-    --border:    #1e2644;
+    --bg:        #0f1117;
+    --surface:   #0b0e18;
+    --card:      #131929;
+    --border:    #1a2035;
     --green:     #2e7d32;
     --green-lit: #4CAF50;
     --accent:    #69D369;
-    --text:      #e0e6f0;
-    --text-dim:  #8892b0;
-    --text-faint:#3d4a6a;
-    --white:     #f0f4ff;
+    --text:      #e0e0e0;
+    --text-dim:  #8a93a8;
+    --text-faint:#3a4260;
+    --white:     #f0f2ff;
     --danger:    #E57373;
     --gold:      #FFD54F;
   }
@@ -40,7 +40,7 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 5%;
     height: 64px;
-    background: rgba(8,12,20,0.94);
+    background: rgba(15,17,23,0.95);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
   }
@@ -59,9 +59,9 @@
     font-size: 1rem; font-weight: 700; text-decoration: none;
     display: inline-block;
     transition: transform .15s, box-shadow .15s;
-    box-shadow: 0 0 32px rgba(76,175,80,0.35);
+    box-shadow: 0 0 20px rgba(76,175,80,0.20);
   }
-  .btn-nav:hover, .nav-links .btn-nav:hover { color: #fff !important; transform: translateY(-2px); box-shadow: 0 4px 40px rgba(76,175,80,0.5); }
+  .btn-nav:hover, .nav-links .btn-nav:hover { color: #fff !important; transform: translateY(-2px); box-shadow: 0 4px 28px rgba(76,175,80,0.30); }
 
   /* HERO */
   .hero {
@@ -75,13 +75,13 @@
     content: '';
     position: absolute; inset: 0;
     background:
-      radial-gradient(ellipse 70% 50% at 50% 0%, rgba(76,175,80,0.12) 0%, transparent 65%),
-      radial-gradient(ellipse 50% 40% at 80% 85%, rgba(37,99,235,0.07) 0%, transparent 60%);
+      radial-gradient(ellipse 60% 40% at 50% 0%, rgba(76,175,80,0.07) 0%, transparent 65%),
+      radial-gradient(ellipse 40% 30% at 80% 85%, rgba(37,99,235,0.05) 0%, transparent 60%);
     pointer-events: none;
   }
   .hero-badge {
     display: inline-flex; align-items: center; gap: 6px;
-    background: rgba(105,211,105,0.1); border: 1px solid rgba(105,211,105,0.25);
+    background: rgba(105,211,105,0.07); border: 1px solid rgba(105,211,105,0.15);
     color: var(--accent); border-radius: 100px;
     padding: 5px 14px; font-size: 0.8rem; font-weight: 600;
     margin-bottom: 28px; letter-spacing: 0.3px;
@@ -112,9 +112,9 @@
     font-size: 1rem; font-weight: 700;
     border: none; cursor: pointer;
     transition: transform .15s, box-shadow .15s;
-    box-shadow: 0 0 32px rgba(76,175,80,0.35);
+    box-shadow: 0 0 20px rgba(76,175,80,0.20);
   }
-  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 40px rgba(76,175,80,0.5); }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 28px rgba(76,175,80,0.30); }
   .btn-secondary {
     background: transparent; color: var(--text-dim);
     padding: 16px 28px; border-radius: 12px;
@@ -165,7 +165,7 @@
   .feature-card:hover { border-color: var(--green); transform: translateY(-4px); }
   .feature-icon {
     width: 48px; height: 48px; border-radius: 12px;
-    background: rgba(76,175,80,0.12);
+    background: rgba(76,175,80,0.08);
     display: flex; align-items: center; justify-content: center;
     margin-bottom: 20px; font-size: 1.5rem;
   }
@@ -184,7 +184,7 @@
   .step { text-align: center; }
   .step-num {
     width: 52px; height: 52px; border-radius: 50%;
-    background: var(--green); color: #fff;
+    background: var(--card); border: 2px solid var(--border); color: var(--accent);
     font-size: 1.2rem; font-weight: 800;
     display: flex; align-items: center; justify-content: center;
     margin: 0 auto 16px;
@@ -210,7 +210,7 @@
   }
   .plan-card.featured {
     border-color: var(--green-lit);
-    box-shadow: 0 0 40px rgba(76,175,80,0.15);
+    box-shadow: 0 0 32px rgba(76,175,80,0.08);
   }
   .plan-badge {
     position: absolute; top: 16px; right: 16px;
@@ -253,7 +253,7 @@
 
   /* CTA SECTION */
   .cta-section {
-    background: linear-gradient(135deg, #111d38 0%, #080c14 100%);
+    background: linear-gradient(135deg, #131929 0%, #0f1117 100%);
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
     text-align: center;
