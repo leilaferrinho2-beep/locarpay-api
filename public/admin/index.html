@@ -53,15 +53,29 @@
   function loadConfigTab() {
     const el = $('config-credit-toggle');
     if (el) el.checked = !!currentOwnerData?.creditAnalysisEnabled;
-    const cid = $('serasa-client-id');
-    const csc = $('serasa-client-secret');
-    if (cid) cid.value = currentOwnerData?.serasaClientId     || '';
-    if (csc) csc.value = currentOwnerData?.serasaClientSecret || '';
-    const st = $('serasa-status');
-    if (st) {
-      const hasKeys = currentOwnerData?.serasaClientId && currentOwnerData?.serasaClientSecret;
-      st.textContent = hasKeys ? '✅ Credenciais configuradas.' : '🟡 Modo sandbox ativo (sem credenciais reais).';
-      st.style.color  = hasKeys ? '#4CAF50' : '#FFD54F';
+
+    // Serasa
+    const scid = $('serasa-client-id');
+    const scss = $('serasa-client-secret');
+    if (scid) scid.value = currentOwnerData?.serasaClientId     || '';
+    if (scss) scss.value = currentOwnerData?.serasaClientSecret || '';
+    const sst = $('serasa-status');
+    if (sst) {
+      const ok = currentOwnerData?.serasaClientId && currentOwnerData?.serasaClientSecret;
+      sst.textContent = ok ? '✅ Credenciais configuradas.' : '🟡 Modo sandbox ativo (sem credenciais reais).';
+      sst.style.color  = ok ? '#4CAF50' : '#FFD54F';
+    }
+
+    // Boa Vista
+    const bcid = $('boavista-client-id');
+    const bcss = $('boavista-client-secret');
+    if (bcid) bcid.value = currentOwnerData?.boavistaClientId     || '';
+    if (bcss) bcss.value = currentOwnerData?.boavistaClientSecret || '';
+    const bst = $('boavista-status');
+    if (bst) {
+      const ok = currentOwnerData?.boavistaClientId && currentOwnerData?.boavistaClientSecret;
+      bst.textContent = ok ? '✅ Credenciais configuradas.' : '🟡 Modo sandbox ativo (sem credenciais reais).';
+      bst.style.color  = ok ? '#4CAF50' : '#FFD54F';
     }
   }
 
@@ -539,16 +553,8 @@
     box.innerHTML     = '';
     if (currentOwnerData?.creditAnalysisEnabled) {
       serasaWrap.style.display = 'block';
-      const r = ca.serasaReport;
-      if (r) {
-        const scoreColor = r.score >= 700 ? '#4CAF50' : r.score >= 500 ? '#FFD54F' : '#ef5350';
-        const sandboxTag = r.sandbox ? '<span style="background:#2a2d3e;color:#888;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:6px">SANDBOX</span>' : '';
-        const pendHtml = r.pendencias?.length
-          ? r.pendencias.map(p => `<div style="background:#0f1117;border:1px solid #2a2d3e;border-radius:6px;padding:10px 12px;margin-top:6px"><div style="font-size:12px;color:#aaa;font-weight:600">${p.tipo}</div><div style="font-size:13px;color:#e0e0e0;margin-top:2px">${p.credor} — <span style="color:#ef5350">R$ ${(+p.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div><div style="font-size:11px;color:#555;margin-top:2px">${p.dataOcorrencia}</div></div>`).join('')
-          : '<p style="font-size:13px;color:#4CAF50;margin-top:6px">✅ Nenhuma pendência encontrada.</p>';
-        box.innerHTML = `<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div style="font-size:32px;font-weight:800;color:${scoreColor}">${r.score ?? '—'}</div><div><div style="font-size:13px;font-weight:700;color:${scoreColor}">${r.statusLabel}${sandboxTag}</div><div style="font-size:11px;color:#555">Consultado em ${new Date(r.consultadoEm).toLocaleString('pt-BR')}</div></div></div><div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Pendências / Negativações</div>${pendHtml}`;
-        box.style.display = 'block';
-      }
+      if (ca.serasaReport)   renderCreditReport(ca.serasaReport,   'ca-serasa-result',   'ca-serasa-btn',   '🔍 Serasa Experian');
+      if (ca.boavistaReport) renderCreditReport(ca.boavistaReport, 'ca-boavista-result', 'ca-boavista-btn', '🔎 Boa Vista SCPC');
     } else {
       serasaWrap.style.display = 'none';
     }
@@ -583,118 +589,128 @@
     finally { btn.disabled = false; btn.textContent = 'Salvar Análise'; }
   };
 
-  // ── Serasa ─────────────────────────────────────────────────
+  // ── Bureaus de crédito (Serasa + Boa Vista) ────────────────
 
-  window.toggleSerasaSecret = () => {
-    const el = $('serasa-client-secret');
-    el.type = el.type === 'password' ? 'text' : 'password';
+  window.toggleBureauSecret = (bureau) => {
+    const el = $(bureau + '-client-secret');
+    if (el) el.type = el.type === 'password' ? 'text' : 'password';
   };
 
-  window.saveSerasaCredentials = async () => {
-    const clientId     = ($('serasa-client-id')?.value     || '').trim();
-    const clientSecret = ($('serasa-client-secret')?.value || '').trim();
-    const st = $('serasa-status');
+  window.saveBureauCredentials = async (bureau) => {
+    const clientId     = ($(bureau + '-client-id')?.value     || '').trim();
+    const clientSecret = ($(bureau + '-client-secret')?.value || '').trim();
+    const st = $(bureau + '-status');
     st.textContent = 'Salvando...'; st.style.color = '#888';
     try {
       const user = auth.currentUser;
       const res  = await fetch('/api/locarpay-credit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'save-credentials', ownerId: currentOwnerId, clientId, clientSecret, callerEmail: user?.email })
+        body: JSON.stringify({ step: 'save-credentials', bureau, ownerId: currentOwnerId, clientId, clientSecret, callerEmail: user?.email })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      currentOwnerData = { ...currentOwnerData, serasaClientId: clientId, serasaClientSecret: clientSecret };
-      st.textContent = clientId ? '✅ Credenciais salvas com sucesso.' : '✅ Credenciais removidas (modo sandbox ativo).';
-      st.style.color = '#4CAF50';
-      showToast('Credenciais Serasa salvas', 'success');
-    } catch (e) {
-      st.textContent = '❌ Erro: ' + e.message;
-      st.style.color = '#ef5350';
-    }
-  };
-
-  window.testSerasaCredentials = async () => {
-    const st = $('serasa-status');
-    st.textContent = 'Testando conexão...'; st.style.color = '#FFD54F';
-    // Usa CPF fictício para sandbox; com credenciais reais vai tentar autenticar
-    const testCpf = '000.000.000-00';
-    try {
-      const res = await fetch('/api/locarpay-credit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'check', ownerId: currentOwnerId, tenantId: 'test', cpf: testCpf })
-      });
-      if (res.status === 400) { // CPF inválido = chegou na API = credenciais OK
-        st.textContent = '✅ Conexão com a API estabelecida.'; st.style.color = '#4CAF50';
+      if (bureau === 'serasa') {
+        currentOwnerData = { ...currentOwnerData, serasaClientId: clientId, serasaClientSecret: clientSecret };
       } else {
-        const d = await res.json();
-        if (d.sandbox) { st.textContent = '🟡 Modo sandbox ativo (sem credenciais reais).'; st.style.color = '#FFD54F'; }
-        else           { st.textContent = '✅ Conexão com Serasa estabelecida.';            st.style.color = '#4CAF50'; }
+        currentOwnerData = { ...currentOwnerData, boavistaClientId: clientId, boavistaClientSecret: clientSecret };
       }
+      const label = bureau === 'serasa' ? 'Serasa' : 'Boa Vista';
+      st.textContent = clientId ? `✅ Credenciais ${label} salvas.` : '✅ Credenciais removidas (sandbox ativo).';
+      st.style.color = '#4CAF50';
+      showToast(`Credenciais ${label} salvas`, 'success');
     } catch (e) {
-      st.textContent = '❌ Falha na conexão: ' + e.message; st.style.color = '#ef5350';
+      st.textContent = '❌ Erro: ' + e.message; st.style.color = '#ef5350';
     }
   };
 
-  window.consultarSerasa = async () => {
-    const t = tenants.find(x => x.id === creditTenantId);
-    const cpf = t?.cpf || '';
-    if (!cpf) { showToast('Inquilino sem CPF cadastrado', 'error'); return; }
-    const btn = $('ca-serasa-btn');
-    btn.disabled = true; btn.textContent = '🔍 Consultando...';
-    const box = $('ca-serasa-result');
-    box.style.display = 'none';
+  window.testBureauCredentials = async (bureau) => {
+    const st = $(bureau + '-status');
+    st.textContent = 'Testando conexão...'; st.style.color = '#FFD54F';
+    const step = bureau === 'serasa' ? 'check-serasa' : 'check-boavista';
     try {
       const res = await fetch('/api/locarpay-credit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'check', ownerId: currentOwnerId, tenantId: creditTenantId, cpf })
+        body: JSON.stringify({ step, ownerId: currentOwnerId, tenantId: 'test', cpf: '11144477735' })
+      });
+      const d = await res.json();
+      if (d.sandbox) { st.textContent = '🟡 Modo sandbox ativo (sem credenciais reais).'; st.style.color = '#FFD54F'; }
+      else           { st.textContent = `✅ Conexão com ${bureau === 'serasa' ? 'Serasa' : 'Boa Vista'} estabelecida.`; st.style.color = '#4CAF50'; }
+    } catch (e) {
+      st.textContent = '❌ Falha: ' + e.message; st.style.color = '#ef5350';
+    }
+  };
+
+  function renderCreditReport(report, boxId, btnId, btnLabel) {
+    const box = $(boxId);
+    const btn = $(btnId);
+    if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
+    if (!report || !box) return;
+    const scoreColor = (report.score >= 700) ? '#4CAF50' : (report.score >= 500) ? '#FFD54F' : '#ef5350';
+    const sandboxTag = report.sandbox ? '<span style="background:#2a2d3e;color:#888;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:6px">SANDBOX</span>' : '';
+    const bureauTag  = `<span style="background:#20233a;color:#4CAF50;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px">${report.bureau === 'serasa' ? 'SERASA' : 'BOA VISTA'}</span>`;
+    const pendHtml = report.pendencias?.length
+      ? report.pendencias.map(p =>
+          `<div style="background:#0f1117;border:1px solid #2a2d3e;border-radius:6px;padding:10px 12px;margin-top:6px">
+            <div style="font-size:12px;color:#aaa;font-weight:600">${p.tipo}</div>
+            <div style="font-size:13px;color:#e0e0e0;margin-top:2px">${p.credor} — <span style="color:#ef5350">R$ ${(+p.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div>
+            <div style="font-size:11px;color:#555;margin-top:2px">${p.dataOcorrencia}</div>
+          </div>`).join('')
+      : '<p style="font-size:13px;color:#4CAF50;margin-top:6px">✅ Nenhuma pendência encontrada.</p>';
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="font-size:32px;font-weight:800;color:${scoreColor}">${report.score ?? '—'}</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:${scoreColor}">${report.statusLabel}${sandboxTag}${bureauTag}</div>
+          <div style="font-size:11px;color:#555">Consultado em ${new Date(report.consultadoEm).toLocaleString('pt-BR')}</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Pendências / Negativações</div>
+      ${pendHtml}`;
+    box.style.display = 'block';
+  }
+
+  async function doConsulta(bureau) {
+    const t = tenants.find(x => x.id === creditTenantId);
+    if (!t?.cpf) { showToast('Inquilino sem CPF cadastrado', 'error'); return; }
+    const isSerasa  = bureau === 'serasa';
+    const btnId     = isSerasa ? 'ca-serasa-btn'   : 'ca-boavista-btn';
+    const boxId     = isSerasa ? 'ca-serasa-result' : 'ca-boavista-result';
+    const btnLabel  = isSerasa ? '🔍 Consultar Serasa' : '🔍 Consultar Boa Vista';
+    const step      = isSerasa ? 'check-serasa' : 'check-boavista';
+    const btn = $(btnId);
+    btn.disabled = true; btn.textContent = '🔍 Consultando...';
+    $(boxId).style.display = 'none';
+    try {
+      const res = await fetch('/api/locarpay-credit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step, ownerId: currentOwnerId, tenantId: creditTenantId, cpf: t.cpf })
       });
       const report = await res.json();
       if (!res.ok) throw new Error(report.error);
-
-      // Atualiza estado local
-      if (t) {
-        t.creditAnalysis = t.creditAnalysis || {};
-        t.creditAnalysis.serasaReport  = report;
-        t.creditAnalysis.score         = report.score;
-        t.creditAnalysis.status        = report.status === 'REGULAR' ? 'approved' : 'analyzing';
-        $('ca-status').value           = t.creditAnalysis.status;
-        $('ca-score').value            = report.score ?? '';
+      t.creditAnalysis = t.creditAnalysis || {};
+      if (isSerasa) {
+        t.creditAnalysis.serasaReport = report;
+        t.creditAnalysis.score  = report.score;
+        t.creditAnalysis.status = report.status === 'REGULAR' ? 'approved' : 'analyzing';
+        $('ca-status').value = t.creditAnalysis.status;
+        $('ca-score').value  = report.score ?? '';
+      } else {
+        t.creditAnalysis.boavistaReport = report;
       }
-
-      // Renderiza resultado
-      const scoreColor = report.score >= 700 ? '#4CAF50' : report.score >= 500 ? '#FFD54F' : '#ef5350';
-      const sandboxTag = report.sandbox ? '<span style="background:#2a2d3e;color:#888;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:6px">SANDBOX</span>' : '';
-      const pendHtml = report.pendencias?.length
-        ? report.pendencias.map(p => `
-            <div style="background:#0f1117;border:1px solid #2a2d3e;border-radius:6px;padding:10px 12px;margin-top:6px">
-              <div style="font-size:12px;color:#aaa;font-weight:600">${p.tipo}</div>
-              <div style="font-size:13px;color:#e0e0e0;margin-top:2px">${p.credor} — <span style="color:#ef5350">R$ ${(+p.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div>
-              <div style="font-size:11px;color:#555;margin-top:2px">${p.dataOcorrencia}</div>
-            </div>`).join('')
-        : '<p style="font-size:13px;color:#4CAF50;margin-top:6px">✅ Nenhuma pendência encontrada.</p>';
-
-      box.innerHTML = `
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-          <div style="font-size:32px;font-weight:800;color:${scoreColor}">${report.score ?? '—'}</div>
-          <div>
-            <div style="font-size:13px;font-weight:700;color:${scoreColor}">${report.statusLabel}${sandboxTag}</div>
-            <div style="font-size:11px;color:#555">Consultado em ${new Date(report.consultadoEm).toLocaleString('pt-BR')}</div>
-          </div>
-        </div>
-        <div style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Pendências / Negativações</div>
-        ${pendHtml}`;
-      box.style.display = 'block';
+      renderCreditReport(report, boxId, btnId, btnLabel);
       renderTenants();
-      showToast('Consulta Serasa concluída', 'success');
+      showToast(`Consulta ${isSerasa ? 'Serasa' : 'Boa Vista'} concluída`, 'success');
     } catch (e) {
       showToast('Erro na consulta: ' + e.message, 'error');
-    } finally {
-      btn.disabled = false; btn.textContent = '🔍 Consultar Serasa';
+      const b = $(btnId); if (b) { b.disabled = false; b.textContent = btnLabel; }
     }
-  };
+  }
+
+  window.consultarSerasa   = () => doConsulta('serasa');
+  window.consultarBoaVista = () => doConsulta('boavista');
 
   window.switchOwner = async (ownerId) => {
     currentOwnerId   = ownerId;
@@ -2519,14 +2535,40 @@
       <label style="margin-top:14px">Client Secret <span style="color:#555;font-weight:400">(fornecido pela Serasa)</span></label>
       <div style="position:relative">
         <input id="serasa-client-secret" type="password" placeholder="••••••••••••••••" autocomplete="off" style="padding-right:42px">
-        <button onclick="toggleSerasaSecret()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:#888;cursor:pointer;font-size:15px" title="Mostrar/ocultar">👁</button>
+        <button onclick="toggleBureauSecret('serasa')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:#888;cursor:pointer;font-size:15px" title="Mostrar/ocultar">👁</button>
       </div>
 
       <div id="serasa-status" style="margin-top:12px;font-size:12px;color:#555"></div>
 
       <div style="display:flex;gap:10px;margin-top:16px">
-        <button class="btn-outline" onclick="testSerasaCredentials()">Testar conexão</button>
-        <button class="btn" onclick="saveSerasaCredentials()">Salvar credenciais</button>
+        <button class="btn-outline" onclick="testBureauCredentials('serasa')">Testar conexão</button>
+        <button class="btn" onclick="saveBureauCredentials('serasa')">Salvar credenciais</button>
+      </div>
+    </div>
+
+    <!-- Boa Vista SCPC -->
+    <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:12px;padding:24px;max-width:560px;margin-top:20px">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:4px">🔎 Consulta Boa Vista SCPC</h3>
+      <p style="font-size:13px;color:#888;margin-bottom:20px;line-height:1.6">
+        Insira suas credenciais da API Boa Vista (Equifax) para consultas complementares ao Serasa.
+        Cada imobiliária usa seu próprio contrato com a Boa Vista.<br>
+        <span style="color:#4CAF50;font-size:12px">Sem credenciais: modo sandbox (dados simulados para teste).</span>
+      </p>
+
+      <label>Client ID <span style="color:#555;font-weight:400">(fornecido pela Boa Vista)</span></label>
+      <input id="boavista-client-id" type="text" placeholder="ex: bv_prod_xxxxxxxxxxxx" autocomplete="off">
+
+      <label style="margin-top:14px">Client Secret <span style="color:#555;font-weight:400">(fornecido pela Boa Vista)</span></label>
+      <div style="position:relative">
+        <input id="boavista-client-secret" type="password" placeholder="••••••••••••••••" autocomplete="off" style="padding-right:42px">
+        <button onclick="toggleBureauSecret('boavista')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:#888;cursor:pointer;font-size:15px" title="Mostrar/ocultar">👁</button>
+      </div>
+
+      <div id="boavista-status" style="margin-top:12px;font-size:12px;color:#555"></div>
+
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn-outline" onclick="testBureauCredentials('boavista')">Testar conexão</button>
+        <button class="btn" onclick="saveBureauCredentials('boavista')">Salvar credenciais</button>
       </div>
     </div>
   </div>
@@ -2873,13 +2915,15 @@
     <label style="margin-top:16px">Observações</label>
     <textarea id="ca-notes" rows="3" placeholder="Notas sobre a análise, pendências, restrições encontradas…"></textarea>
 
-    <!-- Serasa -->
+    <!-- Bureaus de crédito -->
     <div id="ca-serasa-wrap" style="display:none;margin-top:20px;padding-top:20px;border-top:1px solid #2a2d3e">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <span style="font-size:13px;font-weight:700;color:#e0e0e0">🔍 Consulta Serasa Experian</span>
-        <button id="ca-serasa-btn" class="btn-sm" style="color:#4CAF50;border-color:#4CAF50" onclick="consultarSerasa()">🔍 Consultar Serasa</button>
+      <p style="font-size:12px;color:#555;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Consultas de Crédito</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <button id="ca-serasa-btn" class="btn-sm" style="color:#4CAF50;border-color:#4CAF50" onclick="consultarSerasa()">🔍 Serasa Experian</button>
+        <button id="ca-boavista-btn" class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="consultarBoaVista()">🔎 Boa Vista SCPC</button>
       </div>
-      <div id="ca-serasa-result" style="display:none;background:#0f1117;border:1px solid #2a2d3e;border-radius:8px;padding:14px"></div>
+      <div id="ca-serasa-result"   style="display:none;background:#0f1117;border:1px solid #2a2d3e;border-radius:8px;padding:14px;margin-bottom:8px"></div>
+      <div id="ca-boavista-result" style="display:none;background:#0f1117;border:1px solid #1a2a3e;border-radius:8px;padding:14px"></div>
     </div>
 
     <div class="modal-actions">
