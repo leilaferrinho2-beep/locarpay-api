@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LocarPay — Cadastro de Imobiliária</title>
+  <title>iLocarPay â€” Cadastro de ImobiliÃ¡ria</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -28,7 +28,7 @@
       align-items: center;
     }
 
-    /* ── NAV ── */
+    /* â”€â”€ NAV â”€â”€ */
     nav {
       width: 100%;
       max-width: 1100px;
@@ -51,7 +51,7 @@
     }
     .nav-login:hover { color: var(--text); border-color: var(--muted); }
 
-    /* ── HERO ── */
+    /* â”€â”€ HERO â”€â”€ */
     .hero {
       text-align: center;
       padding: 48px 24px 32px;
@@ -67,7 +67,7 @@
     h1 span { color: var(--green-lt); }
     .hero p { color: var(--muted); font-size: 16px; line-height: 1.7; max-width: 500px; margin: 0 auto 36px; }
 
-    /* ── PRICING ── */
+    /* â”€â”€ PRICING â”€â”€ */
     .pricing {
       display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
       padding: 0 24px 40px;
@@ -89,9 +89,9 @@
     .plan-limit { font-size: 12px; color: var(--muted); margin: 6px 0 16px; }
     .plan-features { list-style: none; }
     .plan-features li { font-size: 13px; color: var(--muted); padding: 3px 0; }
-    .plan-features li::before { content: '✓ '; color: var(--green-lt); }
+    .plan-features li::before { content: 'âœ“ '; color: var(--green-lt); }
 
-    /* ── FORM ── */
+    /* â”€â”€ FORM â”€â”€ */
     .form-card {
       background: var(--card); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 32px;
@@ -157,64 +157,64 @@
 <nav>
   <a class="logo" href="/">
     <div class="logo-mark">L</div>
-    <span class="logo-name">LocarPay</span>
+    <span class="logo-name">iLocarPay</span>
   </a>
-  <a class="nav-login" href="/admin">Já tenho conta →</a>
+  <a class="nav-login" href="/admin">JÃ¡ tenho conta â†’</a>
 </nav>
 
 <div class="hero">
-  <div class="badge">Gestão de Aluguéis</div>
-  <h1>Receba aluguéis com<br><span>PIX e cartão</span> no automático</h1>
-  <p>Cadastre sua imobiliária em 2 minutos. 14 dias grátis, sem cartão de crédito.</p>
+  <div class="badge">GestÃ£o de AluguÃ©is</div>
+  <h1>Receba aluguÃ©is com<br><span>PIX e cartÃ£o</span> no automÃ¡tico</h1>
+  <p>Cadastre sua imobiliÃ¡ria em 2 minutos. 14 dias grÃ¡tis, sem cartÃ£o de crÃ©dito.</p>
 </div>
 
 <!-- Pricing cards -->
 <div class="pricing">
   <div class="plan-card">
     <div class="plan-name">Trial</div>
-    <div class="plan-price">R$0<span>/mês</span></div>
-    <div class="plan-limit">até 3 inquilinos</div>
+    <div class="plan-price">R$0<span>/mÃªs</span></div>
+    <div class="plan-limit">atÃ© 3 inquilinos</div>
     <ul class="plan-features">
-      <li>14 dias grátis</li>
-      <li>PIX automático</li>
+      <li>14 dias grÃ¡tis</li>
+      <li>PIX automÃ¡tico</li>
       <li>App Android</li>
     </ul>
   </div>
   <div class="plan-card featured">
     <div class="plan-badge">Mais popular</div>
     <div class="plan-name">Basic</div>
-    <div class="plan-price">R$49<span>/mês</span></div>
-    <div class="plan-limit">até 10 inquilinos</div>
+    <div class="plan-price">R$49<span>/mÃªs</span></div>
+    <div class="plan-limit">atÃ© 10 inquilinos</div>
     <ul class="plan-features">
       <li>Tudo do trial</li>
-      <li>Cobranças automáticas</li>
-      <li>Relatórios mensais</li>
-      <li>Notificações push</li>
+      <li>CobranÃ§as automÃ¡ticas</li>
+      <li>RelatÃ³rios mensais</li>
+      <li>NotificaÃ§Ãµes push</li>
     </ul>
   </div>
   <div class="plan-card">
     <div class="plan-name">Pro</div>
-    <div class="plan-price">R$99<span>/mês</span></div>
-    <div class="plan-limit">até 30 inquilinos</div>
+    <div class="plan-price">R$99<span>/mÃªs</span></div>
+    <div class="plan-limit">atÃ© 30 inquilinos</div>
     <ul class="plan-features">
       <li>Tudo do Basic</li>
       <li>Contrato digital</li>
-      <li>Reajuste automático</li>
-      <li>Múltiplos imóveis</li>
+      <li>Reajuste automÃ¡tico</li>
+      <li>MÃºltiplos imÃ³veis</li>
     </ul>
   </div>
 </div>
 
 <!-- Registration form -->
 <div class="form-card">
-  <h2>Criar conta grátis</h2>
-  <p class="subtitle">14 dias de trial — sem cartão de crédito</p>
+  <h2>Criar conta grÃ¡tis</h2>
+  <p class="subtitle">14 dias de trial â€” sem cartÃ£o de crÃ©dito</p>
 
   <form id="form">
     <div class="row2">
       <div class="field">
-        <label>Nome completo / Razão social *</label>
-        <input id="f-name" type="text" placeholder="João Silva" required>
+        <label>Nome completo / RazÃ£o social *</label>
+        <input id="f-name" type="text" placeholder="JoÃ£o Silva" required>
       </div>
       <div class="field">
         <label>E-mail *</label>
@@ -235,7 +235,7 @@
       <div class="field">
         <label>Tipo de empresa</label>
         <select id="f-type">
-          <option value="">Pessoa física / autônomo</option>
+          <option value="">Pessoa fÃ­sica / autÃ´nomo</option>
           <option value="MEI">MEI</option>
           <option value="LIMITED">LTDA</option>
           <option value="INDIVIDUAL">EIRELI / Individual</option>
@@ -243,7 +243,7 @@
       </div>
       <div class="field">
         <label>Cidade / Estado</label>
-        <input id="f-city" type="text" placeholder="São Paulo / SP">
+        <input id="f-city" type="text" placeholder="SÃ£o Paulo / SP">
       </div>
     </div>
 
@@ -254,39 +254,39 @@
           <input class="plan-radio" type="radio" name="plan" id="p-trial" value="trial" checked>
           <label class="plan-label" for="p-trial">
             <div class="pname">Trial</div>
-            <div class="pprice">Grátis 14 dias</div>
+            <div class="pprice">GrÃ¡tis 14 dias</div>
           </label>
         </div>
         <div>
           <input class="plan-radio" type="radio" name="plan" id="p-basic" value="basic">
           <label class="plan-label" for="p-basic">
             <div class="pname">Basic</div>
-            <div class="pprice">R$49/mês</div>
+            <div class="pprice">R$49/mÃªs</div>
           </label>
         </div>
         <div>
           <input class="plan-radio" type="radio" name="plan" id="p-pro" value="pro">
           <label class="plan-label" for="p-pro">
             <div class="pname">Pro</div>
-            <div class="pprice">R$99/mês</div>
+            <div class="pprice">R$99/mÃªs</div>
           </label>
         </div>
       </div>
     </div>
 
-    <button class="btn-submit" id="btn" type="submit">Criar conta grátis →</button>
+    <button class="btn-submit" id="btn" type="submit">Criar conta grÃ¡tis â†’</button>
     <div class="msg" id="msg"></div>
   </form>
 
   <hr class="divider">
   <p class="footer-note">
-    Já tem conta? <a href="/admin">Acesse o painel →</a><br>
-    Dúvidas? <a href="mailto:contatotransgu@gmail.com">contatotransgu@gmail.com</a>
+    JÃ¡ tem conta? <a href="/admin">Acesse o painel â†’</a><br>
+    DÃºvidas? <a href="mailto:contatotransgu@gmail.com">contatotransgu@gmail.com</a>
   </p>
 </div>
 
 <script>
-  const API = '/api/locarpay-owner';
+  const API = '/api/iLocarPay-owner';
 
   document.getElementById('form').addEventListener('submit', async e => {
     e.preventDefault();
@@ -321,18 +321,18 @@
       const data = await r.json();
 
       if (r.status === 409) {
-        // Already registered — redirect to admin
+        // Already registered â€” redirect to admin
         msg.className = 'msg success';
-        msg.innerHTML = '✓ E-mail já cadastrado. <a href="/admin" style="color:#81c784">Acesse o painel →</a>';
+        msg.innerHTML = 'âœ“ E-mail jÃ¡ cadastrado. <a href="/admin" style="color:#81c784">Acesse o painel â†’</a>';
         return;
       }
       if (!r.ok) throw new Error(data.error || 'Erro ao cadastrar');
 
       msg.className = 'msg success';
       msg.innerHTML = `
-        ✓ Conta criada com sucesso! Trial de 14 dias ativo.<br><br>
-        <strong>Próximo passo:</strong> acesse o painel e adicione seus primeiros inquilinos.<br><br>
-        <a href="/admin" style="color:#81c784;font-weight:700">Ir para o painel admin →</a>
+        âœ“ Conta criada com sucesso! Trial de 14 dias ativo.<br><br>
+        <strong>PrÃ³ximo passo:</strong> acesse o painel e adicione seus primeiros inquilinos.<br><br>
+        <a href="/admin" style="color:#81c784;font-weight:700">Ir para o painel admin â†’</a>
       `;
       document.getElementById('form').style.opacity = '0.5';
       document.getElementById('form').style.pointerEvents = 'none';
@@ -340,9 +340,10 @@
       msg.className = 'msg error';
       msg.textContent = err.message;
       btn.disabled = false;
-      btn.textContent = 'Criar conta grátis →';
+      btn.textContent = 'Criar conta grÃ¡tis â†’';
     }
   });
 </script>
 </body>
 </html>
+
