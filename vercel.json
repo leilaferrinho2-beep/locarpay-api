@@ -1,8 +1,7 @@
 {
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/version.json",      "destination": "/api/version" },
-    { "source": "/billing-webhook",   "destination": "/api/locarpay-owner" },
+{ "source": "/billing-webhook",   "destination": "/api/locarpay-owner" },
     { "source": "/payment-webhook",   "destination": "/api/locarpay-card" },
     { "source": "/admin", "destination": "/admin/index.html" },
     { "source": "/admin/", "destination": "/admin/index.html" },
