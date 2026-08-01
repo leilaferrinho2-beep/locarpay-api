@@ -7,7 +7,7 @@
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, signInWithPopup, signInWithRedirect, signInWithCustomToken, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-  import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, serverTimestamp, query, where, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, serverTimestamp, query, where, orderBy, limit, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
   const MASTER_EMAIL = 'denisfelicio20@gmail.com';
 
@@ -28,6 +28,8 @@
   let allOwners        = [];
   let tenants   = [];
   let contracts = [];
+  let leads     = [];
+  let leadsUnsubscribe = null;
 
   function $(id) { return document.getElementById(id); }
 
@@ -40,7 +42,7 @@
   }
 
   function setTab(tab) {
-    ['tab-tenants','tab-owners','tab-overdue','tab-licenses','tab-config'].forEach(t => {
+    ['tab-tenants','tab-owners','tab-overdue','tab-licenses','tab-config','tab-leads'].forEach(t => {
       $(t)?.classList.remove('active');
       const panel = $(t.replace('tab-', 'panel-'));
       if (panel) panel.style.display = 'none';
@@ -48,6 +50,7 @@
     $('tab-' + tab)?.classList.add('active');
     const p = $('panel-' + tab); if (p) p.style.display = 'block';
     if (tab === 'config') loadConfigTab();
+    if (tab === 'leads')  loadLeads();
   }
 
   function loadConfigTab() {
@@ -65,6 +68,8 @@
       sst.textContent = ok ? '✅ Credenciais configuradas.' : '🟡 Modo sandbox ativo (sem credenciais reais).';
       sst.style.color  = ok ? '#4CAF50' : '#FFD54F';
     }
+
+    loadBrokers();
 
     // Boa Vista
     const bcid = $('boavista-client-id');
@@ -721,6 +726,214 @@
     await loadTenants();
   };
 
+  // ── Leads ──────────────────────────────────────────────────
+
+  function startLeadsBadge() {
+    if (!currentOwnerId) return;
+    if (leadsUnsubscribe) leadsUnsubscribe();
+    const q = query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId), where('status', '==', 'pending'));
+    leadsUnsubscribe = onSnapshot(q, snap => {
+      const n = snap.size;
+      const tab = $('tab-leads');
+      if (tab) tab.innerHTML = n > 0 ? `📋 Leads <span style="background:#ef5350;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">${n}</span>` : '📋 Leads';
+    });
+  }
+
+  async function loadLeads() {
+    if (!currentOwnerId) return;
+    const tbody = $('leads-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="empty">Carregando...</td></tr>';
+    const snap = await getDocs(query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId), orderBy('createdAt', 'desc')));
+    leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderLeads();
+  }
+
+  function renderLeads() {
+    const tbody = $('leads-tbody');
+    if (!tbody) return;
+    if (!leads.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhum lead recebido ainda.</td></tr>'; return; }
+    const statusCfg = {
+      pending:   ['#FFD54F','⏳ Pendente'],
+      approved:  ['#4CAF50','✅ Aprovado'],
+      rejected:  ['#ef5350','❌ Reprovado'],
+      delivered: ['#42A5F5','🏠 Chaves entregues']
+    };
+    tbody.innerHTML = leads.map(l => {
+      const [col, lbl] = statusCfg[l.status] || statusCfg.pending;
+      const docsHtml = (l.docs || []).map((d, i) =>
+        `<a href="${d.url}" target="_blank" style="color:#4CAF50;font-size:11px;margin-right:6px">📎 Doc ${i+1}${d.type ? ' ('+d.type+')' : ''}</a>`
+      ).join('');
+      const btns = l.status === 'pending' ? `
+        <button class="btn-sm" style="color:#4CAF50;border-color:#4CAF50" onclick="openApproveModal('${l.id}')">✅ Aprovar</button>
+        <button class="btn-sm" style="color:#ef5350;border-color:#ef5350;margin-left:4px" onclick="rejectLead('${l.id}')">❌ Rejeitar</button>
+      ` : l.status === 'approved' && l.contractId ? `
+        <button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="deliverKeys('${l.contractId}','${l.tenantId||''}')">🏠 Entregar chaves</button>
+        <button class="btn-sm" style="margin-left:4px" onclick="regenContract('${l.contractId}')">📄 Reenviar contrato</button>
+      ` : '';
+      return `<tr>
+        <td><strong>${l.tenant?.name||'—'}</strong><br><span style="font-size:11px;color:#888">${l.tenant?.email||''}</span></td>
+        <td>${l.tenant?.cpf||'—'}</td>
+        <td>${l.propertyCode||'—'}<br><span style="font-size:11px;color:#555">${l.propertyDescription||''}</span></td>
+        <td>${l.brokerName||l.brokerEmail||'—'}</td>
+        <td style="font-size:11px">${docsHtml||'—'}</td>
+        <td><span style="color:${col};font-weight:600">${lbl}</span></td>
+        <td style="white-space:nowrap">${btns}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Modal aprovação de lead
+  let approvingLeadId = null;
+  window.openApproveModal = (leadId) => {
+    approvingLeadId = leadId;
+    const l = leads.find(x => x.id === leadId);
+    if (!l) return;
+    $('approve-lead-name').textContent = l.tenant?.name || '—';
+    $('approve-lead-email').textContent = l.tenant?.email || '—';
+    $('approve-lead-prop').textContent = l.propertyCode || l.propertyDescription || '—';
+    $('modal-approve-lead').style.display = 'flex';
+    $('approve-rent').value = '';
+    $('approve-due-day').value = '10';
+    $('approve-start').value = new Date().toISOString().slice(0,10);
+    const endDate = new Date(); endDate.setFullYear(endDate.getFullYear()+1);
+    $('approve-end').value = endDate.toISOString().slice(0,10);
+    $('approve-address').value = l.propertyDescription || '';
+  };
+
+  window.confirmApproveLead = async () => {
+    const btn = $('approve-lead-btn');
+    btn.disabled = true; btn.textContent = 'Aprovando...';
+    try {
+      const res = await fetch('/api/locarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step: 'approve-lead',
+          leadId: approvingLeadId,
+          contractData: {
+            baseRent:        parseBRL($('approve-rent').value),
+            dueDay:          parseInt($('approve-due-day').value) || 10,
+            startDate:       $('approve-start').value,
+            endDate:         $('approve-end').value,
+            propertyAddress: $('approve-address').value
+          }
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      $('modal-approve-lead').style.display = 'none';
+      showToast('Lead aprovado! Contrato enviado para assinatura.', 'success');
+      await loadLeads();
+      await loadTenants();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Aprovar e Gerar Contrato'; }
+  };
+
+  window.rejectLead = async (leadId) => {
+    const reason = prompt('Motivo da rejeição (opcional):') ?? null;
+    if (reason === null) return;
+    try {
+      const res = await fetch('/api/locarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'reject-lead', leadId, reason })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showToast('Lead rejeitado.', 'info');
+      await loadLeads();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+  };
+
+  window.deliverKeys = async (contractId, tenantId) => {
+    if (!contractId || !tenantId) { showToast('Contrato ou inquilino não encontrado', 'error'); return; }
+    if (!confirm('Confirmar entrega das chaves? Isso ativa o inquilino no app.')) return;
+    try {
+      const res = await fetch('/api/locarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'deliver-keys', contractId, tenantId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showToast('🏠 Chaves entregues! Inquilino ativado no app.', 'success');
+      await loadLeads();
+      await loadTenants();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+  };
+
+  window.regenContract = async (contractId) => {
+    const btn = event?.target;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando...'; }
+    try {
+      const res = await fetch('/api/locarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'generate-contract', contractId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showToast('Contrato reenviado para assinatura.', 'success');
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = '📄 Reenviar contrato'; } }
+  };
+
+  window.generateContractForTenant = async (contractId) => {
+    const btn = event?.target;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando...'; }
+    try {
+      const res = await fetch('/api/locarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'generate-contract', contractId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showToast('Contrato enviado para assinatura via Assinafy!', 'success');
+      await loadTenants();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = '📄 Gerar contrato'; } }
+  };
+
+  window.deliverKeysForTenant = async (contractId, tenantId) => {
+    await deliverKeys(contractId, tenantId);
+  };
+
+  window.registerBroker = async () => {
+    const name  = $('broker-name')?.value?.trim();
+    const email = $('broker-email')?.value?.trim();
+    const phone = $('broker-phone')?.value?.trim();
+    if (!email) { showToast('E-mail do corretor obrigatório', 'error'); return; }
+    const btn = $('broker-save-btn');
+    btn.disabled = true; btn.textContent = 'Cadastrando...';
+    try {
+      const res = await fetch('/api/locarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'register-broker', ownerId: currentOwnerId, name, email, phone })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showToast('Corretor cadastrado!', 'success');
+      if ($('broker-name'))  $('broker-name').value  = '';
+      if ($('broker-email')) $('broker-email').value = '';
+      if ($('broker-phone')) $('broker-phone').value = '';
+      loadBrokers();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Cadastrar Corretor'; }
+  };
+
+  async function loadBrokers() {
+    if (!currentOwnerId) return;
+    const wrap = $('brokers-list');
+    if (!wrap) return;
+    const snap = await getDocs(query(collection(db, 'brokers'), where('ownerId', '==', currentOwnerId)));
+    const brokers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!brokers.length) { wrap.innerHTML = '<p style="color:#555;font-size:13px">Nenhum corretor cadastrado.</p>'; return; }
+    wrap.innerHTML = brokers.map(b => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2d3e">
+        <div>
+          <div style="font-weight:600;font-size:14px">${b.name||'—'}</div>
+          <div style="font-size:12px;color:#888">${b.email} ${b.phone ? '· '+b.phone : ''}</div>
+        </div>
+        <span style="font-size:12px;color:${b.active?'#4CAF50':'#ef5350'}">${b.active?'Ativo':'Inativo'}</span>
+      </div>`).join('');
+  }
+
   // ── Validação CPF ──────────────────────────────────────────
   function validarCpf(cpf) {
     const d = cpf.replace(/\D/g,'');
@@ -977,6 +1190,13 @@
     el.value = v.replace('.', ',');
   };
 
+  window.maskPhone = (el) => {
+    let v = el.value.replace(/\D/g,'').slice(0,11);
+    if (v.length > 10) v = v.replace(/^(\d{2})(\d{5})(\d{4})$/,'($1) $2-$3');
+    else if (v.length > 6) v = v.replace(/^(\d{2})(\d{4})(\d*)$/,'($1) $2-$3');
+    else if (v.length > 2) v = v.replace(/^(\d{2})(\d*)$/,'($1) $2');
+    el.value = v;
+  };
   window.maskPct = (el) => {
     let v = el.value.replace(/[^\d,.-]/g, '');
     el.value = v;
@@ -1206,6 +1426,17 @@
             const cfg = {pending:['#888','⏳ Análise'],analyzing:['#FFD54F','🔍 Em análise'],approved:['#4CAF50','✅ Aprovado'],rejected:['#ef5350','❌ Reprovado']};
             const [col,lbl] = cfg[s]||cfg.pending;
             return `<button class="btn-sm" style="color:${col};border-color:${col}" onclick="openCreditAnalysis('${t.id}')">${lbl}</button>`;
+          })()}
+          ${(()=>{
+            const c = contracts.find(x => x.tenantId === t.id);
+            if (!c) return '';
+            const signed = c.assinafyStatus === 'completed';
+            const hasDoc = !!c.assinafyDocumentId;
+            const active = c.active;
+            if (active) return `<button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" disabled>🏠 Ativo</button>`;
+            if (signed && !active) return `<button class="btn-sm" style="color:#4CAF50;border-color:#4CAF50" onclick="deliverKeysForTenant('${c.id}','${t.id}')">🏠 Entregar chaves</button>`;
+            if (hasDoc) return `<button class="btn-sm" style="color:#FFD54F;border-color:#FFD54F" onclick="regenContract('${c.id}')">📄 Reenviar</button>`;
+            return `<button class="btn-sm" style="color:#4CAF50;border-color:#4CAF50" onclick="generateContractForTenant('${c.id}')">📄 Gerar contrato</button>`;
           })()}
           <button class="btn-sm" style="background:#c0392b;border-color:#c0392b;color:#fff" onclick="deleteTenant('${t.id}','${(t.name||'').replace(/'/g,'')}')">Excluir</button>
         </td>
@@ -2189,7 +2420,7 @@
   $('tenant-cancel').addEventListener('click',  () => { $('modal-tenant').style.display = 'none'; resetTenantForm(); });
   $('tenant-save').addEventListener('click', saveTenant);
 
-  [$('modal-tenant'), $('modal-docs'), $('modal-billing'), $('modal-edit-tenant'), $('modal-extras'), $('modal-history'), $('modal-adjust-rent'), $('modal-credit-analysis')].forEach(m => {
+  [$('modal-tenant'), $('modal-docs'), $('modal-billing'), $('modal-edit-tenant'), $('modal-extras'), $('modal-history'), $('modal-adjust-rent'), $('modal-credit-analysis'), $('modal-approve-lead')].forEach(m => {
     m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
   });
   $('docs-modal-close').addEventListener('click', () => { $('modal-docs').style.display = 'none'; });
@@ -2222,9 +2453,12 @@
     if (!isMaster) {
       $('tab-owners').style.display = 'none';
       $('tab-config').style.display = 'block';
+      $('tab-leads').style.display  = 'block';
     } else {
       $('tab-licenses').style.display = 'block';
+      $('tab-leads').style.display    = 'block';
     }
+    startLeadsBadge();
 
     showSection('dashboard-section');
     renderPlanBanner();
@@ -2432,6 +2666,7 @@
 <section id="dashboard-section">
   <div class="tabs">
     <div class="tab active" id="tab-tenants">Inquilinos</div>
+    <div class="tab" id="tab-leads" style="display:none">📋 Leads</div>
     <div class="tab" id="tab-overdue" style="color:#ef9a9a">⚠ Inadimplentes</div>
     <div class="tab" id="tab-owners">Imobiliárias</div>
     <div class="tab" id="tab-licenses" style="display:none">🔑 Licenças</div>
@@ -2546,6 +2781,21 @@
       </div>
     </div>
 
+    <!-- Corretores -->
+    <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:12px;padding:24px;max-width:560px;margin-top:20px">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:4px">👔 Corretores</h3>
+      <p style="font-size:13px;color:#888;margin-bottom:20px;line-height:1.6">
+        Cadastre os corretores vinculados a esta imobiliária. Eles poderão enviar leads pelo app.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label>Nome</label><input id="broker-name" type="text" placeholder="João Silva"></div>
+        <div><label>E-mail</label><input id="broker-email" type="email" placeholder="joao@email.com"></div>
+      </div>
+      <div style="margin-top:10px"><label>Telefone</label><input id="broker-phone" type="tel" placeholder="(11) 99999-9999" oninput="maskPhone(this)" style="max-width:200px"></div>
+      <button class="btn" id="broker-save-btn" style="margin-top:14px" onclick="registerBroker()">Cadastrar Corretor</button>
+      <div id="brokers-list" style="margin-top:20px;border-top:1px solid #2a2d3e;padding-top:16px"></div>
+    </div>
+
     <!-- Boa Vista SCPC -->
     <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:12px;padding:24px;max-width:560px;margin-top:20px">
       <h3 style="font-size:15px;font-weight:700;margin-bottom:4px">🔎 Consulta Boa Vista SCPC</h3>
@@ -2573,6 +2823,33 @@
     </div>
   </div>
 
+  <!-- Painel: Leads de Corretores -->
+  <div class="panel" id="panel-leads" style="display:none">
+    <div class="section-header">
+      <h2>📋 Leads de Corretores</h2>
+      <button class="btn-outline" onclick="loadLeads()">↻ Atualizar</button>
+    </div>
+    <p style="font-size:13px;color:#888;margin-bottom:20px">Pré-cadastros enviados pelos corretores via app. Aprove para gerar o contrato via Assinafy.</p>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Inquilino</th>
+            <th>CPF</th>
+            <th>Imóvel</th>
+            <th>Corretor</th>
+            <th>Documentos</th>
+            <th>Status</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="leads-tbody">
+          <tr><td colspan="7" class="empty">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Painel: Imobiliárias (só master) -->
   <div class="panel" id="panel-owners">
     <div class="section-header">
@@ -2588,6 +2865,52 @@
     </table>
   </div>
 </section>
+
+<!-- Modal: Aprovar Lead -->
+<div id="modal-approve-lead" class="modal-overlay">
+  <div class="modal-box" style="max-width:500px">
+    <h3>✅ Aprovar Lead e Gerar Contrato</h3>
+    <div style="background:#0f1117;border:1px solid #2a2d3e;border-radius:8px;padding:14px;margin:16px 0">
+      <div style="display:flex;gap:20px;flex-wrap:wrap">
+        <div><div style="font-size:11px;color:#888">Inquilino</div><div id="approve-lead-name" style="font-weight:700"></div></div>
+        <div><div style="font-size:11px;color:#888">E-mail</div><div id="approve-lead-email" style="font-size:13px"></div></div>
+        <div><div style="font-size:11px;color:#888">Imóvel</div><div id="approve-lead-prop" style="font-size:13px"></div></div>
+      </div>
+    </div>
+
+    <label>Endereço completo do imóvel</label>
+    <input id="approve-address" type="text" placeholder="Rua das Flores, 123 — Apto 42 — São Paulo/SP">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px">
+      <div>
+        <label>Aluguel mensal</label>
+        <input id="approve-rent" type="text" placeholder="R$ 0,00" oninput="maskBRL(this)">
+      </div>
+      <div>
+        <label>Dia de vencimento</label>
+        <input id="approve-due-day" type="number" min="1" max="28" value="10">
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px">
+      <div>
+        <label>Início do contrato</label>
+        <input id="approve-start" type="date">
+      </div>
+      <div>
+        <label>Fim do contrato</label>
+        <input id="approve-end" type="date">
+      </div>
+    </div>
+
+    <p style="font-size:12px;color:#555;margin-top:14px">Após a aprovação: o inquilino recebe e-mail de boas-vindas, o contrato é gerado e enviado para assinatura via Assinafy (imobiliária + inquilino). Após ambos assinarem, clique em <strong>Entregar Chaves</strong> para ativar o inquilino no app.</p>
+
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="$('modal-approve-lead').style.display='none'">Cancelar</button>
+      <button class="btn" id="approve-lead-btn" onclick="confirmApproveLead()">✅ Aprovar e Gerar Contrato</button>
+    </div>
+  </div>
+</div>
 
 <!-- Modal: Billing / Plano -->
 <div id="modal-billing" class="modal-overlay">
