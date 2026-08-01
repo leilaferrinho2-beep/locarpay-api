@@ -511,6 +511,20 @@
     await loadTenants();
   };
 
+  // ── Validação CPF ──────────────────────────────────────────
+  function validarCpf(cpf) {
+    const d = cpf.replace(/\D/g,'');
+    if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+    let s = 0;
+    for (let i = 0; i < 9; i++) s += +d[i] * (10 - i);
+    let r = (s * 10) % 11; if (r === 10 || r === 11) r = 0;
+    if (r !== +d[9]) return false;
+    s = 0;
+    for (let i = 0; i < 10; i++) s += +d[i] * (11 - i);
+    r = (s * 10) % 11; if (r === 10 || r === 11) r = 0;
+    return r === +d[10];
+  }
+
   // ── Máscaras ───────────────────────────────────────────────
   function maskCpf(v) {
     return v.replace(/\D/g,'').slice(0,11)
@@ -529,26 +543,29 @@
   }
 
   // ── CEP lookup ─────────────────────────────────────────────
+  let cepValido = false;
   (function() {
     const cepInput = () => $('t-cep');
     function formatCep(v) { return v.replace(/\D/g,'').replace(/^(\d{5})(\d)/,'$1-$2').slice(0,9); }
     async function lookupCep(raw) {
       const digits = raw.replace(/\D/g,'');
+      cepValido = false;
       if (digits.length !== 8) return;
       const status = $('t-cep-status');
       status.textContent = '⏳'; status.style.color = '#8FAF8F';
       try {
         const r = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
         const d = await r.json();
-        if (d.erro) { status.textContent = '✗ CEP não encontrado'; status.style.color = '#EF5350'; return; }
+        if (d.erro) { status.textContent = '✗ CEP não encontrado'; status.style.color = '#EF5350'; cepValido = false; return; }
         $('t-street').value = d.logradouro || '';
         $('t-bairro').value = d.bairro || '';
         $('t-city').value   = d.localidade || '';
         $('t-uf').value     = d.uf || '';
         $('t-addr-block').style.display = 'block';
         status.textContent = '✓'; status.style.color = '#69D369';
+        cepValido = true;
         $('t-num').focus();
-      } catch { status.textContent = '✗ Erro'; status.style.color = '#EF5350'; }
+      } catch { status.textContent = '✗ Erro'; status.style.color = '#EF5350'; cepValido = false; }
     }
     document.addEventListener('DOMContentLoaded', () => {
       const inp = cepInput();
@@ -587,14 +604,19 @@
       showToast('Preencha todos os campos obrigatórios', 'error');
       return;
     }
-    if (cep.length !== 8) {
-      showToast('CEP obrigatório — digite um CEP válido', 'error');
+    if (cep.length !== 8 || !cepValido) {
+      showToast('CEP inválido — aguarde a busca ou verifique o CEP digitado', 'error');
       $('t-cep').focus();
       return;
     }
     if (!num) {
       showToast('Número do imóvel obrigatório', 'error');
       $('t-num').focus();
+      return;
+    }
+    if (cpf && !validarCpf(cpf)) {
+      showToast('CPF inválido — verifique os dígitos', 'error');
+      $('t-cpf').focus();
       return;
     }
     if (!currentOwnerId) {
