@@ -1496,6 +1496,24 @@
       el.style.borderColor = p === plan ? '#4CAF50' : '#2A4A2A';
       el.style.background  = p === plan ? '#1A2E1A' : '#132213';
     });
+    // Cartão disponível apenas no Pro e fora do trial
+    const isTrial  = !currentOwnerData?.plan || currentOwnerData?.status === 'trial' || currentOwnerData?.plan === 'trial';
+    const allowCard = plan === 'pro' && !isTrial;
+    const cardBtn  = $('upg-card-btn');
+    const cardNote = $('upg-card-note');
+    if (!allowCard) {
+      if (cardBtn)  { cardBtn.style.display = 'none'; }
+      if (cardNote) {
+        cardNote.textContent = plan === 'basic'
+          ? '💳 Cartão de crédito disponível apenas no plano Pro.'
+          : '💳 Pagamento por cartão disponível ao renovar o Pro após o trial.';
+        cardNote.style.display = 'block';
+      }
+      upgSelectMethod('pix');
+    } else {
+      if (cardBtn)  { cardBtn.style.display = ''; }
+      if (cardNote) { cardNote.style.display = 'none'; }
+    }
   };
 
   window.upgSelectMethod = (method) => {
@@ -2273,6 +2291,7 @@
           💳 Cartão
         </button>
       </div>
+      <div id="upg-card-note" style="display:none;font-size:12px;color:#8FAF8F;margin:-16px 0 16px;padding:8px 12px;background:#0f1117;border:1px solid #2A4A2A;border-radius:8px"></div>
 
       <label style="font-size:12px;color:#8FAF8F;text-transform:uppercase;letter-spacing:.05em">CPF ou CNPJ do responsável</label>
       <input id="upg-cpf" type="text" inputmode="numeric" maxlength="18" placeholder="000.000.000-00 ou 00.000.000/0001-00"
