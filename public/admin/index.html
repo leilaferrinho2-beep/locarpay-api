@@ -577,7 +577,7 @@
     const cpf       = $('t-cpf').value.replace(/\D/g,'');
     const propCode  = $('t-prop-code').value.trim().toUpperCase();
     const prop      = '';
-    const rent      = parseFloat($('t-rent').value.replace(',', '.'));
+    const rent      = parseBRL($('t-rent').value);
     const dueDay    = parseInt($('t-due').value);
     const digital   = $('t-digital').checked;
     const cep     = $('t-cep').value.replace(/\D/g,'');
@@ -717,6 +717,17 @@
     }
   }
 
+  window.maskBRL = (el) => {
+    let v = el.value.replace(/\D/g, '');
+    if (!v) { el.value = ''; return; }
+    v = (parseInt(v, 10) / 100).toFixed(2);
+    el.value = 'R$ ' + v.replace('.', ',').replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
+  };
+
+  function parseBRL(str) {
+    return parseFloat((str || '').replace('R$ ', '').replace(/\./g, '').replace(',', '.')) || 0;
+  }
+
   function resetTenantForm() {
     ['t-name','t-email','t-phone','t-cpf','t-cep','t-num','t-street','t-bairro','t-city','t-uf','t-complemento','t-property','t-prop-code','t-rent','t-due'].forEach(id => { const el = $(id); if(el) el.value = ''; });
     $('t-due').value = '10';
@@ -774,7 +785,7 @@
     $('et-name').value  = t.name  || '';
     $('et-phone').value = t.phone || '';
     $('et-cpf').value   = t.cpf   || '';
-    $('et-rent').value  = c?.baseRent  || '';
+    $('et-rent').value  = c?.baseRent ? 'R$ ' + c.baseRent.toFixed(2).replace('.', ',').replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.') : '';
     $('et-due').value   = c?.dueDay    || 10;
     $('et-property').value  = c?.propertyDescription || '';
     $('et-prop-code').value = c?.propertyCode || '';
@@ -792,7 +803,7 @@
       const userUpdates = { name: $('et-name').value.trim(), phone: $('et-phone').value.trim(), cpf: $('et-cpf').value.trim() };
       await updateDoc(doc(db, 'users', editingTenantId), userUpdates);
       if (c) {
-        const rent = parseFloat($('et-rent').value.replace(',', '.'));
+        const rent = parseBRL($('et-rent').value);
         const due  = parseInt($('et-due').value);
         if (!isNaN(rent) && !isNaN(due)) {
           const newCode = $('et-prop-code').value.trim().toUpperCase();
@@ -2453,7 +2464,7 @@
         <input id="t-prop-code" type="text" placeholder="ex: AP-101, CASA-3, KITNET-02" autocomplete="off" style="text-transform:uppercase">
         <small style="color:#666;font-size:11px">Identificador único deste imóvel nesta imobiliária</small>
       </div>
-      <div><label>Aluguel (R$) <span>*</span></label><input id="t-rent" type="number" placeholder="1200" min="0" step="0.01"></div>
+      <div><label>Aluguel (R$) <span>*</span></label><input id="t-rent" type="text" inputmode="numeric" placeholder="R$ 0,00" oninput="maskBRL(this)"></div>
     </div>
     <div class="row2">
       <div><label>Dia do vencimento <span>*</span></label><input id="t-due" type="number" value="10" min="1" max="28"></div>
@@ -2495,7 +2506,7 @@
     </div>
     <div class="row2">
       <div><label>CPF</label><input id="et-cpf" type="text"></div>
-      <div><label>Aluguel (R$)</label><input id="et-rent" type="number" min="0" step="0.01"></div>
+      <div><label>Aluguel (R$)</label><input id="et-rent" type="text" inputmode="numeric" placeholder="R$ 0,00" oninput="maskBRL(this)"></div>
     </div>
     <div class="row2">
       <div><label>Dia do vencimento</label><input id="et-due" type="number" min="1" max="28"></div>
