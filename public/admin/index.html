@@ -1924,20 +1924,20 @@
 
   /* Login */
   #login-section { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr 440px; z-index: 100; overflow: hidden; }
-  .login-left { background: linear-gradient(160deg, #0d1b35 0%, #0a1628 50%, #06101e 100%); display: flex; flex-direction: column; justify-content: center; padding: 80px 72px; position: relative; overflow: hidden; }
-  .login-left::before { content: ''; position: absolute; width: 600px; height: 600px; border-radius: 50%; background: radial-gradient(circle, rgba(79,134,247,0.08) 0%, transparent 70%); top: -100px; right: -100px; pointer-events: none; }
+  .login-left { background: linear-gradient(160deg, #0d1520 0%, #0a1018 50%, #070b11 100%); display: flex; flex-direction: column; justify-content: center; padding: 80px 72px; position: relative; overflow: hidden; }
+  .login-left::before { content: ''; position: absolute; width: 600px; height: 600px; border-radius: 50%; background: radial-gradient(circle, rgba(76,175,80,0.07) 0%, transparent 70%); top: -100px; right: -100px; pointer-events: none; }
   .ll-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 56px; }
-  .ll-logo-mark { width: 36px; height: 36px; border-radius: 9px; background: linear-gradient(135deg, #4F86F7, #2563eb); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; color: #fff; }
+  .ll-logo-mark { width: 36px; height: 36px; border-radius: 9px; background: linear-gradient(135deg, #66BB6A, #2e7d32); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; color: #fff; }
   .ll-logo-name { font-size: 18px; font-weight: 700; color: #fff; }
-  .ll-logo-name span { color: #4F86F7; }
+  .ll-logo-name span { color: #4CAF50; }
   .ll-headline { font-size: 40px; font-weight: 800; color: #fff; line-height: 1.15; letter-spacing: -1px; margin-bottom: 20px; max-width: 480px; }
-  .ll-headline em { font-style: normal; color: #4F86F7; }
-  .ll-sub { font-size: 16px; color: #4a6a8a; line-height: 1.7; max-width: 400px; margin-bottom: 56px; }
+  .ll-headline em { font-style: normal; color: #4CAF50; }
+  .ll-sub { font-size: 16px; color: #6a7a8a; line-height: 1.7; max-width: 400px; margin-bottom: 56px; }
   .ll-stats { display: flex; gap: 40px; }
   .ll-stat-num { font-size: 28px; font-weight: 800; color: #fff; }
-  .ll-stat-label { font-size: 12px; color: #3a5a7a; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .ll-stat-label { font-size: 12px; color: #4a5a6a; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
   .login-right { background: #080c14; display: flex; flex-direction: column; justify-content: center; align-items: stretch; padding: 56px 48px; border-left: 1px solid rgba(255,255,255,0.04); }
-  .lr-eyebrow { font-size: 11px; font-weight: 600; color: #4F86F7; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; }
+  .lr-eyebrow { font-size: 11px; font-weight: 600; color: #4CAF50; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; }
   .lr-title { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 8px; }
   .lr-sub { font-size: 14px; color: #3a4a5a; margin-bottom: 40px; line-height: 1.5; }
   .btn-google { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 15px 24px; background: #fff; color: #111; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.15s, transform 0.1s; }
@@ -2035,7 +2035,7 @@
   <div class="login-left">
     <div class="ll-logo">
       <div class="ll-logo-mark">L</div>
-      <div class="ll-logo-name">Locar<span>Pay</span></div>
+      <div class="ll-logo-name">iLocar<span>Pay</span></div>
     </div>
     <div class="ll-headline">Gestão de aluguéis<br><em>sem complicação</em></div>
     <div class="ll-sub">Contratos digitais, cobranças automáticas e acompanhamento de inquilinos em um único painel.</div>
@@ -2062,13 +2062,13 @@
     <!-- OTP Login -->
     <div id="otp-email-step">
       <input id="otp-email-input" type="email" placeholder="Seu e-mail cadastrado" style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid #1a2030;background:#0d1420;color:#e0e6f0;font-size:14px;box-sizing:border-box;margin-bottom:10px;outline:none;">
-      <button id="btn-send-otp" style="width:100%;padding:12px;border-radius:10px;border:1px solid #2563eb;background:transparent;color:#4F86F7;font-size:14px;font-weight:600;cursor:pointer;">Entrar com código por e-mail</button>
+      <button id="btn-send-otp" style="width:100%;padding:12px;border-radius:10px;border:1px solid #4CAF50;background:transparent;color:#4CAF50;font-size:14px;font-weight:600;cursor:pointer;">Entrar com código por e-mail</button>
     </div>
     <div id="otp-code-step" style="display:none">
-      <div style="font-size:13px;color:#7a90a8;margin-bottom:10px;">Código enviado para <span id="otp-sent-to" style="color:#4F86F7"></span></div>
-      <input id="otp-code-input" type="text" inputmode="numeric" maxlength="6" placeholder="000000" style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid #2563eb;background:#0d1420;color:#e0e6f0;font-size:22px;letter-spacing:8px;text-align:center;box-sizing:border-box;margin-bottom:10px;outline:none;">
-      <button id="btn-verify-otp" style="width:100%;padding:12px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Verificar código</button>
-      <div style="text-align:center;margin-top:10px"><button id="btn-resend-otp" style="background:none;border:none;color:#4F86F7;font-size:12px;cursor:pointer;text-decoration:underline;">Reenviar código</button></div>
+      <div style="font-size:13px;color:#7a90a8;margin-bottom:10px;">Código enviado para <span id="otp-sent-to" style="color:#4CAF50"></span></div>
+      <input id="otp-code-input" type="text" inputmode="numeric" maxlength="6" placeholder="000000" style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid #4CAF50;background:#080e0a;color:#e0e6f0;font-size:22px;letter-spacing:8px;text-align:center;box-sizing:border-box;margin-bottom:10px;outline:none;">
+      <button id="btn-verify-otp" style="width:100%;padding:12px;border-radius:10px;border:none;background:#4CAF50;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Verificar código</button>
+      <div style="text-align:center;margin-top:10px"><button id="btn-resend-otp" style="background:none;border:none;color:#4CAF50;font-size:12px;cursor:pointer;text-decoration:underline;">Reenviar código</button></div>
     </div>
     <div class="lr-divider" style="margin:20px 0 12px"><span>acesso restrito</span></div>
     <div class="lr-note">Apenas imobiliárias cadastradas na plataforma têm acesso.</div>
