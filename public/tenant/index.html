@@ -2,331 +2,563 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LocarPay — Área do Inquilino</title>
-<script type="module">
-  import { initializeApp }                    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getAuth, signInWithCustomToken, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-  import { getFirestore, collection, query, where, getDocs, orderBy } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-
-  const app  = initializeApp({
-    apiKey:    "AIzaSyDTd-f-QTKNhixlYCDVHI5pGe9H8hxwON4",
-    authDomain:"locarpayapp.firebaseapp.com",
-    projectId: "locarpayapp"
-  });
-  const auth = getAuth(app);
-  const db   = getFirestore(app);
-
-  const $ = id => document.getElementById(id);
-  const fmt    = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-  const fmtDate = d => d?.toDate ? d.toDate().toLocaleDateString('pt-BR') : (d ? new Date(d.seconds*1000).toLocaleDateString('pt-BR') : '—');
-
-  let step = 'email';
-  let pendingEmail = '';
-
-  // ── Auth state ───────────────────────────────────────────────────────────
-  onAuthStateChanged(auth, user => {
-    if (user) {
-      showScreen('dashboard');
-      loadContract(user.uid);
-      loadCharges(user.uid);
-    } else {
-      showScreen('login');
-    }
-  });
-
-  // ── Screens ──────────────────────────────────────────────────────────────
-  function showScreen(name) {
-    ['login','otp','dashboard'].forEach(s => {
-      $('screen-'+s).style.display = s === name ? 'block' : 'none';
-    });
-  }
-
-  // ── Login: enviar OTP ─────────────────────────────────────────────────────
-  $('btn-send-otp').onclick = async () => {
-    const email = $('input-email').value.trim().toLowerCase();
-    if (!email.includes('@')) { showError('email-error', 'Informe um e-mail válido.'); return; }
-    $('btn-send-otp').disabled = true; $('btn-send-otp').textContent = 'Enviando...';
-    showError('email-error', '');
-    try {
-      const r = await fetch('/api/locarpay-send-otp', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
-      if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Erro'); }
-      pendingEmail = email;
-      $('otp-hint').textContent = `Código enviado para ${email}`;
-      showScreen('otp');
-    } catch (e) {
-      showError('email-error', e.message);
-    }
-    $('btn-send-otp').disabled = false; $('btn-send-otp').textContent = 'Receber código';
-  };
-
-  // ── Login: verificar OTP ──────────────────────────────────────────────────
-  $('btn-verify-otp').onclick = async () => {
-    const otp = $('input-otp').value.trim();
-    if (otp.length < 4) { showError('otp-error', 'Informe o código.'); return; }
-    $('btn-verify-otp').disabled = true; $('btn-verify-otp').textContent = 'Verificando...';
-    showError('otp-error', '');
-    try {
-      const r = await fetch('/api/locarpay-verify-otp', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: pendingEmail, otp })
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Código inválido');
-      await signInWithCustomToken(auth, d.customToken);
-      // onAuthStateChanged vai cuidar do redirect
-    } catch (e) {
-      showError('otp-error', e.message);
-    }
-    $('btn-verify-otp').disabled = false; $('btn-verify-otp').textContent = 'Entrar';
-  };
-
-  $('btn-back-email').onclick = () => showScreen('login');
-
-  $('btn-logout').onclick = () => signOut(auth);
-
-  // ── Dashboard: carregar contrato ─────────────────────────────────────────
-  async function loadContract(uid) {
-    try {
-      const snap = await getDocs(query(
-        collection(db, 'contracts'),
-        where('tenantId', '==', uid),
-        where('active', '==', true)
-      ));
-      if (snap.empty) return;
-      const contract = snap.docs[0].data();
-      const fmtTs = ts => ts?.seconds ? new Date(ts.seconds * 1000).toLocaleDateString('pt-BR') : '—';
-      const status = contract.assinafyStatus === 'signed' ? '✅ Assinado'
-        : contract.assinafyStatus === 'pending' ? '⏳ Aguardando assinatura'
-        : contract.assinafyStatus === 'manual' ? '📋 Contrato sem assinatura digital' : '—';
-      const endDate = contract.endDate ? fmtTs(contract.endDate) : '—';
-      const startDate = contract.startDate ? fmtTs(contract.startDate) : '—';
-      $('contract-info').innerHTML = `
-        <h3 class="section-title">Meu Contrato</h3>
-        <div class="card card-pending">
-          <div class="card-row"><span class="card-label">STATUS</span><span class="card-meta">${status}</span></div>
-          <div class="card-row"><span class="card-label">IMÓVEL</span><span class="card-meta">${contract.propertyDescription || '—'}</span></div>
-          <div class="card-row"><span class="card-label">ALUGUEL</span><span class="card-amount" style="font-size:16px">${fmt.format(contract.baseRent || 0)}</span></div>
-          <div class="card-row"><span class="card-meta">Início: ${startDate}</span><span class="card-meta">Término: ${endDate}</span></div>
-        </div>`;
-    } catch (_) {}
-  }
-
-  // ── Dashboard: carregar cobranças ─────────────────────────────────────────
-  async function loadCharges(uid) {
-    $('charges-list').innerHTML = '<p class="loading">Carregando cobranças...</p>';
-    try {
-      const snap = await getDocs(query(
-        collection(db, 'charges'),
-        where('tenantId', '==', uid)
-      ));
-      const charges = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a,b) => (b.dueDate?.seconds||0) - (a.dueDate?.seconds||0));
-
-      if (charges.length === 0) {
-        $('charges-list').innerHTML = '<p class="empty">Nenhuma cobrança encontrada.</p>';
-        return;
-      }
-
-      const pending = charges.filter(c => c.status === 'pending' || c.status === 'overdue');
-      const paid    = charges.filter(c => c.status === 'paid');
-
-      let html = '';
-
-      if (pending.length > 0) {
-        html += '<h3 class="section-title">Em aberto</h3>';
-        pending.forEach(c => {
-          const isOverdue = c.status === 'overdue';
-          const diaAtraso = c.diasAtraso || 0;
-          html += `
-            <div class="card ${isOverdue ? 'card-overdue' : 'card-pending'}">
-              <div class="card-row">
-                <span class="card-label">${isOverdue ? '⚠️ VENCIDA' : '🕐 PENDENTE'}</span>
-                <span class="card-amount">${fmt.format(c.totalAmount || c.baseRent || 0)}</span>
-              </div>
-              <div class="card-row">
-                <span class="card-meta">Ref.: ${c.monthRef || '—'}</span>
-                <span class="card-meta ${isOverdue ? 'text-red' : ''}">Venc.: ${fmtDate(c.dueDate)}</span>
-              </div>
-              ${isOverdue && diaAtraso > 0 ? `<div class="card-row"><span class="card-meta text-red">${diaAtraso} dia${diaAtraso>1?'s':''} de atraso · multa aplicada</span></div>` : ''}
-              ${c.pixCopyPaste ? `
-                <div class="pix-section">
-                  ${c.pixQrCode ? `
-                    <p class="pix-label">QR Code PIX</p>
-                    <div style="text-align:center;margin-bottom:12px">
-                      <img src="data:image/png;base64,${c.pixQrCode}" alt="QR Code PIX" style="width:180px;height:180px;border-radius:8px;background:#fff;padding:8px">
-                    </div>
-                  ` : ''}
-                  <p class="pix-label">PIX Copia e Cola</p>
-                  <div class="pix-code">${c.pixCopyPaste}</div>
-                  <button class="btn-pix" onclick="copyPix('${c.id}','${c.pixCopyPaste.replace(/'/g,"\\'")}')">Copiar código PIX</button>
-                </div>
-              ` : `<p class="pix-hint">Solicite ao proprietário para gerar o PIX no app LocarPay.</p>`}
-            </div>`;
-        });
-      }
-
-      if (paid.length > 0) {
-        html += '<h3 class="section-title">Histórico de pagamentos</h3>';
-        paid.slice(0, 12).forEach(c => {
-          html += `
-            <div class="card card-paid">
-              <div class="card-row">
-                <span class="card-label">✅ PAGO</span>
-                <span class="card-amount">${fmt.format(c.totalAmount || c.baseRent || 0)}</span>
-              </div>
-              <div class="card-row">
-                <span class="card-meta">Ref.: ${c.monthRef || '—'}</span>
-                <span class="card-meta">Venc.: ${fmtDate(c.dueDate)}</span>
-              </div>
-            </div>`;
-        });
-      }
-
-      $('charges-list').innerHTML = html;
-    } catch (e) {
-      $('charges-list').innerHTML = `<p class="empty">Erro ao carregar: ${e.message}</p>`;
-    }
-  }
-
-  window.copyPix = (id, code) => {
-    navigator.clipboard.writeText(code).then(() => {
-      const btn = document.querySelector(`button[onclick*="${id}"]`);
-      if (btn) { const orig = btn.textContent; btn.textContent = 'Copiado! ✓'; setTimeout(() => btn.textContent = orig, 2000); }
-    });
-  };
-
-  function showError(id, msg) { $(id).textContent = msg; }
-</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>iLocarPay — Área do Inquilino</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #0f1117;
-    color: #e0e0e0;
-    min-height: 100vh;
-  }
+:root {
+  --bg:       #07080d;
+  --surface:  rgba(255,255,255,.045);
+  --border:   rgba(255,255,255,.08);
+  --green:    #4CAF50;
+  --green-dk: #2e7d32;
+  --green-glow: rgba(76,175,80,.18);
+  --red:      #ef5350;
+  --yellow:   #FFD54F;
+  --text:     #f0f0f0;
+  --muted:    rgba(255,255,255,.45);
+  --card-r:   18px;
+  --sans:     -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html,body { height:100%; -webkit-tap-highlight-color:transparent; }
+body { font-family:var(--sans); background:var(--bg); color:var(--text); min-height:100dvh; overflow-x:hidden; }
 
-  /* Header */
-  .header {
-    background: #1a1d2e;
-    padding: 16px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid #2a2d3e;
-    position: sticky; top: 0; z-index: 10;
-  }
-  .logo { font-size: 18px; font-weight: 800; color: #4CAF50; letter-spacing: -0.3px; }
-  .btn-logout { background: transparent; border: 1px solid #2a2d3e; color: #888; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
-  .btn-logout:hover { color: #ccc; border-color: #3a3d4e; }
+/* ── Screens ── */
+.screen { display:none; min-height:100dvh; }
+.screen.active { display:flex; flex-direction:column; }
 
-  /* Screens */
-  .screen { display: none; }
-  .login-wrap {
-    display: flex; flex-direction: column; align-items: center;
-    padding: 48px 24px 24px;
-    max-width: 420px; margin: 0 auto;
-  }
-  .login-logo { font-size: 28px; font-weight: 900; color: #4CAF50; margin-bottom: 8px; }
-  .login-sub { color: #888; font-size: 14px; margin-bottom: 32px; text-align: center; }
-  .input-label { font-size: 13px; color: #aaa; margin-bottom: 6px; display: block; }
-  .input-field {
-    width: 100%; background: #1a1d2e; border: 1px solid #2a2d3e; color: #e0e0e0;
-    padding: 12px 14px; border-radius: 10px; font-size: 15px; outline: none;
-    transition: border-color .2s;
-  }
-  .input-field:focus { border-color: #4CAF50; }
-  .btn-primary {
-    width: 100%; background: #2D6A2D; color: #fff; border: none;
-    padding: 14px; border-radius: 10px; font-size: 15px; font-weight: 700;
-    cursor: pointer; margin-top: 12px; transition: background .2s;
-  }
-  .btn-primary:hover { background: #3a8a3a; }
-  .btn-primary:disabled { background: #1a3a1a; color: #666; cursor: not-allowed; }
-  .btn-link { background: transparent; border: none; color: #4CAF50; cursor: pointer; font-size: 13px; margin-top: 8px; padding: 4px 0; }
-  .error-msg { color: #ef5350; font-size: 13px; margin-top: 6px; min-height: 18px; }
-  .otp-hint { color: #888; font-size: 13px; margin-bottom: 20px; text-align: center; }
+/* ── Auth ── */
+.auth-bg {
+  position:fixed; inset:0; z-index:0;
+  background: radial-gradient(ellipse 120% 80% at 60% -10%, rgba(76,175,80,.22) 0%, transparent 65%),
+              radial-gradient(ellipse 80% 60% at -20% 80%, rgba(30,60,30,.4) 0%, transparent 60%),
+              var(--bg);
+}
+.auth-wrap {
+  position:relative; z-index:1;
+  display:flex; flex-direction:column; align-items:center;
+  padding:60px 28px 40px; max-width:400px; margin:0 auto; width:100%;
+}
+.auth-logo {
+  width:72px; height:72px; border-radius:22px;
+  background:linear-gradient(135deg,#66BB6A,#2e7d32);
+  display:flex; align-items:center; justify-content:center;
+  font-size:34px; font-weight:900; color:#fff;
+  box-shadow:0 8px 32px rgba(76,175,80,.35);
+  margin-bottom:28px;
+}
+.auth-title { font-size:26px; font-weight:800; margin-bottom:6px; letter-spacing:-.5px; }
+.auth-sub   { color:var(--muted); font-size:15px; margin-bottom:40px; text-align:center; line-height:1.5; }
+.field-group { width:100%; margin-bottom:16px; }
+.field-label { font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.05em; text-transform:uppercase; margin-bottom:8px; display:block; }
+.field-input {
+  width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text);
+  padding:15px 16px; border-radius:14px; font-size:16px; outline:none;
+  transition:border-color .2s, box-shadow .2s; backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+}
+.field-input:focus { border-color:var(--green); box-shadow:0 0 0 3px var(--green-glow); }
+.btn-main {
+  width:100%; background:var(--green); color:#fff; border:none;
+  padding:15px; border-radius:14px; font-size:16px; font-weight:700;
+  cursor:pointer; margin-top:4px; transition:background .2s, transform .1s, box-shadow .2s;
+  box-shadow:0 4px 20px rgba(76,175,80,.3);
+}
+.btn-main:hover  { background:#43A047; box-shadow:0 6px 28px rgba(76,175,80,.4); }
+.btn-main:active { transform:scale(.98); }
+.btn-main:disabled { background:#1e3a1e; color:#3a5a3a; box-shadow:none; cursor:not-allowed; }
+.btn-ghost { background:transparent; border:none; color:var(--green); cursor:pointer; font-size:14px; margin-top:12px; padding:8px 0; font-family:var(--sans); }
 
-  /* Dashboard */
-  .dashboard { max-width: 560px; margin: 0 auto; padding: 20px 16px 60px; }
-  .section-title { font-size: 12px; font-weight: 700; color: #888; letter-spacing: .5px; text-transform: uppercase; margin: 24px 0 10px; }
-  .card {
-    border-radius: 14px; padding: 16px; margin-bottom: 12px;
-    border: 1px solid transparent;
-  }
-  .card-pending { background: #1a1d2e; border-color: #2a2d3e; }
-  .card-overdue { background: #2a1010; border-color: #5a1a1a; }
-  .card-paid    { background: #111e11; border-color: #1e3a1e; }
-  .card-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-  .card-label { font-size: 11px; font-weight: 700; color: #aaa; letter-spacing: .5px; }
-  .card-amount { font-size: 20px; font-weight: 800; color: #e0e0e0; }
-  .card-paid .card-amount { color: #81C784; }
-  .card-overdue .card-amount { color: #ef9a9a; }
-  .card-meta { font-size: 13px; color: #777; }
-  .text-red { color: #ef5350 !important; }
-  .pix-section { margin-top: 14px; background: #0f1117; border-radius: 10px; padding: 12px; }
-  .pix-label { font-size: 11px; color: #888; margin-bottom: 6px; font-weight: 600; letter-spacing: .3px; }
-  .pix-code {
-    font-family: monospace; font-size: 11px; color: #aaa; word-break: break-all;
-    background: #1a1d2e; padding: 8px; border-radius: 6px; margin-bottom: 10px;
-    max-height: 60px; overflow: hidden;
-  }
-  .btn-pix {
-    width: 100%; background: #1B5E20; color: #fff; border: none;
-    padding: 10px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;
-    transition: background .2s;
-  }
-  .btn-pix:hover { background: #2D6A2D; }
-  .pix-hint { color: #666; font-size: 12px; margin-top: 10px; text-align: center; }
-  .loading, .empty { color: #666; font-size: 14px; text-align: center; padding: 32px 0; }
+/* OTP boxes */
+.otp-row { display:flex; gap:10px; width:100%; margin-bottom:16px; }
+.otp-box {
+  flex:1; aspect-ratio:1; text-align:center; font-size:24px; font-weight:800;
+  background:var(--surface); border:1px solid var(--border); color:var(--text);
+  border-radius:14px; outline:none; transition:border-color .2s, box-shadow .2s;
+  -webkit-backdrop-filter:blur(12px);
+}
+.otp-box:focus { border-color:var(--green); box-shadow:0 0 0 3px var(--green-glow); }
+.otp-hint { color:var(--muted); font-size:14px; margin-bottom:28px; text-align:center; line-height:1.5; }
+.err-msg { color:var(--red); font-size:13px; margin-top:-8px; margin-bottom:8px; min-height:20px; text-align:center; }
+
+/* ── Dashboard header ── */
+.dash-header {
+  position:sticky; top:0; z-index:20;
+  background:rgba(7,8,13,.85); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  padding:14px 20px 14px; padding-top:max(14px, env(safe-area-inset-top));
+  display:flex; align-items:center; justify-content:space-between;
+}
+.dash-logo { display:flex; align-items:center; gap:10px; }
+.dash-logo-icon {
+  width:32px; height:32px; border-radius:9px;
+  background:linear-gradient(135deg,#66BB6A,#2e7d32);
+  display:flex; align-items:center; justify-content:center;
+  font-size:16px; font-weight:900; color:#fff;
+}
+.dash-logo-name { font-size:17px; font-weight:800; }
+.dash-logo-name span { color:var(--green); }
+.dash-user { display:flex; align-items:center; gap:10px; }
+.dash-email { font-size:12px; color:var(--muted); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.btn-logout {
+  background:var(--surface); border:1px solid var(--border); color:var(--muted);
+  padding:7px 14px; border-radius:20px; cursor:pointer; font-size:13px;
+  transition:color .2s, border-color .2s;
+}
+.btn-logout:hover { color:var(--text); border-color:rgba(255,255,255,.2); }
+
+/* ── Dashboard body ── */
+.dash-body { flex:1; padding:0 0 100px; }
+.dash-section { max-width:560px; margin:0 auto; padding:0 16px; }
+
+/* ── Hero (contrato ativo) ── */
+.contract-hero {
+  margin:20px 16px 0;
+  max-width:528px; margin-left:auto; margin-right:auto;
+  background:linear-gradient(135deg,rgba(46,125,50,.5),rgba(27,94,32,.3));
+  border:1px solid rgba(76,175,80,.3);
+  border-radius:var(--card-r); padding:24px;
+  position:relative; overflow:hidden;
+}
+.contract-hero::before {
+  content:''; position:absolute; top:-60px; right:-60px;
+  width:200px; height:200px; border-radius:50%;
+  background:radial-gradient(circle, rgba(76,175,80,.15), transparent);
+  pointer-events:none;
+}
+.hero-label { font-size:11px; color:rgba(76,175,80,.8); font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-bottom:10px; }
+.hero-prop  { font-size:18px; font-weight:800; margin-bottom:4px; }
+.hero-rent  { font-size:32px; font-weight:900; color:var(--green); letter-spacing:-1px; }
+.hero-meta  { display:flex; gap:20px; margin-top:14px; }
+.hero-meta-item { }
+.hero-meta-label { font-size:10px; color:rgba(255,255,255,.5); text-transform:uppercase; letter-spacing:.05em; }
+.hero-meta-val   { font-size:13px; font-weight:600; margin-top:2px; }
+.hero-badge {
+  display:inline-flex; align-items:center; gap:5px;
+  background:rgba(76,175,80,.15); border:1px solid rgba(76,175,80,.3);
+  color:var(--green); font-size:11px; font-weight:700;
+  padding:4px 10px; border-radius:20px; margin-top:14px;
+}
+
+/* ── Section headers ── */
+.sec-header { display:flex; align-items:center; gap:8px; padding:24px 0 12px; }
+.sec-title   { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
+
+/* ── Charge cards ── */
+.charge-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--card-r); padding:20px; margin-bottom:12px;
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  transition:transform .15s;
+}
+.charge-card:active { transform:scale(.99); }
+.charge-overdue { background:rgba(239,83,80,.06); border-color:rgba(239,83,80,.25); }
+.charge-paid    { background:rgba(76,175,80,.04); border-color:rgba(76,175,80,.12); }
+.charge-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+.charge-pill {
+  display:inline-flex; align-items:center; gap:5px;
+  font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px;
+}
+.pill-pending  { background:rgba(255,213,79,.12); color:var(--yellow); border:1px solid rgba(255,213,79,.25); }
+.pill-overdue  { background:rgba(239,83,80,.12); color:var(--red);    border:1px solid rgba(239,83,80,.25); }
+.pill-paid     { background:rgba(76,175,80,.12);  color:var(--green);  border:1px solid rgba(76,175,80,.25); }
+.charge-amount { font-size:28px; font-weight:900; letter-spacing:-1px; }
+.charge-amount-overdue { color:var(--red); }
+.charge-amount-paid    { color:var(--green); }
+.charge-row { display:flex; justify-content:space-between; }
+.charge-meta { font-size:13px; color:var(--muted); }
+.charge-ref  { font-size:14px; font-weight:600; }
+.delay-tag { font-size:12px; color:var(--red); margin-top:6px; font-weight:500; }
+
+/* PIX */
+.pix-wrap { margin-top:16px; background:rgba(0,0,0,.3); border-radius:12px; padding:16px; }
+.pix-sec-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.1em; font-weight:700; margin-bottom:10px; }
+.pix-qr { text-align:center; margin-bottom:14px; }
+.pix-qr img { width:160px; height:160px; border-radius:10px; background:#fff; padding:6px; }
+.pix-code-box {
+  font-family:monospace; font-size:11px; color:rgba(255,255,255,.5);
+  background:rgba(255,255,255,.04); border:1px solid var(--border);
+  padding:10px 12px; border-radius:8px; word-break:break-all;
+  max-height:56px; overflow:hidden; margin-bottom:12px;
+}
+.btn-pix {
+  width:100%; background:var(--green-dk); color:#fff; border:none;
+  padding:13px; border-radius:11px; font-size:14px; font-weight:700;
+  cursor:pointer; transition:background .2s; display:flex; align-items:center; justify-content:center; gap:8px;
+}
+.btn-pix:hover  { background:var(--green); }
+.btn-pix:active { transform:scale(.98); }
+.pix-hint { font-size:12px; color:var(--muted); text-align:center; margin-top:12px; }
+
+/* No contract */
+.no-contract {
+  text-align:center; padding:48px 24px;
+  color:var(--muted); font-size:15px;
+}
+.no-contract .icon { font-size:48px; margin-bottom:16px; opacity:.5; }
+
+/* Bottom nav */
+.bottom-nav {
+  position:fixed; bottom:0; left:0; right:0; z-index:30;
+  background:rgba(7,8,13,.92); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+  border-top:1px solid var(--border);
+  display:flex;
+  padding-bottom:max(12px, env(safe-area-inset-bottom));
+}
+.nav-item {
+  flex:1; display:flex; flex-direction:column; align-items:center;
+  padding:10px 0 0; gap:4px; cursor:pointer;
+  color:var(--muted); font-size:10px; font-weight:600; letter-spacing:.03em;
+  text-transform:uppercase; transition:color .2s; border:none; background:none;
+  font-family:var(--sans);
+}
+.nav-item.active { color:var(--green); }
+.nav-item svg { width:22px; height:22px; }
+
+/* Sections */
+.dash-panel { display:none; }
+.dash-panel.visible { display:block; }
+
+/* Animations */
+@keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+.fadein { animation:fadeUp .35s ease both; }
+
+/* Loading */
+.skeleton {
+  background:linear-gradient(90deg, var(--surface) 25%, rgba(255,255,255,.07) 50%, var(--surface) 75%);
+  background-size:200% 100%; animation:shimmer 1.4s infinite;
+  border-radius:10px; height:120px; margin-bottom:12px;
+}
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+/* App download banner */
+.app-banner {
+  margin:20px 16px 0; max-width:528px; margin-left:auto; margin-right:auto;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--card-r); padding:16px 20px;
+  display:flex; align-items:center; gap:14px;
+}
+.app-banner-icon { font-size:32px; }
+.app-banner-text { flex:1; }
+.app-banner-text strong { font-size:14px; display:block; margin-bottom:2px; }
+.app-banner-text span { font-size:12px; color:var(--muted); }
+.btn-download {
+  background:var(--green); color:#fff; border:none;
+  padding:9px 16px; border-radius:10px; font-size:13px; font-weight:700;
+  cursor:pointer; white-space:nowrap; text-decoration:none; display:inline-block;
+}
+
+/* Responsive */
+@media (min-width:600px) {
+  .auth-wrap { padding-top:100px; }
+}
 </style>
 </head>
 <body>
 
-<!-- ── Header ───────────────────────────────────────────────────── -->
-<div class="header">
-  <span class="logo">LocarPay</span>
-  <button class="btn-logout" id="btn-logout">Sair</button>
-</div>
-
-<!-- ── Screen: Login ─────────────────────────────────────────────── -->
-<div class="screen" id="screen-login">
-  <div class="login-wrap">
-    <div class="login-logo">L</div>
-    <p class="login-sub">Portal do Inquilino<br>Acesse suas cobranças</p>
-    <label class="input-label" for="input-email">E-mail cadastrado</label>
-    <input class="input-field" id="input-email" type="email" placeholder="seu@email.com.br" autocomplete="email">
-    <p class="error-msg" id="email-error"></p>
-    <button class="btn-primary" id="btn-send-otp">Receber código</button>
+<!-- ── Screen: Login ─────────────────────────────────── -->
+<div class="screen active" id="screen-login">
+  <div class="auth-bg"></div>
+  <div class="auth-wrap fadein">
+    <div class="auth-logo">i</div>
+    <h1 class="auth-title">iLocarPay</h1>
+    <p class="auth-sub">Portal do Inquilino<br>Acesse suas cobranças e contrato</p>
+    <div class="field-group">
+      <label class="field-label" for="input-email">Seu e-mail</label>
+      <input class="field-input" id="input-email" type="email" placeholder="seu@email.com.br" autocomplete="email" inputmode="email">
+    </div>
+    <p class="err-msg" id="email-error"></p>
+    <button class="btn-main" id="btn-send-otp">Receber código de acesso</button>
   </div>
 </div>
 
-<!-- ── Screen: OTP ───────────────────────────────────────────────── -->
+<!-- ── Screen: OTP ────────────────────────────────────── -->
 <div class="screen" id="screen-otp">
-  <div class="login-wrap">
-    <div class="login-logo">L</div>
-    <p class="otp-hint" id="otp-hint">Código enviado para seu e-mail</p>
-    <label class="input-label" for="input-otp">Código de 6 dígitos</label>
-    <input class="input-field" id="input-otp" type="number" placeholder="000000" maxlength="6" autocomplete="one-time-code" inputmode="numeric">
-    <p class="error-msg" id="otp-error"></p>
-    <button class="btn-primary" id="btn-verify-otp">Entrar</button>
-    <button class="btn-link" id="btn-back-email">← Voltar</button>
+  <div class="auth-bg"></div>
+  <div class="auth-wrap fadein">
+    <div class="auth-logo" style="background:linear-gradient(135deg,#42A5F5,#1565C0)">🔐</div>
+    <h1 class="auth-title">Verifique o código</h1>
+    <p class="otp-hint" id="otp-hint">Enviamos um código de 6 dígitos para o seu e-mail</p>
+    <div class="otp-row" id="otp-row">
+      <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+    </div>
+    <p class="err-msg" id="otp-error"></p>
+    <button class="btn-main" id="btn-verify-otp">Entrar</button>
+    <button class="btn-ghost" id="btn-back-email">← Voltar</button>
   </div>
 </div>
 
-<!-- ── Screen: Dashboard ─────────────────────────────────────────── -->
+<!-- ── Screen: Dashboard ──────────────────────────────── -->
 <div class="screen" id="screen-dashboard">
-  <div class="dashboard">
-    <div id="contract-info"></div>
-    <div id="charges-list"><p class="loading">Carregando...</p></div>
+
+  <div class="dash-header">
+    <div class="dash-logo">
+      <div class="dash-logo-icon">i</div>
+      <span class="dash-logo-name">iLocar<span>Pay</span></span>
+    </div>
+    <div class="dash-user">
+      <span class="dash-email" id="user-email-label"></span>
+      <button class="btn-logout" id="btn-logout">Sair</button>
+    </div>
   </div>
+
+  <div class="dash-body" id="dash-body">
+
+    <!-- Panel: Início -->
+    <div class="dash-panel visible" id="panel-home">
+      <div class="dash-section">
+        <!-- app banner -->
+        <a class="app-banner" href="/download/locarpay.apk" download style="text-decoration:none;color:inherit;margin-top:20px;display:flex">
+          <span class="app-banner-icon">📱</span>
+          <div class="app-banner-text">
+            <strong>Baixe o app iLocarPay</strong>
+            <span>Pague, veja cobranças e contratos direto no celular</span>
+          </div>
+          <span class="btn-download">Baixar</span>
+        </a>
+      </div>
+      <!-- contrato -->
+      <div id="contract-area" class="dash-section" style="margin-top:8px"></div>
+    </div>
+
+    <!-- Panel: Cobranças -->
+    <div class="dash-panel" id="panel-charges">
+      <div class="dash-section">
+        <div class="sec-header"><span class="sec-title">Cobranças</span></div>
+        <div id="charges-list"><div class="skeleton"></div><div class="skeleton" style="height:80px;opacity:.6"></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bottom nav -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" id="nav-home" onclick="navTo('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Início
+    </button>
+    <button class="nav-item" id="nav-charges" onclick="navTo('charges')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+      Cobranças
+    </button>
+  </nav>
+
 </div>
 
+<script type="module">
+import { initializeApp }    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, signInWithCustomToken, signOut, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, collection, query, where, getDocs }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const app  = initializeApp({ apiKey:"AIzaSyDTd-f-QTKNhixlYCDVHI5pGe9H8hxwON4", authDomain:"locarpayapp.firebaseapp.com", projectId:"locarpayapp" });
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+const $  = id => document.getElementById(id);
+const fmt = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' });
+const fmtDate = d => d?.toDate ? d.toDate().toLocaleDateString('pt-BR') : (d?.seconds ? new Date(d.seconds*1000).toLocaleDateString('pt-BR') : '—');
+
+let pendingEmail = '';
+
+// ── Auth ──────────────────────────────────────────────
+onAuthStateChanged(auth, user => {
+  if (user) {
+    show('screen-dashboard');
+    $('user-email-label').textContent = user.email || '';
+    loadAll(user.uid);
+  } else {
+    show('screen-login');
+  }
+});
+
+function show(id) {
+  ['screen-login','screen-otp','screen-dashboard'].forEach(s => {
+    const el = $(s);
+    el.classList.toggle('active', s === id);
+    el.style.display = s === id ? 'flex' : 'none';
+  });
+}
+
+// ── OTP boxes ─────────────────────────────────────────
+const otpBoxes = document.querySelectorAll('.otp-box');
+otpBoxes.forEach((box, i) => {
+  box.addEventListener('input', e => {
+    const v = e.target.value.replace(/\D/g,'');
+    box.value = v.slice(-1);
+    if (v && i < 5) otpBoxes[i+1].focus();
+    if (getOtp().length === 6) verifyOtp();
+  });
+  box.addEventListener('keydown', e => {
+    if (e.key === 'Backspace' && !box.value && i > 0) { otpBoxes[i-1].focus(); otpBoxes[i-1].value = ''; }
+  });
+  box.addEventListener('paste', e => {
+    e.preventDefault();
+    const txt = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g,'');
+    [...txt.slice(0,6)].forEach((ch, j) => { if (otpBoxes[j]) otpBoxes[j].value = ch; });
+    if (txt.length >= 6) verifyOtp();
+    else otpBoxes[Math.min(txt.length, 5)].focus();
+  });
+});
+function getOtp() { return [...otpBoxes].map(b => b.value).join(''); }
+
+// ── Login ─────────────────────────────────────────────
+$('btn-send-otp').onclick = async () => {
+  const email = $('input-email').value.trim().toLowerCase();
+  if (!email.includes('@')) { $('email-error').textContent = 'Informe um e-mail válido.'; return; }
+  $('email-error').textContent = '';
+  $('btn-send-otp').disabled = true;
+  $('btn-send-otp').textContent = 'Enviando...';
+  try {
+    const r = await fetch('/api/locarpay-send-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email }) });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Erro'); }
+    pendingEmail = email;
+    $('otp-hint').textContent = `Código enviado para ${email}`;
+    otpBoxes.forEach(b => b.value = '');
+    show('screen-otp');
+    setTimeout(() => otpBoxes[0].focus(), 300);
+  } catch(e) { $('email-error').textContent = e.message; }
+  $('btn-send-otp').disabled = false;
+  $('btn-send-otp').textContent = 'Receber código de acesso';
+};
+
+$('btn-back-email').onclick = () => show('screen-login');
+$('btn-logout').onclick    = () => signOut(auth);
+
+$('btn-verify-otp').onclick = verifyOtp;
+
+async function verifyOtp() {
+  const otp = getOtp();
+  if (otp.length < 6) return;
+  $('otp-error').textContent = '';
+  $('btn-verify-otp').disabled = true;
+  $('btn-verify-otp').textContent = 'Verificando...';
+  try {
+    const r = await fetch('/api/locarpay-verify-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email:pendingEmail, otp }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Código inválido');
+    await signInWithCustomToken(auth, d.customToken);
+  } catch(e) {
+    $('otp-error').textContent = e.message;
+    otpBoxes.forEach(b => b.value = '');
+    otpBoxes[0].focus();
+  }
+  $('btn-verify-otp').disabled = false;
+  $('btn-verify-otp').textContent = 'Entrar';
+}
+
+// ── Nav ───────────────────────────────────────────────
+window.navTo = (panel) => {
+  ['home','charges'].forEach(p => {
+    $('panel-'+p)?.classList.toggle('visible', p === panel);
+    $('nav-'+p)?.classList.toggle('active', p === panel);
+  });
+};
+
+// ── Load data ─────────────────────────────────────────
+async function loadAll(uid) {
+  await Promise.all([ loadContract(uid), loadCharges(uid) ]);
+}
+
+async function loadContract(uid) {
+  const area = $('contract-area');
+  try {
+    const snap = await getDocs(query(collection(db,'contracts'), where('tenantId','==',uid), where('active','==',true)));
+    if (snap.empty) {
+      area.innerHTML = `<div class="no-contract"><div class="icon">🏠</div><p>Nenhum contrato ativo encontrado.</p></div>`;
+      return;
+    }
+    const c = snap.docs[0].data();
+    const statusMap = { completed:'✅ Assinado', signed:'✅ Assinado', pending:'⏳ Aguardando assinatura', manual:'📋 Contrato manual' };
+    const statusLabel = statusMap[c.assinafyStatus] || '⏳ Aguardando assinatura';
+    const fmtTs = ts => ts?.seconds ? new Date(ts.seconds*1000).toLocaleDateString('pt-BR') : (ts ? new Date(ts).toLocaleDateString('pt-BR') : '—');
+    area.innerHTML = `
+      <div class="contract-hero fadein">
+        <div class="hero-label">Meu Contrato</div>
+        <div class="hero-prop">${c.propertyDescription || c.propertyAddress || 'Imóvel cadastrado'}</div>
+        <div class="hero-rent">${fmt.format(c.baseRent || 0)}<span style="font-size:16px;font-weight:500;color:rgba(76,175,80,.7)">/mês</span></div>
+        <div class="hero-meta">
+          <div class="hero-meta-item"><div class="hero-meta-label">Início</div><div class="hero-meta-val">${fmtTs(c.startDate)}</div></div>
+          <div class="hero-meta-item"><div class="hero-meta-label">Término</div><div class="hero-meta-val">${fmtTs(c.endDate)}</div></div>
+          <div class="hero-meta-item"><div class="hero-meta-label">Vence dia</div><div class="hero-meta-val">${c.dueDay || '—'}</div></div>
+        </div>
+        <div class="hero-badge">${statusLabel}</div>
+        ${c.signedFileUrl ? `<br><a href="${c.signedFileUrl}" target="_blank" style="color:rgba(76,175,80,.8);font-size:13px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-top:4px">📄 Ver contrato assinado</a>` : ''}
+      </div>`;
+  } catch(e) { area.innerHTML = `<div class="no-contract"><p>Erro ao carregar contrato.</p></div>`; }
+}
+
+async function loadCharges(uid) {
+  const list = $('charges-list');
+  try {
+    const snap = await getDocs(query(collection(db,'charges'), where('tenantId','==',uid)));
+    const all = snap.docs.map(d => ({id:d.id,...d.data()})).sort((a,b) => (b.dueDate?.seconds||0)-(a.dueDate?.seconds||0));
+    if (!all.length) { list.innerHTML = `<div class="no-contract"><div class="icon">💳</div><p>Nenhuma cobrança encontrada.</p></div>`; return; }
+
+    const pending = all.filter(c => c.status==='pending'||c.status==='overdue');
+    const paid    = all.filter(c => c.status==='paid');
+    let html = '';
+
+    if (pending.length) {
+      html += `<div class="sec-header"><span class="sec-title">Em aberto</span></div>`;
+      pending.forEach(c => {
+        const ov = c.status==='overdue';
+        html += `<div class="charge-card ${ov?'charge-overdue':''} fadein">
+          <div class="charge-top">
+            <span class="charge-pill ${ov?'pill-overdue':'pill-pending'}">${ov?'⚠️ Vencida':'🕐 Pendente'}</span>
+            <span class="charge-amount ${ov?'charge-amount-overdue':''}">${fmt.format(c.totalAmount||c.baseRent||0)}</span>
+          </div>
+          <div class="charge-row">
+            <span class="charge-ref">${c.monthRef||'—'}</span>
+            <span class="charge-meta">Venc. ${fmtDate(c.dueDate)}</span>
+          </div>
+          ${ov&&c.diasAtraso ? `<p class="delay-tag">⚡ ${c.diasAtraso} dia${c.diasAtraso>1?'s':''} de atraso · multa aplicada</p>` : ''}
+          ${c.pixCopyPaste ? `
+          <div class="pix-wrap">
+            <div class="pix-sec-label">Pagar com PIX</div>
+            ${c.pixQrCode ? `<div class="pix-qr"><img src="data:image/png;base64,${c.pixQrCode}" alt="QR PIX"></div>` : ''}
+            <div class="pix-code-box">${c.pixCopyPaste}</div>
+            <button class="btn-pix" onclick="copyPix('${c.id}','${c.pixCopyPaste.replace(/'/g,"\\'")}')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              Copiar código PIX
+            </button>
+          </div>` : `<p class="pix-hint">Aguardando geração do PIX pelo proprietário.</p>`}
+        </div>`;
+      });
+    }
+
+    if (paid.length) {
+      html += `<div class="sec-header" style="margin-top:8px"><span class="sec-title">Histórico</span></div>`;
+      paid.slice(0,12).forEach(c => {
+        html += `<div class="charge-card charge-paid">
+          <div class="charge-top">
+            <span class="charge-pill pill-paid">✅ Pago</span>
+            <span class="charge-amount charge-amount-paid">${fmt.format(c.totalAmount||c.baseRent||0)}</span>
+          </div>
+          <div class="charge-row">
+            <span class="charge-ref">${c.monthRef||'—'}</span>
+            <span class="charge-meta">Venc. ${fmtDate(c.dueDate)}</span>
+          </div>
+        </div>`;
+      });
+    }
+
+    list.innerHTML = html;
+  } catch(e) { list.innerHTML = `<div class="no-contract"><p>Erro: ${e.message}</p></div>`; }
+}
+
+window.copyPix = (id, code) => {
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = document.querySelector(`button[onclick*="${id}"]`);
+    if (btn) { const t = btn.textContent; btn.innerHTML = '✓ Copiado!'; setTimeout(() => btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copiar código PIX`, 2000); }
+  }).catch(() => { alert(code); });
+};
+</script>
 </body>
 </html>

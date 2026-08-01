@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>iLocarPay — Área do Corretor</title>
+<style>
+:root {
+  --bg:         #07080d;
+  --surface:    rgba(255,255,255,.045);
+  --surface2:   rgba(255,255,255,.07);
+  --border:     rgba(255,255,255,.08);
+  --blue:       #42A5F5;
+  --blue-dk:    #1565C0;
+  --blue-glow:  rgba(66,165,245,.18);
+  --green:      #4CAF50;
+  --orange:     #FFA726;
+  --red:        #ef5350;
+  --yellow:     #FFD54F;
+  --text:       #f0f0f0;
+  --muted:      rgba(255,255,255,.45);
+  --card-r:     18px;
+  --sans:       -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html,body { height:100%; -webkit-tap-highlight-color:transparent; }
+body { font-family:var(--sans); background:var(--bg); color:var(--text); min-height:100dvh; overflow-x:hidden; }
+
+.screen { display:none; min-height:100dvh; flex-direction:column; }
+.screen.active { display:flex; }
+
+/* ── Auth ── */
+.auth-bg {
+  position:fixed; inset:0; z-index:0;
+  background: radial-gradient(ellipse 120% 80% at 60% -10%, rgba(66,165,245,.2) 0%, transparent 65%),
+              radial-gradient(ellipse 80% 60% at -20% 80%, rgba(21,101,192,.3) 0%, transparent 60%),
+              var(--bg);
+}
+.auth-wrap {
+  position:relative; z-index:1;
+  display:flex; flex-direction:column; align-items:center;
+  padding:60px 28px 40px; max-width:400px; margin:0 auto; width:100%;
+}
+.auth-logo {
+  width:72px; height:72px; border-radius:22px;
+  background:linear-gradient(135deg,#64B5F6,#1565C0);
+  display:flex; align-items:center; justify-content:center;
+  font-size:30px; font-weight:900; color:#fff;
+  box-shadow:0 8px 32px rgba(66,165,245,.35);
+  margin-bottom:28px; letter-spacing:-.5px;
+}
+.auth-title { font-size:26px; font-weight:800; margin-bottom:6px; letter-spacing:-.5px; }
+.auth-sub   { color:var(--muted); font-size:15px; margin-bottom:40px; text-align:center; line-height:1.5; }
+
+.field-group { width:100%; margin-bottom:16px; }
+.field-label { font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.05em; text-transform:uppercase; margin-bottom:8px; display:block; }
+.field-input {
+  width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text);
+  padding:15px 16px; border-radius:14px; font-size:16px; outline:none;
+  transition:border-color .2s, box-shadow .2s; -webkit-backdrop-filter:blur(12px);
+}
+.field-input:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-glow); }
+.btn-main {
+  width:100%; background:var(--blue); color:#fff; border:none;
+  padding:15px; border-radius:14px; font-size:16px; font-weight:700;
+  cursor:pointer; margin-top:4px; transition:background .2s, transform .1s, box-shadow .2s;
+  box-shadow:0 4px 20px rgba(66,165,245,.3);
+}
+.btn-main:hover  { background:#2196F3; box-shadow:0 6px 28px rgba(66,165,245,.4); }
+.btn-main:active { transform:scale(.98); }
+.btn-main:disabled { background:#1a2a3a; color:#3a5a7a; box-shadow:none; cursor:not-allowed; }
+.btn-ghost { background:transparent; border:none; color:var(--blue); cursor:pointer; font-size:14px; margin-top:12px; padding:8px 0; font-family:var(--sans); }
+.err-msg { color:var(--red); font-size:13px; margin-bottom:8px; min-height:20px; text-align:center; }
+
+/* OTP */
+.otp-row { display:flex; gap:10px; width:100%; margin-bottom:16px; }
+.otp-box {
+  flex:1; aspect-ratio:1; text-align:center; font-size:24px; font-weight:800;
+  background:var(--surface); border:1px solid var(--border); color:var(--text);
+  border-radius:14px; outline:none; transition:border-color .2s, box-shadow .2s;
+}
+.otp-box:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-glow); }
+.otp-hint { color:var(--muted); font-size:14px; margin-bottom:28px; text-align:center; line-height:1.5; }
+
+/* ── Header ── */
+.dash-header {
+  position:sticky; top:0; z-index:20;
+  background:rgba(7,8,13,.88); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  padding:14px 20px; padding-top:max(14px, env(safe-area-inset-top));
+  display:flex; align-items:center; justify-content:space-between;
+}
+.dash-logo { display:flex; align-items:center; gap:10px; }
+.dash-logo-icon {
+  width:32px; height:32px; border-radius:9px;
+  background:linear-gradient(135deg,#64B5F6,#1565C0);
+  display:flex; align-items:center; justify-content:center;
+  font-size:16px; font-weight:900; color:#fff;
+}
+.dash-logo-name { font-size:17px; font-weight:800; }
+.dash-logo-role { font-size:11px; color:var(--blue); font-weight:600; margin-left:2px; }
+.dash-user { display:flex; align-items:center; gap:10px; }
+.dash-email { font-size:12px; color:var(--muted); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.btn-logout {
+  background:var(--surface); border:1px solid var(--border); color:var(--muted);
+  padding:7px 14px; border-radius:20px; cursor:pointer; font-size:13px;
+  transition:color .2s, border-color .2s; font-family:var(--sans);
+}
+.btn-logout:hover { color:var(--text); border-color:rgba(255,255,255,.2); }
+
+/* ── Body ── */
+.dash-body { flex:1; padding-bottom:100px; max-width:600px; margin:0 auto; width:100%; }
+.sec { padding:20px 16px 0; }
+.sec-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.sec-title { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
+
+/* ── App Banner ── */
+.app-banner {
+  margin:20px 16px 0;
+  background:linear-gradient(135deg,rgba(21,101,192,.4),rgba(13,71,161,.25));
+  border:1px solid rgba(66,165,245,.2); border-radius:var(--card-r);
+  padding:18px 20px; display:flex; align-items:center; gap:14px;
+}
+.app-banner-icon { font-size:36px; }
+.app-banner-text { flex:1; }
+.app-banner-text strong { font-size:14px; display:block; margin-bottom:3px; }
+.app-banner-text span { font-size:12px; color:var(--muted); }
+.btn-dl {
+  background:var(--blue); color:#fff; border:none;
+  padding:10px 16px; border-radius:10px; font-size:13px; font-weight:700;
+  cursor:pointer; white-space:nowrap; text-decoration:none; display:inline-block;
+  transition:background .2s;
+}
+.btn-dl:hover { background:#2196F3; }
+
+/* ── Stats row ── */
+.stats-row { display:flex; gap:12px; margin:20px 16px 0; }
+.stat-card {
+  flex:1; background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; padding:16px 14px; text-align:center;
+}
+.stat-num { font-size:28px; font-weight:900; letter-spacing:-1px; }
+.stat-lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:4px; font-weight:600; }
+
+/* ── Lead cards ── */
+.lead-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--card-r); padding:18px 20px; margin-bottom:12px;
+  transition:border-color .2s;
+}
+.lead-card:hover { border-color:rgba(66,165,245,.25); }
+.lead-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.lead-name { font-size:16px; font-weight:700; }
+.lead-prop { font-size:13px; color:var(--muted); margin-top:2px; }
+.lead-pill {
+  font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px;
+  white-space:nowrap;
+}
+.pill-pending  { background:rgba(255,213,79,.12); color:var(--yellow); border:1px solid rgba(255,213,79,.25); }
+.pill-analyzing{ background:rgba(66,165,245,.12); color:var(--blue);   border:1px solid rgba(66,165,245,.25); }
+.pill-approved { background:rgba(76,175,80,.12);  color:var(--green);  border:1px solid rgba(76,175,80,.25); }
+.pill-rejected { background:rgba(239,83,80,.12);  color:var(--red);    border:1px solid rgba(239,83,80,.25); }
+.pill-active   { background:rgba(76,175,80,.2);   color:var(--green);  border:1px solid rgba(76,175,80,.4); }
+.lead-bottom { display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
+.lead-date { font-size:12px; color:var(--muted); }
+.lead-docs { font-size:12px; color:var(--blue); }
+.timeline-bar {
+  display:flex; align-items:center; gap:0; margin-top:12px;
+  background:rgba(255,255,255,.04); border-radius:8px; padding:10px 12px; gap:4px;
+}
+.ts-step { flex:1; text-align:center; font-size:10px; font-weight:600; }
+.ts-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-bottom:3px; }
+.ts-label { color:var(--muted); }
+.ts-done .ts-dot { background:var(--green); box-shadow:0 0 6px var(--green); }
+.ts-done .ts-label { color:var(--green); }
+.ts-active .ts-dot { background:var(--blue); box-shadow:0 0 6px var(--blue); animation:pulse 1.5s ease infinite; }
+.ts-active .ts-label { color:var(--blue); }
+.ts-future .ts-dot { background:rgba(255,255,255,.15); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+.ts-line { flex:none; width:1px; height:16px; background:rgba(255,255,255,.1); }
+
+/* ── FAB ── */
+.fab {
+  position:fixed; bottom:90px; right:20px; z-index:40;
+  width:56px; height:56px; border-radius:18px;
+  background:linear-gradient(135deg,#64B5F6,#1565C0);
+  border:none; color:#fff; font-size:28px; cursor:pointer;
+  box-shadow:0 6px 24px rgba(66,165,245,.45);
+  display:flex; align-items:center; justify-content:center;
+  transition:transform .15s, box-shadow .15s;
+}
+.fab:hover  { transform:scale(1.07); box-shadow:0 8px 32px rgba(66,165,245,.55); }
+.fab:active { transform:scale(.96); }
+
+/* ── Bottom Nav ── */
+.bottom-nav {
+  position:fixed; bottom:0; left:0; right:0; z-index:30;
+  background:rgba(7,8,13,.92); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+  border-top:1px solid var(--border);
+  display:flex; padding-bottom:max(12px,env(safe-area-inset-bottom));
+}
+.nav-item {
+  flex:1; display:flex; flex-direction:column; align-items:center;
+  padding:10px 0 0; gap:4px; cursor:pointer;
+  color:var(--muted); font-size:10px; font-weight:600; letter-spacing:.03em;
+  text-transform:uppercase; transition:color .2s; border:none; background:none;
+  font-family:var(--sans);
+}
+.nav-item.active { color:var(--blue); }
+.nav-item svg { width:22px; height:22px; }
+
+/* ── Modal ── */
+.modal-overlay {
+  position:fixed; inset:0; z-index:50;
+  background:rgba(0,0,0,.7); backdrop-filter:blur(6px);
+  display:flex; align-items:flex-end; padding:0;
+  opacity:0; pointer-events:none; transition:opacity .2s;
+}
+.modal-overlay.open { opacity:1; pointer-events:all; }
+.modal-sheet {
+  width:100%; max-width:600px; margin:0 auto;
+  background:#0f1117; border-radius:24px 24px 0 0;
+  border:1px solid var(--border); border-bottom:none;
+  max-height:92dvh; overflow-y:auto;
+  transform:translateY(100%); transition:transform .3s cubic-bezier(.25,.46,.45,.94);
+}
+.modal-overlay.open .modal-sheet { transform:translateY(0); }
+.modal-handle { width:40px; height:4px; background:rgba(255,255,255,.2); border-radius:2px; margin:12px auto; }
+.modal-header { padding:8px 20px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); }
+.modal-title { font-size:18px; font-weight:800; }
+.btn-close { background:var(--surface2); border:none; color:var(--muted); width:32px; height:32px; border-radius:50%; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.modal-body { padding:20px; }
+
+/* ── Stepper ── */
+.stepper { display:flex; gap:0; margin-bottom:24px; }
+.step-item { flex:1; text-align:center; position:relative; }
+.step-item:not(:last-child)::after {
+  content:''; position:absolute; top:14px; left:50%; width:100%; height:2px;
+  background:rgba(255,255,255,.1);
+}
+.step-item.done::after, .step-item.active::after { background:var(--blue); }
+.step-num {
+  width:28px; height:28px; border-radius:50%; margin:0 auto 6px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:800; position:relative; z-index:1;
+  background:rgba(255,255,255,.08); color:var(--muted);
+  border:2px solid rgba(255,255,255,.12);
+}
+.step-item.done  .step-num { background:var(--blue); color:#fff; border-color:var(--blue); }
+.step-item.active .step-num { background:transparent; color:var(--blue); border-color:var(--blue); }
+.step-lbl { font-size:10px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+.step-item.active .step-lbl { color:var(--blue); }
+.step-item.done  .step-lbl { color:rgba(66,165,245,.7); }
+
+/* ── Form ── */
+.form-row { margin-bottom:16px; }
+.form-label { font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.05em; text-transform:uppercase; margin-bottom:8px; display:block; }
+.form-input {
+  width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text);
+  padding:14px 16px; border-radius:12px; font-size:15px; outline:none;
+  transition:border-color .2s, box-shadow .2s; font-family:var(--sans);
+}
+.form-input:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-glow); }
+.form-input::placeholder { color:rgba(255,255,255,.25); }
+.form-row-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+/* Upload */
+.upload-zone {
+  border:2px dashed rgba(66,165,245,.3); border-radius:14px; padding:28px 20px;
+  text-align:center; cursor:pointer; transition:border-color .2s, background .2s;
+  background:rgba(66,165,245,.04);
+}
+.upload-zone:hover { border-color:rgba(66,165,245,.6); background:rgba(66,165,245,.08); }
+.upload-zone input { display:none; }
+.upload-icon { font-size:36px; margin-bottom:10px; }
+.upload-title { font-size:15px; font-weight:600; margin-bottom:4px; }
+.upload-hint  { font-size:13px; color:var(--muted); }
+.upload-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+.upload-thumb {
+  width:72px; height:72px; border-radius:10px; object-fit:cover;
+  border:1px solid var(--border); position:relative;
+}
+.upload-file-chip {
+  display:inline-flex; align-items:center; gap:6px; padding:6px 10px;
+  background:rgba(66,165,245,.1); border:1px solid rgba(66,165,245,.2); border-radius:8px;
+  font-size:12px; color:var(--blue); max-width:140px;
+}
+.upload-file-chip span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Form nav */
+.form-nav { display:flex; gap:12px; margin-top:24px; }
+.btn-prev {
+  background:var(--surface2); border:1px solid var(--border); color:var(--text);
+  padding:14px 20px; border-radius:12px; font-size:15px; font-weight:700;
+  cursor:pointer; font-family:var(--sans);
+}
+.btn-next {
+  flex:1; background:var(--blue); color:#fff; border:none;
+  padding:14px; border-radius:12px; font-size:15px; font-weight:700;
+  cursor:pointer; font-family:var(--sans); transition:background .2s;
+}
+.btn-next:hover { background:#2196F3; }
+.btn-next:disabled { background:#1a2a3a; color:#3a5a7a; cursor:not-allowed; }
+
+/* Empty */
+.empty-state { text-align:center; padding:56px 24px; }
+.empty-icon  { font-size:48px; opacity:.4; margin-bottom:16px; }
+.empty-text  { color:var(--muted); font-size:15px; line-height:1.6; }
+
+/* Animations */
+@keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+.fadein { animation:fadeUp .35s ease both; }
+.skeleton { background:linear-gradient(90deg,var(--surface) 25%,rgba(255,255,255,.07) 50%,var(--surface) 75%); background-size:200% 100%; animation:shimmer 1.4s infinite; border-radius:10px; height:100px; margin-bottom:12px; }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+@media (min-width:600px) {
+  .auth-wrap { padding-top:100px; }
+  .modal-overlay { align-items:center; }
+  .modal-sheet { border-radius:24px; border:1px solid var(--border); max-height:80dvh; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Login ── -->
+<div class="screen active" id="screen-login">
+  <div class="auth-bg"></div>
+  <div class="auth-wrap fadein">
+    <div class="auth-logo">C</div>
+    <h1 class="auth-title">iLocarPay</h1>
+    <p class="auth-sub">Portal do Corretor<br>Envie propostas e acompanhe seus leads</p>
+    <div class="field-group">
+      <label class="field-label" for="inp-email">Seu e-mail cadastrado</label>
+      <input class="field-input" id="inp-email" type="email" placeholder="corretor@email.com.br" autocomplete="email" inputmode="email">
+    </div>
+    <p class="err-msg" id="email-err"></p>
+    <button class="btn-main" id="btn-send">Receber código de acesso</button>
+  </div>
+</div>
+
+<!-- ── OTP ── -->
+<div class="screen" id="screen-otp">
+  <div class="auth-bg"></div>
+  <div class="auth-wrap fadein">
+    <div class="auth-logo" style="background:linear-gradient(135deg,#90CAF9,#1565C0);font-size:32px">🔑</div>
+    <h1 class="auth-title">Código enviado</h1>
+    <p class="otp-hint" id="otp-hint">Verifique seu e-mail e insira o código de 6 dígitos</p>
+    <div class="otp-row" id="otp-row">
+      <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+      <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+    </div>
+    <p class="err-msg" id="otp-err"></p>
+    <button class="btn-main" id="btn-verify">Entrar</button>
+    <button class="btn-ghost" id="btn-back">← Voltar</button>
+  </div>
+</div>
+
+<!-- ── Dashboard ── -->
+<div class="screen" id="screen-dash">
+  <div class="dash-header">
+    <div class="dash-logo">
+      <div class="dash-logo-icon">C</div>
+      <div>
+        <div class="dash-logo-name">iLocarPay</div>
+        <div class="dash-logo-role">CORRETOR</div>
+      </div>
+    </div>
+    <div class="dash-user">
+      <span class="dash-email" id="user-email-lbl"></span>
+      <button class="btn-logout" id="btn-logout">Sair</button>
+    </div>
+  </div>
+
+  <div class="dash-body">
+    <!-- App download -->
+    <a class="app-banner fadein" href="/download/locarpay.apk" download style="text-decoration:none;color:inherit;display:flex">
+      <span class="app-banner-icon">📱</span>
+      <div class="app-banner-text">
+        <strong>App iLocarPay — Corretor</strong>
+        <span>Capture fotos dos documentos diretamente pelo app</span>
+      </div>
+      <span class="btn-dl">Baixar</span>
+    </a>
+
+    <!-- Stats -->
+    <div class="stats-row fadein">
+      <div class="stat-card"><div class="stat-num" id="stat-total">—</div><div class="stat-lbl">Total de leads</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-pend" style="color:var(--yellow)">—</div><div class="stat-lbl">Em análise</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-ok" style="color:var(--green)">—</div><div class="stat-lbl">Aprovados</div></div>
+    </div>
+
+    <!-- Leads -->
+    <div class="sec">
+      <div class="sec-header">
+        <span class="sec-title">Meus Leads</span>
+      </div>
+      <div id="leads-list"><div class="skeleton"></div><div class="skeleton" style="height:80px;opacity:.6"></div></div>
+    </div>
+  </div>
+
+  <!-- FAB -->
+  <button class="fab" id="btn-fab" title="Novo Lead">+</button>
+
+  <nav class="bottom-nav">
+    <button class="nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Início
+    </button>
+    <button class="nav-item" onclick="document.getElementById('btn-fab').click()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      Novo Lead
+    </button>
+  </nav>
+</div>
+
+<!-- ── Modal: Novo Lead ── -->
+<div class="modal-overlay" id="modal-lead">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">Novo Lead</span>
+      <button class="btn-close" id="btn-close-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Stepper -->
+      <div class="stepper" id="stepper">
+        <div class="step-item active" id="s1"><div class="step-num">1</div><div class="step-lbl">Inquilino</div></div>
+        <div class="step-item"        id="s2"><div class="step-num">2</div><div class="step-lbl">Imóvel</div></div>
+        <div class="step-item"        id="s3"><div class="step-num">3</div><div class="step-lbl">Documentos</div></div>
+      </div>
+
+      <!-- Step 1: Dados do inquilino -->
+      <div id="step-1">
+        <div class="form-row">
+          <label class="form-label">Nome completo</label>
+          <input class="form-input" id="t-name" placeholder="João da Silva" autocomplete="name">
+        </div>
+        <div class="form-row">
+          <label class="form-label">E-mail</label>
+          <input class="form-input" id="t-email" type="email" placeholder="inquilino@email.com.br" inputmode="email">
+        </div>
+        <div class="form-row-2">
+          <div class="form-row" style="margin-bottom:0">
+            <label class="form-label">CPF</label>
+            <input class="form-input" id="t-cpf" placeholder="000.000.000-00" inputmode="numeric" maxlength="14">
+          </div>
+          <div class="form-row" style="margin-bottom:0">
+            <label class="form-label">Telefone</label>
+            <input class="form-input" id="t-phone" placeholder="(11) 99999-9999" inputmode="tel" maxlength="15">
+          </div>
+        </div>
+        <div class="form-nav">
+          <button class="btn-next" onclick="goStep(2)">Próximo →</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Dados do imóvel -->
+      <div id="step-2" style="display:none">
+        <div class="form-row">
+          <label class="form-label">Endereço do imóvel</label>
+          <input class="form-input" id="p-addr" placeholder="Rua Exemplo, 123 — Bairro — Cidade/UF">
+        </div>
+        <div class="form-row-2">
+          <div class="form-row" style="margin-bottom:0">
+            <label class="form-label">Aluguel (R$)</label>
+            <input class="form-input" id="p-rent" placeholder="1.500,00" inputmode="decimal">
+          </div>
+          <div class="form-row" style="margin-bottom:0">
+            <label class="form-label">Código / Ref.</label>
+            <input class="form-input" id="p-code" placeholder="IMO-001">
+          </div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Observações</label>
+          <textarea class="form-input" id="p-obs" rows="3" placeholder="Informações adicionais sobre o imóvel ou inquilino..." style="resize:vertical;min-height:80px"></textarea>
+        </div>
+        <div class="form-nav">
+          <button class="btn-prev" onclick="goStep(1)">← Voltar</button>
+          <button class="btn-next" onclick="goStep(3)">Próximo →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Documentos -->
+      <div id="step-3" style="display:none">
+        <p style="font-size:14px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+          Envie fotos dos documentos do inquilino:<br>
+          RG/CNH, comprovante de renda, comprovante de residência
+        </p>
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+          <input type="file" id="file-input" multiple accept="image/*,application/pdf" onchange="handleFiles(this.files)">
+          <div class="upload-icon">📁</div>
+          <div class="upload-title">Toque para selecionar arquivos</div>
+          <div class="upload-hint">Imagens e PDFs — máx. 5 arquivos</div>
+        </div>
+        <div class="upload-list" id="upload-list"></div>
+        <p class="err-msg" id="send-err" style="margin-top:12px"></p>
+        <div class="form-nav">
+          <button class="btn-prev" onclick="goStep(2)">← Voltar</button>
+          <button class="btn-next" id="btn-submit" onclick="submitLead()">🚀 Enviar Lead</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp }    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, signInWithCustomToken, signOut, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, collection, query, where, getDocs, orderBy }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+
+const firebaseConfig = {
+  apiKey:    "AIzaSyDTd-f-QTKNhixlYCDVHI5pGe9H8hxwON4",
+  authDomain:"locarpayapp.firebaseapp.com",
+  projectId: "locarpayapp",
+  storageBucket:"locarpayapp.appspot.com"
+};
+const app     = initializeApp(firebaseConfig);
+const auth    = getAuth(app);
+const db      = getFirestore(app);
+const storage = getStorage(app);
+
+const $ = id => document.getElementById(id);
+const statusMap = {
+  pending:   ['pill-pending',  '⏳ Enviado'],
+  analyzing: ['pill-analyzing','🔍 Em análise'],
+  approved:  ['pill-approved', '✅ Aprovado'],
+  rejected:  ['pill-rejected', '❌ Reprovado'],
+  active:    ['pill-active',   '🏠 Ativo']
+};
+const timelineSteps = ['pending','analyzing','approved','active'];
+const tlLabel = { pending:'Enviado', analyzing:'Análise', approved:'Aprovado', active:'Ativo' };
+
+let pendingEmail = '';
+let currentUser  = null;
+let selectedFiles = [];
+
+// ── Auth ──────────────────────────────────────────────
+onAuthStateChanged(auth, user => {
+  if (user) {
+    currentUser = user;
+    show('screen-dash');
+    $('user-email-lbl').textContent = user.email || '';
+    loadLeads(user.uid);
+  } else {
+    show('screen-login');
+  }
+});
+
+function show(id) {
+  ['screen-login','screen-otp','screen-dash'].forEach(s => {
+    const el = $(s);
+    el.style.display = s === id ? 'flex' : 'none';
+    el.classList.toggle('active', s === id);
+  });
+}
+
+// ── OTP boxes ─────────────────────────────────────────
+const boxes = document.querySelectorAll('.otp-box');
+boxes.forEach((box, i) => {
+  box.addEventListener('input', e => {
+    const v = e.target.value.replace(/\D/g,'');
+    box.value = v.slice(-1);
+    if (v && i < 5) boxes[i+1].focus();
+    if (getOtp().length === 6) verifyOtp();
+  });
+  box.addEventListener('keydown', e => {
+    if (e.key==='Backspace' && !box.value && i>0) { boxes[i-1].focus(); boxes[i-1].value=''; }
+  });
+  box.addEventListener('paste', e => {
+    e.preventDefault();
+    const txt = (e.clipboardData||window.clipboardData).getData('text').replace(/\D/g,'');
+    [...txt.slice(0,6)].forEach((ch,j) => { if (boxes[j]) boxes[j].value=ch; });
+    if (txt.length >= 6) verifyOtp(); else boxes[Math.min(txt.length,5)].focus();
+  });
+});
+function getOtp() { return [...boxes].map(b=>b.value).join(''); }
+
+// ── Login ─────────────────────────────────────────────
+$('btn-send').onclick = async () => {
+  const email = $('inp-email').value.trim().toLowerCase();
+  if (!email.includes('@')) { $('email-err').textContent='E-mail inválido.'; return; }
+  $('email-err').textContent = '';
+  $('btn-send').disabled = true; $('btn-send').textContent = 'Enviando...';
+  try {
+    const r = await fetch('/api/locarpay-send-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email}) });
+    if (!r.ok) { const d=await r.json(); throw new Error(d.error||'Erro'); }
+    pendingEmail = email;
+    $('otp-hint').textContent = `Código enviado para ${email}`;
+    boxes.forEach(b=>b.value='');
+    show('screen-otp');
+    setTimeout(()=>boxes[0].focus(),300);
+  } catch(e) { $('email-err').textContent = e.message; }
+  $('btn-send').disabled = false; $('btn-send').textContent = 'Receber código de acesso';
+};
+$('btn-back').onclick    = () => show('screen-login');
+$('btn-logout').onclick  = () => signOut(auth);
+$('btn-verify').onclick  = verifyOtp;
+
+async function verifyOtp() {
+  const otp = getOtp();
+  if (otp.length < 6) return;
+  $('otp-err').textContent = '';
+  $('btn-verify').disabled=true; $('btn-verify').textContent='Verificando...';
+  try {
+    const r = await fetch('/api/locarpay-verify-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:pendingEmail,otp}) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error||'Código inválido');
+    await signInWithCustomToken(auth, d.customToken);
+  } catch(e) {
+    $('otp-err').textContent = e.message;
+    boxes.forEach(b=>b.value=''); boxes[0].focus();
+  }
+  $('btn-verify').disabled=false; $('btn-verify').textContent='Entrar';
+}
+
+// ── Leads ─────────────────────────────────────────────
+async function loadLeads(uid) {
+  const list = $('leads-list');
+  try {
+    const snap = await getDocs(query(collection(db,'leads'), where('brokerId','==',uid)));
+    const all  = snap.docs.map(d=>({id:d.id,...d.data()}))
+      .sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+
+    // Stats
+    $('stat-total').textContent = all.length;
+    $('stat-pend').textContent  = all.filter(l=>l.status==='pending'||l.status==='analyzing').length;
+    $('stat-ok').textContent    = all.filter(l=>l.status==='approved'||l.status==='active').length;
+
+    if (!all.length) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><p class="empty-text">Você ainda não enviou nenhum lead.<br>Toque em + para cadastrar um inquilino.</p></div>`;
+      return;
+    }
+
+    list.innerHTML = all.map(l => {
+      const [pillClass, pillLabel] = statusMap[l.status] || ['pill-pending','⏳ Enviado'];
+      const dt = l.createdAt?.seconds ? new Date(l.createdAt.seconds*1000).toLocaleDateString('pt-BR') : '—';
+      const curIdx = timelineSteps.indexOf(l.status);
+      const tl = timelineSteps.map((s,i) => {
+        const cls = i < curIdx ? 'ts-done' : i === curIdx ? 'ts-active' : 'ts-future';
+        return `<div class="ts-step ${cls}"><div class="ts-dot"></div><div class="ts-label">${tlLabel[s]}</div></div>
+                ${i<timelineSteps.length-1?'<div class="ts-line"></div>':''}`;
+      }).join('');
+      const docs = l.documentUrls?.length ? `📎 ${l.documentUrls.length} doc${l.documentUrls.length>1?'s':''}` : '';
+      return `<div class="lead-card fadein">
+        <div class="lead-top">
+          <div>
+            <div class="lead-name">${l.tenantName||'—'}</div>
+            <div class="lead-prop">${l.propertyAddress||'Imóvel não informado'}</div>
+          </div>
+          <span class="lead-pill ${pillClass}">${pillLabel}</span>
+        </div>
+        <div class="timeline-bar">${tl}</div>
+        <div class="lead-bottom">
+          <span class="lead-date">📅 ${dt}</span>
+          ${docs?`<span class="lead-docs">${docs}</span>`:''}
+        </div>
+        ${l.rejectReason ? `<p style="font-size:12px;color:var(--red);margin-top:8px;padding-top:8px;border-top:1px solid rgba(239,83,80,.2)">Motivo: ${l.rejectReason}</p>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) { list.innerHTML = `<p style="color:var(--red);text-align:center;padding:20px">${e.message}</p>`; }
+}
+
+// ── Modal ─────────────────────────────────────────────
+$('btn-fab').onclick       = openModal;
+$('btn-close-modal').onclick = closeModal;
+$('modal-lead').addEventListener('click', e => { if (e.target === $('modal-lead')) closeModal(); });
+
+function openModal() {
+  resetForm();
+  $('modal-lead').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeModal() {
+  $('modal-lead').classList.remove('open');
+  document.body.style.overflow='';
+}
+function resetForm() {
+  ['t-name','t-email','t-cpf','t-phone','p-addr','p-rent','p-code','p-obs'].forEach(id => { if($(id)) $(id).value=''; });
+  selectedFiles = [];
+  $('upload-list').innerHTML = '';
+  $('send-err').textContent = '';
+  goStep(1);
+}
+
+// ── Stepper ───────────────────────────────────────────
+window.goStep = (n) => {
+  [1,2,3].forEach(i => {
+    $('step-'+i).style.display = i===n ? 'block' : 'none';
+    const el = $('s'+i);
+    el.classList.remove('active','done');
+    if (i < n) el.classList.add('done');
+    else if (i === n) el.classList.add('active');
+  });
+};
+
+// ── Masks ─────────────────────────────────────────────
+$('t-cpf').addEventListener('input', e => {
+  let v = e.target.value.replace(/\D/g,'').slice(0,11);
+  if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/,'$1.$2.$3-$4');
+  else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d+)/,'$1.$2.$3');
+  else if (v.length > 3) v = v.replace(/(\d{3})(\d+)/,'$1.$2');
+  e.target.value = v;
+});
+$('t-phone').addEventListener('input', e => {
+  let v = e.target.value.replace(/\D/g,'').slice(0,11);
+  if (v.length > 10) v = v.replace(/(\d{2})(\d{5})(\d{4})/,'($1) $2-$3');
+  else if (v.length > 6) v = v.replace(/(\d{2})(\d{4,5})(\d*)/,'($1) $2-$3');
+  else if (v.length > 2) v = v.replace(/(\d{2})(\d+)/,'($1) $2');
+  e.target.value = v;
+});
+
+// ── File upload ───────────────────────────────────────
+window.handleFiles = (files) => {
+  const newFiles = [...files].slice(0, 5 - selectedFiles.length);
+  selectedFiles.push(...newFiles);
+  renderThumbs();
+};
+
+function renderThumbs() {
+  const ul = $('upload-list');
+  ul.innerHTML = selectedFiles.map((f, i) => {
+    if (f.type.startsWith('image/')) {
+      return `<img class="upload-thumb" src="${URL.createObjectURL(f)}" alt="${f.name}">`;
+    }
+    return `<div class="upload-file-chip">📄 <span>${f.name}</span></div>`;
+  }).join('');
+}
+
+// ── Submit ────────────────────────────────────────────
+window.submitLead = async () => {
+  const btn = $('btn-submit');
+  $('send-err').textContent = '';
+
+  const name  = $('t-name').value.trim();
+  const email = $('t-email').value.trim();
+  const cpf   = $('t-cpf').value.replace(/\D/g,'');
+  const phone = $('t-phone').value.trim();
+  const addr  = $('p-addr').value.trim();
+  const rent  = parseFloat(($('p-rent').value||'0').replace(/\./g,'').replace(',','.')) || 0;
+  const code  = $('p-code').value.trim();
+  const obs   = $('p-obs').value.trim();
+
+  if (!name||!email||cpf.length<11) { $('send-err').textContent='Preencha nome, e-mail e CPF corretamente.'; return; }
+  if (!addr) { $('send-err').textContent='Informe o endereço do imóvel.'; return; }
+
+  btn.disabled=true; btn.textContent='Enviando...';
+
+  try {
+    // 1. Upload docs
+    const docUrls = [];
+    for (const f of selectedFiles) {
+      const path = `leads-docs/${currentUser.uid}/${Date.now()}_${f.name}`;
+      const r    = await uploadBytes(sRef(storage, path), f);
+      const url  = await getDownloadURL(r.ref);
+      docUrls.push(url);
+    }
+
+    // 2. Submit lead
+    const body = {
+      step: 'submit-lead',
+      brokerId: currentUser.uid,
+      brokerEmail: currentUser.email,
+      tenantName: name, tenantEmail: email, tenantCpf: cpf, tenantPhone: phone,
+      propertyAddress: addr, propertyCode: code, baseRent: rent, notes: obs,
+      documentUrls: docUrls
+    };
+    const res = await fetch('/api/locarpay-broker', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    const d   = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Erro ao enviar');
+
+    closeModal();
+    loadLeads(currentUser.uid);
+  } catch(e) {
+    $('send-err').textContent = e.message;
+  }
+
+  btn.disabled=false; btn.textContent='🚀 Enviar Lead';
+};
+</script>
+</body>
+</html>
