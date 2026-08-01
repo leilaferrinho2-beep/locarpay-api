@@ -1492,8 +1492,24 @@
     else if (from === 'verify') upgShowStep('card');
   };
 
+  window.upgMaskCpfCnpj = (el) => {
+    let v = el.value.replace(/\D/g, '').slice(0, 14);
+    if (v.length <= 11) {
+      v = v.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    } else {
+      v = v.replace(/(\d{2})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1/$2').replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+    }
+    el.value = v;
+  };
+
   window.upgStep1Next = async () => {
     $('upg-err-1').textContent = '';
+    const cpfRaw = ($('upg-cpf').value || '').replace(/\D/g, '');
+    if (cpfRaw.length !== 11 && cpfRaw.length !== 14) {
+      $('upg-err-1').textContent = 'Informe o CPF (11 dígitos) ou CNPJ (14 dígitos) do responsável.';
+      return;
+    }
+    upgState.cpfCnpj = cpfRaw;
     if (upgState.method === 'pix') {
       await upgInitPix();
     } else {
@@ -1511,7 +1527,7 @@
     try {
       const resp = await fetch('/api/locarpay-subscription', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'pix', ownerId: currentOwnerId, plan: upgState.plan })
+        body: JSON.stringify({ step: 'pix', ownerId: currentOwnerId, plan: upgState.plan, cpfCnpj: upgState.cpfCnpj })
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Erro ao gerar PIX');
@@ -2210,6 +2226,11 @@
           💳 Cartão
         </button>
       </div>
+
+      <label style="font-size:12px;color:#8FAF8F;text-transform:uppercase;letter-spacing:.05em">CPF ou CNPJ do responsável</label>
+      <input id="upg-cpf" type="text" inputmode="numeric" maxlength="18" placeholder="000.000.000-00 ou 00.000.000/0001-00"
+        style="width:100%;box-sizing:border-box;background:#132213;border:1px solid #2A4A2A;border-radius:8px;padding:10px 12px;color:#E4F0E4;font-size:14px;margin:8px 0 20px"
+        oninput="upgMaskCpfCnpj(this)">
 
       <div id="upg-err-1" style="color:#ef5350;font-size:12px;min-height:16px;margin-bottom:8px"></div>
       <div style="display:flex;gap:10px">
