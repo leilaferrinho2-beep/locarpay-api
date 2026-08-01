@@ -156,7 +156,7 @@
     } catch (_) {}
 
     const cards = [
-      { label: 'Inquilinos',       value: totalTenants,           icon: '👤', color: '#4F86F7' },
+      { label: 'Inquilinos',       value: totalTenants,           icon: '👤', color: '#4CAF50' },
       { label: 'Contratos ativos', value: totalContracts,         icon: '📄', color: '#4CAF50' },
       { label: 'Pendentes',        value: pendingCount,           icon: '⏳', color: '#FFB74D' },
       { label: 'Pagas',            value: paidCount,              icon: '✅', color: '#81C784' },
@@ -851,7 +851,7 @@
       const x      = pad.left + gap * i + (gap - barW) / 2;
       const y      = pad.top + chartH - barH;
       const grad   = ctx.createLinearGradient(0, y, 0, y + barH);
-      grad.addColorStop(0, '#4F86F7');
+      grad.addColorStop(0, '#4CAF50');
       grad.addColorStop(1, '#2D6A2D');
       ctx.fillStyle = grad;
       ctx.beginPath();
@@ -1911,11 +1911,11 @@
   #owner-selector-wrap { display: flex; align-items: center; gap: 8px; }
   .owner-chip {
     background: #20233a; border: 1px solid #3a3d52; border-radius: 20px;
-    padding: 4px 14px; font-size: 12px; color: #4F86F7; font-weight: 600;
+    padding: 4px 14px; font-size: 12px; color: #4CAF50; font-weight: 600;
   }
 
-  .btn { background: #4F86F7; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
-  .btn:hover { background: #3a70e0; }
+  .btn { background: #4CAF50; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+  .btn:hover { background: #388E3C; }
   .btn:disabled { opacity: 0.6; cursor: not-allowed; }
   .btn-outline { background: transparent; border: 1px solid #3a3d52; color: #aaa; border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
   .btn-outline:hover { border-color: #aaa; color: #fff; }
@@ -1955,7 +1955,7 @@
   .tabs { display: flex; border-bottom: 1px solid #2a2d3e; background: #1a1d2e; padding: 0 32px; }
   .tab { padding: 14px 24px; font-size: 14px; font-weight: 500; color: #888; cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; user-select: none; }
   .tab:hover { color: #ccc; }
-  .tab.active { color: #fff; border-bottom-color: #4F86F7; }
+  .tab.active { color: #fff; border-bottom-color: #4CAF50; }
   .panel { padding: 32px; display: none; flex: 1; }
   .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
   .section-header h2 { font-size: 20px; font-weight: 700; }
@@ -1967,12 +1967,12 @@
   .empty { text-align: center; color: #555; padding: 40px; }
 
   .btn-sm { padding: 3px 10px; font-size: 11px; border-radius: 6px; border: 1px solid #3a3d52; background: transparent; color: #aaa; cursor: pointer; margin-right: 4px; transition: border-color 0.15s, color 0.15s; }
-  .btn-sm:hover { border-color: #4F86F7; color: #4F86F7; }
+  .btn-sm:hover { border-color: #4CAF50; color: #4CAF50; }
   .btn-sm-alt:hover { border-color: #4caf50; color: #4caf50; }
   .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
   .badge.active   { background: #1b3a1f; color: #4caf50; }
   .badge.inactive { background: #3a1a1a; color: #ef5350; }
-  .badge.digital  { background: #1a2a3a; color: #4F86F7; }
+  .badge.digital  { background: #1a2e1a; color: #4CAF50; }
 
   #blocked-section { display: none; align-items: center; justify-content: center; min-height: 80vh; text-align: center; }
 
@@ -1982,7 +1982,7 @@
   label { display: block; font-size: 13px; color: #888; margin-bottom: 6px; margin-top: 14px; }
   label span { color: #ef5350; }
   input[type=text], input[type=email], input[type=number], input[type=date], select { width: 100%; background: #0f1117; border: 1px solid #3a3d52; border-radius: 8px; padding: 10px 12px; color: #e0e0e0; font-size: 14px; }
-  input:focus, select:focus { outline: none; border-color: #4F86F7; }
+  input:focus, select:focus { outline: none; border-color: #4CAF50; }
   .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
@@ -1993,7 +1993,7 @@
   .switch input { opacity: 0; width: 0; height: 0; }
   .slider { position: absolute; cursor: pointer; inset: 0; background: #3a3d52; border-radius: 24px; transition: 0.2s; }
   .slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.2s; }
-  input:checked + .slider { background: #4F86F7; }
+  input:checked + .slider { background: #4CAF50; }
   input:checked + .slider:before { transform: translateX(20px); }
 
   .docs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
@@ -2015,13 +2015,16 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast.success { border-color: #4caf50; color: #4caf50; }
   .toast.error   { border-color: #ef5350; color: #ef5350; }
-  .toast.info    { border-color: #4F86F7; color: #4F86F7; }
+  .toast.info    { border-color: #4CAF50; color: #4CAF50; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>iLocarPay Admin</h1>
+  <h1 style="display:flex;align-items:center;gap:10px">
+    <img src="/logo.webp" alt="iLocarPay" style="width:28px;height:28px;object-fit:contain;border-radius:7px">
+    iLocarPay <span style="color:#4CAF50;font-weight:400;font-size:14px;margin-left:2px">Admin</span>
+  </h1>
   <div class="header-right">
     <div id="owner-selector-wrap"></div>
     <span class="owner-chip" id="owner-name-badge"></span>
