@@ -571,14 +571,15 @@
   // ── Cadastrar inquilino ────────────────────────────────────
 
   async function saveTenant() {
-    const name    = $('t-name').value.trim();
-    const email   = $('t-email').value.trim().toLowerCase();
-    const phone   = $('t-phone').value.replace(/\D/g,'');
-    const cpf     = $('t-cpf').value.replace(/\D/g,'');
-    const prop    = '';
-    const rent    = parseFloat($('t-rent').value.replace(',', '.'));
-    const dueDay  = parseInt($('t-due').value);
-    const digital = $('t-digital').checked;
+    const name      = $('t-name').value.trim();
+    const email     = $('t-email').value.trim().toLowerCase();
+    const phone     = $('t-phone').value.replace(/\D/g,'');
+    const cpf       = $('t-cpf').value.replace(/\D/g,'');
+    const propCode  = $('t-prop-code').value.trim().toUpperCase();
+    const prop      = '';
+    const rent      = parseFloat($('t-rent').value.replace(',', '.'));
+    const dueDay    = parseInt($('t-due').value);
+    const digital   = $('t-digital').checked;
     const cep     = $('t-cep').value.replace(/\D/g,'');
     const num     = $('t-num').value.trim();
     const street  = $('t-street').value.trim();
@@ -589,6 +590,17 @@
 
     if (!name || !email || isNaN(rent) || isNaN(dueDay)) {
       showToast('Preencha todos os campos obrigatórios', 'error');
+      return;
+    }
+    if (!propCode) {
+      showToast('Código do imóvel obrigatório', 'error');
+      $('t-prop-code').focus();
+      return;
+    }
+    const codeInUse = contracts.some(c => c.ownerId === currentOwnerId && (c.propertyCode || '').toUpperCase() === propCode);
+    if (codeInUse) {
+      showToast(`Código "${propCode}" já está em uso nesta imobiliária`, 'error');
+      $('t-prop-code').focus();
       return;
     }
     if (cep.length !== 8 || !cepValido) {
@@ -652,6 +664,7 @@
         id:                  contractRef.id,
         tenantId:            userRef.id,
         tenantEmail:         email,
+        propertyCode:        propCode,
         propertyDescription: prop,
         baseRent:            rent,
         dueDay,
@@ -705,7 +718,7 @@
   }
 
   function resetTenantForm() {
-    ['t-name','t-email','t-phone','t-cpf','t-cep','t-num','t-street','t-bairro','t-city','t-uf','t-complemento','t-property','t-rent','t-due'].forEach(id => { const el = $(id); if(el) el.value = ''; });
+    ['t-name','t-email','t-phone','t-cpf','t-cep','t-num','t-street','t-bairro','t-city','t-uf','t-complemento','t-property','t-prop-code','t-rent','t-due'].forEach(id => { const el = $(id); if(el) el.value = ''; });
     $('t-due').value = '10';
     $('t-digital').checked = false;
     $('t-addr-block').style.display = 'none';
@@ -763,7 +776,8 @@
     $('et-cpf').value   = t.cpf   || '';
     $('et-rent').value  = c?.baseRent  || '';
     $('et-due').value   = c?.dueDay    || 10;
-    $('et-property').value = c?.propertyDescription || '';
+    $('et-property').value  = c?.propertyDescription || '';
+    $('et-prop-code').value = c?.propertyCode || '';
     $('modal-edit-tenant').style.display = 'flex';
     $('et-name').focus();
   }
@@ -781,7 +795,10 @@
         const rent = parseFloat($('et-rent').value.replace(',', '.'));
         const due  = parseInt($('et-due').value);
         if (!isNaN(rent) && !isNaN(due)) {
-          await updateDoc(doc(db, 'contracts', c.id), { baseRent: rent, dueDay: due, propertyDescription: $('et-property').value.trim() });
+          const newCode = $('et-prop-code').value.trim().toUpperCase();
+          const codeConflict = newCode && contracts.some(x => x.ownerId === currentOwnerId && x.id !== c.id && (x.propertyCode || '').toUpperCase() === newCode);
+          if (codeConflict) { showToast(`Código "${newCode}" já está em uso`, 'error'); return; }
+          await updateDoc(doc(db, 'contracts', c.id), { baseRent: rent, dueDay: due, propertyDescription: $('et-property').value.trim(), propertyCode: newCode });
         }
       }
       $('modal-edit-tenant').style.display = 'none';
@@ -882,7 +899,8 @@
           const c = contracts.find(x => x.tenantId === t.id);
           return (t.name  || '').toLowerCase().includes(q)
               || (t.email || '').toLowerCase().includes(q)
-              || (c?.propertyDescription || '').toLowerCase().includes(q);
+              || (c?.propertyDescription || '').toLowerCase().includes(q)
+              || (c?.propertyCode || '').toLowerCase().includes(q);
         })
       : tenants;
 
@@ -896,7 +914,8 @@
     filtered.forEach(t => {
       const contract  = contracts.find(c => c.tenantId === t.id);
       const rent      = contract ? fmt.format(contract.baseRent || 0) : '—';
-      const property  = contract?.propertyDescription || '—';
+      const propCode  = contract?.propertyCode ? `<span style="font-size:10px;font-weight:700;background:#1a2e1a;color:#4CAF50;border:1px solid #2e4a2e;border-radius:4px;padding:1px 6px;margin-right:4px;letter-spacing:.05em">${contract.propertyCode}</span>` : '';
+      const property  = propCode + (contract?.propertyDescription || (contract ? '—' : '—'));
       const digital   = contract?.requiresDigitalContract;
       const status    = !contract
         ? '<span class="badge inactive">Sem contrato</span>'
@@ -1848,7 +1867,17 @@
     setTimeout(() => { msg.style.display = 'none'; }, 3000);
   }
 
-  $('btn-add-tenant').addEventListener('click', () => { $('modal-tenant').style.display = 'flex'; $('t-name').focus(); });
+  $('btn-add-tenant').addEventListener('click', () => {
+    // Gera código sugerido: próximo número sequencial para este owner
+    const ownerContracts = contracts.filter(c => c.ownerId === currentOwnerId);
+    const existingNums = ownerContracts
+      .map(c => { const m = (c.propertyCode || '').match(/(\d+)$/); return m ? parseInt(m[1]) : 0; })
+      .filter(n => n > 0);
+    const nextNum = existingNums.length ? Math.max(...existingNums) + 1 : 1;
+    $('t-prop-code').value = 'IM-' + String(nextNum).padStart(3, '0');
+    $('modal-tenant').style.display = 'flex';
+    $('t-name').focus();
+  });
   $('btn-generate-charges').addEventListener('click', generateCharges);
   $('btn-notify-upcoming').addEventListener('click', notifyUpcoming);
   $('btn-notify-overdue').addEventListener('click', notifyOverdue);
@@ -2385,8 +2414,16 @@
       </div>
     </div>
     <div class="row2">
+      <div>
+        <label>Código do Imóvel <span>*</span></label>
+        <input id="t-prop-code" type="text" placeholder="ex: AP-101, CASA-3, KITNET-02" autocomplete="off" style="text-transform:uppercase">
+        <small style="color:#666;font-size:11px">Identificador único deste imóvel nesta imobiliária</small>
+      </div>
       <div><label>Aluguel (R$) <span>*</span></label><input id="t-rent" type="number" placeholder="1200" min="0" step="0.01"></div>
+    </div>
+    <div class="row2">
       <div><label>Dia do vencimento <span>*</span></label><input id="t-due" type="number" value="10" min="1" max="28"></div>
+      <div></div>
     </div>
     <label style="margin-top:20px">Tipo de contrato</label>
     <div class="toggle-row">
@@ -2429,6 +2466,14 @@
     <div class="row2">
       <div><label>Dia do vencimento</label><input id="et-due" type="number" min="1" max="28"></div>
       <div><label>Imóvel</label><input id="et-property" type="text"></div>
+    </div>
+    <div class="row2">
+      <div>
+        <label>Código do Imóvel</label>
+        <input id="et-prop-code" type="text" placeholder="AP-101" style="text-transform:uppercase">
+        <small style="color:#666;font-size:11px">Deve ser único dentro desta imobiliária</small>
+      </div>
+      <div></div>
     </div>
     <div class="modal-actions">
       <button class="btn-outline" id="et-cancel">Cancelar</button>
