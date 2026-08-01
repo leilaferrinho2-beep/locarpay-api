@@ -1442,6 +1442,230 @@
     }
   };
 
+  // ── Modal de Upgrade / Pagamento ───────────────────────────
+  let upgState = { plan: 'basic', method: 'pix', verificationId: null, pixPaymentId: null, pixPollInterval: null };
+
+  window.openBillingModal = (ownerId) => {
+    // Para owners não-master, abre o modal de pagamento próprio
+    if (!isMaster) { openUpgradeModal(); return; }
+    // Para master, abre o modal admin
+    const o = allOwners.find(x => x.id === ownerId);
+    if (!o) return;
+    $('billing-owner-name').textContent = o.name || o.email;
+    $('billing-owner-id').textContent   = o.id;
+    $('billing-plan-select').value      = o.plan || 'basic';
+    $('billing-status-info').textContent = billingStatusText(o);
+    $('billing-error').textContent = '';
+    $('billing-save').disabled = false;
+    $('billing-save').textContent = 'Ativar / Atualizar Plano';
+    $('modal-billing').style.display = 'flex';
+  };
+
+  window.openUpgradeModal = () => {
+    upgState = { plan: 'basic', method: 'pix', verificationId: null, pixPaymentId: null, pixPollInterval: null };
+    upgShowStep('1');
+    upgSelectPlan('basic');
+    upgSelectMethod('pix');
+    $('modal-upgrade').style.display = 'flex';
+  };
+
+  window.upgClose = () => {
+    if (upgState.pixPollInterval) { clearInterval(upgState.pixPollInterval); upgState.pixPollInterval = null; }
+    $('modal-upgrade').style.display = 'none';
+  };
+
+  function upgShowStep(step) {
+    ['1','pix','card','verify','confirm','success'].forEach(s => {
+      const el = $('upg-step-' + s); if (el) el.style.display = 'none';
+    });
+    const target = $('upg-step-' + step);
+    if (target) target.style.display = 'block';
+  }
+
+  window.upgSelectPlan = (plan) => {
+    upgState.plan = plan;
+    ['basic','pro'].forEach(p => {
+      const el = $('upg-plan-' + p);
+      if (!el) return;
+      el.style.borderColor = p === plan ? '#4CAF50' : '#2A4A2A';
+      el.style.background  = p === plan ? '#1A2E1A' : '#132213';
+    });
+  };
+
+  window.upgSelectMethod = (method) => {
+    upgState.method = method;
+    const pixBtn  = $('upg-pix-btn');
+    const cardBtn = $('upg-card-btn');
+    if (pixBtn)  { pixBtn.style.borderColor  = method === 'pix'  ? '#4CAF50' : '#2A4A2A'; pixBtn.style.background  = method === 'pix'  ? '#1A2E1A' : '#132213'; pixBtn.style.color  = method === 'pix'  ? '#E4F0E4' : '#8FAF8F'; }
+    if (cardBtn) { cardBtn.style.borderColor = method === 'card' ? '#4CAF50' : '#2A4A2A'; cardBtn.style.background = method === 'card' ? '#1A2E1A' : '#132213'; cardBtn.style.color = method === 'card' ? '#E4F0E4' : '#8FAF8F'; }
+  };
+
+  window.upgBack = (from) => {
+    if (from === 'pix' || from === 'card') upgShowStep('1');
+    else if (from === 'verify') upgShowStep('card');
+  };
+
+  window.upgStep1Next = async () => {
+    $('upg-err-1').textContent = '';
+    if (upgState.method === 'pix') {
+      await upgInitPix();
+    } else {
+      upgShowStep('card');
+      // Máscaras nos campos do cartão
+      const applyCardMask = (id, fn) => { const el=$(id); if(el && !el._masked) { el._masked=true; el.addEventListener('input', e => e.target.value = fn(e.target.value)); } };
+      applyCardMask('upg-c-number', v => v.replace(/\D/g,'').slice(0,16).replace(/(\d{4})(?=\d)/g,'$1 '));
+      applyCardMask('upg-c-cpf',    maskCpf);
+    }
+  };
+
+  async function upgInitPix() {
+    const btn = document.querySelector('#upg-step-1 .btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando PIX…'; }
+    try {
+      const resp = await fetch('/api/locarpay-subscription', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'pix', ownerId: currentOwnerId, plan: upgState.plan })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Erro ao gerar PIX');
+
+      upgState.pixPaymentId = data.paymentId;
+      const prices = { basic: 49, pro: 99 };
+      $('upg-pix-amount').textContent = `R$ ${prices[upgState.plan].toFixed(2).replace('.',',')}`;
+      $('upg-pix-plan-label').textContent = `Plano ${upgState.plan === 'basic' ? 'Basic' : 'Pro'} — pagamento único mensal`;
+      $('upg-pix-code').value = data.pixCopyPaste || '';
+
+      const qrImg = $('upg-qr-img');
+      if (data.pixQrCode) {
+        qrImg.src = 'data:image/png;base64,' + data.pixQrCode;
+        $('upg-qr-wrap').style.display = 'inline-block';
+      } else {
+        $('upg-qr-wrap').style.display = 'none';
+      }
+
+      upgShowStep('pix');
+      upgState.pixPollInterval = setInterval(upgPollPix, 5000);
+    } catch (e) {
+      $('upg-err-1').textContent = e.message;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Continuar →'; }
+    }
+  }
+
+  async function upgPollPix() {
+    try {
+      const resp = await fetch('/api/locarpay-subscription', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'check-pix', paymentId: upgState.pixPaymentId, ownerId: currentOwnerId, plan: upgState.plan })
+      });
+      const data = await resp.json();
+      if (data.paid) {
+        clearInterval(upgState.pixPollInterval);
+        $('upg-success-msg').textContent = `Plano ${data.plan === 'basic' ? 'Basic' : 'Pro'} ativado por 30 dias. Obrigado!`;
+        upgShowStep('success');
+      }
+    } catch (_) {}
+  }
+
+  window.upgCopyPix = () => {
+    const code = $('upg-pix-code').value;
+    if (!code) return;
+    navigator.clipboard.writeText(code).then(() => {
+      const btn = $('upg-copy-btn');
+      btn.textContent = '✓ Copiado!'; btn.style.color = '#69D369';
+      setTimeout(() => { btn.textContent = 'Copiar'; btn.style.color = '#69D369'; }, 2000);
+    });
+  };
+
+  window.upgCardInit = async () => {
+    const btn = $('upg-card-submit');
+    $('upg-err-card').textContent = '';
+    const name   = $('upg-c-name').value.trim().toUpperCase();
+    const number = $('upg-c-number').value.replace(/\D/g,'');
+    const month  = $('upg-c-month').value.trim();
+    const year   = $('upg-c-year').value.trim();
+    const cvv    = $('upg-c-cvv').value.trim();
+    const cpf    = $('upg-c-cpf').value.replace(/\D/g,'');
+
+    if (!name || number.length < 13 || !month || !year || cvv.length < 3) {
+      $('upg-err-card').textContent = 'Preencha todos os dados do cartão'; return;
+    }
+    if (cpf.length !== 11 || !validarCpf(cpf)) {
+      $('upg-err-card').textContent = 'CPF do titular inválido'; return;
+    }
+
+    btn.disabled = true; btn.textContent = 'Processando…';
+    try {
+      const resp = await fetch('/api/locarpay-subscription', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step: 'card-init', ownerId: currentOwnerId, plan: upgState.plan,
+          card: { holderName: name, number, expiryMonth: month, expiryYear: year, ccv: cvv, holderDocument: cpf }
+        })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Erro');
+
+      upgState.verificationId = data.verificationId;
+      $('upg-chip-label').textContent = `${data.cardBrand || 'Cartão'} •••• ${data.lastFour || '****'}`;
+      $('upg-verify-amount').value = '';
+      upgShowStep('verify');
+    } catch (e) {
+      $('upg-err-card').textContent = e.message;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Verificar cartão →';
+    }
+  };
+
+  window.upgVerify = async () => {
+    const btn = $('upg-verify-submit');
+    $('upg-err-verify').textContent = '';
+    const amount = $('upg-verify-amount').value.trim();
+    if (!amount) { $('upg-err-verify').textContent = 'Digite o valor visto no banco'; return; }
+
+    btn.disabled = true; btn.textContent = 'Verificando…';
+    try {
+      const resp = await fetch('/api/locarpay-subscription', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'card-verify', verificationId: upgState.verificationId, userAmount: amount, ownerId: currentOwnerId })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Valor incorreto');
+
+      const prices = { basic: 49, pro: 99 };
+      $('upg-confirm-summary').innerHTML = `
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:#8FAF8F">Plano</span><span>${upgState.plan === 'basic' ? 'Basic' : 'Pro'}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:#8FAF8F">Cartão</span><span>${$('upg-chip-label').textContent}</span></div>
+        <div style="display:flex;justify-content:space-between;border-top:1px solid #2A4A2A;padding-top:8px;margin-top:4px;font-weight:700"><span>Total</span><span style="color:#69D369">R$ ${prices[upgState.plan].toFixed(2).replace('.',',')}</span></div>
+      `;
+      upgShowStep('confirm');
+    } catch (e) {
+      $('upg-err-verify').textContent = e.message;
+    } finally {
+      btn.disabled = false; btn.textContent = '✓ Confirmar valor';
+    }
+  };
+
+  window.upgConfirm = async () => {
+    const btn = $('upg-confirm-submit');
+    $('upg-err-confirm').textContent = '';
+    btn.disabled = true; btn.textContent = 'Processando…';
+    try {
+      const resp = await fetch('/api/locarpay-subscription', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'card-confirm', verificationId: upgState.verificationId, ownerId: currentOwnerId, plan: upgState.plan })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Erro ao processar pagamento');
+
+      $('upg-success-msg').textContent = `Plano ${data.planName} ativado por 30 dias. Obrigado!`;
+      upgShowStep('success');
+    } catch (e) {
+      $('upg-err-confirm').textContent = e.message;
+      btn.disabled = false; btn.textContent = 'Pagar e ativar plano →';
+    }
+  };
+
   // ── Toast ──────────────────────────────────────────────────
 
   function showToast(msg, type = 'success') {
@@ -1964,6 +2188,147 @@
       <button class="btn-outline" style="color:#ef5350;border-color:#3a1a1a" onclick="suspendOwner()">Suspender</button>
       <button class="btn" id="billing-save" onclick="saveBilling()">Ativar / Atualizar Plano</button>
     </div>
+  </div>
+</div>
+
+<!-- Modal: Upgrade / Pagamento de Plano -->
+<div id="modal-upgrade" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="max-width:440px;padding:28px">
+
+    <!-- Step 1: escolha de plano + método -->
+    <div id="upg-step-1">
+      <h3 style="margin-bottom:4px">Ativar seu plano</h3>
+      <p style="font-size:13px;color:#888;margin-bottom:20px">Escolha o plano e a forma de pagamento</p>
+
+      <label style="font-size:12px;color:#8FAF8F;text-transform:uppercase;letter-spacing:.05em">Plano</label>
+      <div style="display:flex;gap:12px;margin:8px 0 20px">
+        <div class="plan-opt selected" id="upg-plan-basic" onclick="upgSelectPlan('basic')" style="flex:1;border:2px solid #4CAF50;border-radius:12px;padding:14px;cursor:pointer;transition:all .2s">
+          <div style="font-weight:700;color:#E4F0E4">Basic</div>
+          <div style="font-size:22px;font-weight:800;color:#69D369;margin:4px 0">R$49<span style="font-size:13px;color:#8FAF8F">/mês</span></div>
+          <div style="font-size:11px;color:#8FAF8F">Até 10 inquilinos</div>
+        </div>
+        <div class="plan-opt" id="upg-plan-pro" onclick="upgSelectPlan('pro')" style="flex:1;border:2px solid #2A4A2A;border-radius:12px;padding:14px;cursor:pointer;transition:all .2s">
+          <div style="font-weight:700;color:#E4F0E4">Pro</div>
+          <div style="font-size:22px;font-weight:800;color:#69D369;margin:4px 0">R$99<span style="font-size:13px;color:#8FAF8F">/mês</span></div>
+          <div style="font-size:11px;color:#8FAF8F">Até 50 inquilinos</div>
+        </div>
+      </div>
+
+      <label style="font-size:12px;color:#8FAF8F;text-transform:uppercase;letter-spacing:.05em">Forma de pagamento</label>
+      <div style="display:flex;gap:10px;margin:8px 0 24px">
+        <button id="upg-pix-btn" onclick="upgSelectMethod('pix')" style="flex:1;padding:12px;border-radius:10px;border:2px solid #4CAF50;background:#1A2E1A;color:#E4F0E4;font-weight:700;cursor:pointer;font-size:14px;transition:all .2s">
+          🏦 PIX
+        </button>
+        <button id="upg-card-btn" onclick="upgSelectMethod('card')" style="flex:1;padding:12px;border-radius:10px;border:2px solid #2A4A2A;background:#132213;color:#8FAF8F;font-weight:600;cursor:pointer;font-size:14px;transition:all .2s">
+          💳 Cartão
+        </button>
+      </div>
+
+      <div id="upg-err-1" style="color:#ef5350;font-size:12px;min-height:16px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:10px">
+        <button class="btn-outline" onclick="upgClose()" style="flex:1">Cancelar</button>
+        <button class="btn" onclick="upgStep1Next()" style="flex:2">Continuar →</button>
+      </div>
+    </div>
+
+    <!-- Step 2a: PIX -->
+    <div id="upg-step-pix" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <button onclick="upgBack('pix')" style="background:none;border:none;color:#8FAF8F;cursor:pointer;font-size:18px">←</button>
+        <h3 style="margin:0">Pagar via PIX</h3>
+      </div>
+      <div style="text-align:center;padding:8px 0">
+        <div id="upg-pix-amount" style="font-size:28px;font-weight:800;color:#69D369;margin-bottom:4px"></div>
+        <div id="upg-pix-plan-label" style="font-size:13px;color:#8FAF8F;margin-bottom:20px"></div>
+        <div id="upg-qr-wrap" style="background:#fff;border-radius:12px;padding:12px;display:inline-block;margin-bottom:16px">
+          <img id="upg-qr-img" src="" alt="QR Code PIX" style="width:180px;height:180px;display:block">
+        </div>
+        <div style="margin-bottom:12px">
+          <div style="font-size:12px;color:#8FAF8F;margin-bottom:6px">PIX Copia e Cola</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="upg-pix-code" readonly style="flex:1;background:#132213;border:1px solid #2A4A2A;border-radius:8px;padding:8px 10px;color:#E4F0E4;font-size:11px;font-family:monospace" value="">
+            <button onclick="upgCopyPix()" style="background:#1A2E1A;border:1px solid #2A4A2A;border-radius:8px;padding:8px 12px;color:#69D369;cursor:pointer;font-size:12px;white-space:nowrap" id="upg-copy-btn">Copiar</button>
+          </div>
+        </div>
+        <div id="upg-pix-status" style="font-size:13px;color:#8FAF8F;padding:10px;background:#132213;border-radius:8px">⏳ Aguardando pagamento…</div>
+      </div>
+    </div>
+
+    <!-- Step 2b: Dados do cartão -->
+    <div id="upg-step-card" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <button onclick="upgBack('card')" style="background:none;border:none;color:#8FAF8F;cursor:pointer;font-size:18px">←</button>
+        <h3 style="margin:0">Dados do Cartão</h3>
+      </div>
+
+      <div style="background:#1A2E1A;border:1px solid #2A4A2A;border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;color:#8FAF8F">
+        🔒 <strong style="color:#69D369">Verificação anti-fraude:</strong> cobraremos um valor aleatório de R$1,00 a R$9,99 para confirmar seu cartão. Ele será <strong style="color:#E4F0E4">estornado imediatamente</strong> após a verificação. Depois cobraremos o valor real do plano.
+      </div>
+
+      <input id="upg-c-name" type="text" placeholder="Nome impresso no cartão" style="margin-bottom:10px;text-transform:uppercase">
+      <input id="upg-c-number" type="text" placeholder="Número do cartão" maxlength="19" style="margin-bottom:10px;font-family:monospace;letter-spacing:2px">
+      <div style="display:flex;gap:10px;margin-bottom:10px">
+        <input id="upg-c-month" type="text" placeholder="MM" maxlength="2" style="flex:1;text-align:center">
+        <input id="upg-c-year"  type="text" placeholder="AA" maxlength="4" style="flex:1;text-align:center">
+        <input id="upg-c-cvv"   type="password" placeholder="CVV" maxlength="4" style="flex:1;text-align:center">
+      </div>
+      <input id="upg-c-cpf" type="text" placeholder="CPF do titular" maxlength="14" style="margin-bottom:10px">
+
+      <div id="upg-err-card" style="color:#ef5350;font-size:12px;min-height:16px;margin-bottom:8px"></div>
+      <button class="btn" onclick="upgCardInit()" id="upg-card-submit" style="width:100%">Verificar cartão →</button>
+    </div>
+
+    <!-- Step 3: Verificar valor micro -->
+    <div id="upg-step-verify" style="display:none">
+      <h3 style="margin-bottom:8px">Confirme no seu banco</h3>
+      <div style="background:#1A2E1A;border:1px solid #2A4A2A;border-radius:10px;padding:14px;margin-bottom:16px">
+        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">
+          <div style="width:24px;height:24px;border-radius:50%;background:rgba(105,211,105,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:#69D369;font-weight:700">1</div>
+          <span style="font-size:13px;color:#E4F0E4">Abra o app do seu banco agora</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">
+          <div style="width:24px;height:24px;border-radius:50%;background:rgba(105,211,105,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:#69D369;font-weight:700">2</div>
+          <span style="font-size:13px;color:#E4F0E4">Procure a cobrança <strong>"iLocarPay"</strong> (valor entre R$1,00 e R$9,99)</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <div style="width:24px;height:24px;border-radius:50%;background:rgba(105,211,105,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:#69D369;font-weight:700">3</div>
+          <span style="font-size:13px;color:#E4F0E4">Digite o valor exato abaixo — será <strong>estornado automaticamente</strong></span>
+        </div>
+      </div>
+
+      <div id="upg-card-chip" style="background:#132213;border:1px solid #2A4A2A;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#E4F0E4">
+        💳 <span id="upg-chip-label"></span>
+      </div>
+
+      <div style="position:relative;margin-bottom:10px">
+        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#8FAF8F;font-size:15px">R$</span>
+        <input id="upg-verify-amount" type="text" placeholder="0,00" style="padding-left:36px;font-size:20px;font-weight:700;letter-spacing:1px">
+      </div>
+
+      <div id="upg-err-verify" style="color:#ef5350;font-size:12px;min-height:16px;margin-bottom:8px"></div>
+      <button class="btn" onclick="upgVerify()" id="upg-verify-submit" style="width:100%;background:#69D369;color:#0B1A0B;font-weight:700">✓ Confirmar valor</button>
+    </div>
+
+    <!-- Step 4: Confirmar cobrança real -->
+    <div id="upg-step-confirm" style="display:none">
+      <h3 style="margin-bottom:8px">Confirmar pagamento</h3>
+      <p style="font-size:13px;color:#8FAF8F;margin-bottom:16px">Cartão verificado com sucesso! Clique para confirmar a cobrança do plano.</p>
+      <div id="upg-confirm-summary" style="background:#1A2E1A;border:1px solid #2A4A2A;border-radius:10px;padding:16px;margin-bottom:20px;font-size:14px;color:#E4F0E4"></div>
+      <div id="upg-err-confirm" style="color:#ef5350;font-size:12px;min-height:16px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:10px">
+        <button class="btn-outline" onclick="upgClose()" style="flex:1">Cancelar</button>
+        <button class="btn" onclick="upgConfirm()" id="upg-confirm-submit" style="flex:2">Pagar e ativar plano →</button>
+      </div>
+    </div>
+
+    <!-- Step 5: Sucesso -->
+    <div id="upg-step-success" style="display:none;text-align:center;padding:20px 0">
+      <div style="font-size:56px;margin-bottom:12px">🎉</div>
+      <h3 style="color:#69D369;margin-bottom:8px">Plano ativado!</h3>
+      <p id="upg-success-msg" style="font-size:14px;color:#8FAF8F;margin-bottom:24px"></p>
+      <button class="btn" onclick="upgClose();location.reload()" style="width:100%">Continuar →</button>
+    </div>
+
   </div>
 </div>
 
