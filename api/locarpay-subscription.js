@@ -47,8 +47,8 @@ async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
   const c = await asaasReq('POST', '/customers', {
     name: name || email.split('@')[0],
     email,
-    ...(cpfD.length === 11   ? { cpfCnpj:     cpfD   } : {}),
-    ...(phoneD.length >= 10  ? { mobilePhone:  phoneD } : {})
+    ...((cpfD.length === 11 || cpfD.length === 14) ? { cpfCnpj: cpfD } : {}),
+    ...(phoneD.length >= 10  ? { mobilePhone: phoneD } : {})
   }, apiKey);
   return c.id;
 }
@@ -72,7 +72,7 @@ async function cancelOrRefund(paymentId, apiKey) {
 
 // ── PIX ──────────────────────────────────────────────────────────────────────
 async function handlePix(db, body) {
-  const { ownerId, plan } = body;
+  const { ownerId, plan, cpfCnpj } = body;
   if (!ownerId || !PLANS[plan]) throw Object.assign(new Error('Dados inválidos'), { status: 400 });
 
   const apiKey   = await getMainAsaasKey(db);
@@ -82,7 +82,10 @@ async function handlePix(db, body) {
   if (!ownerSnap.exists) throw Object.assign(new Error('Imobiliária não encontrada'), { status: 404 });
   const owner = ownerSnap.data();
 
-  const customerId = await findOrCreateCustomer(owner.name, owner.email, owner.cpf, owner.phone, apiKey);
+  const effectiveCpf = (cpfCnpj || owner.cpf || owner.cnpj || '').replace(/\D/g, '');
+  if (!effectiveCpf) throw Object.assign(new Error('CPF ou CNPJ do responsável obrigatório'), { status: 400 });
+
+  const customerId = await findOrCreateCustomer(owner.name, owner.email, effectiveCpf, owner.phone, apiKey);
 
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   const dueDate  = tomorrow.toISOString().slice(0, 10);
