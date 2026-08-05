@@ -8,7 +8,9 @@
     { "source": "/locarpay/admin", "destination": "/admin/index.html" },
     { "source": "/locarpay/admin/", "destination": "/admin/index.html" },
     { "source": "/broker", "destination": "/broker/index.html" },
-    { "source": "/broker/", "destination": "/broker/index.html" }
+    { "source": "/broker/", "destination": "/broker/index.html" },
+    { "source": "/superadmin", "destination": "/superadmin/index.html" },
+    { "source": "/superadmin/", "destination": "/superadmin/index.html" }
   ],
   "headers": [
     {
