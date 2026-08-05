@@ -1,21 +1,17 @@
 // GET  → serve admin HTML
 // POST → superadmin API (requer x-admin-token do super admin)
 
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth }                        from 'firebase-admin/auth';
 import { getFirestore, Timestamp }        from 'firebase-admin/firestore';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const html = readFileSync(join(__dirname, '../public/admin/index.html'), 'utf-8');
 
 const SUPER_ADMIN_EMAIL = 'denisfelicio20@gmail.com';
 
 function initFirebase() {
   if (getApps().length) return;
-  initializeApp({ credential: cert(JSON.parse(process.env.LOCARPAY_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT)) });
+  const sa = process.env.LOCARPAY_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!sa) throw new Error('ENV: service account não configurada (LOCARPAY_SERVICE_ACCOUNT / FIREBASE_SERVICE_ACCOUNT)');
+  initializeApp({ credential: cert(JSON.parse(sa)) });
 }
 
 async function verifyAdmin(req) {
@@ -92,12 +88,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-token');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // GET → serve admin HTML
-  if (req.method === 'GET') {
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache');
-    return res.status(200).send(html);
-  }
+  if (req.method === 'GET') return res.status(302).setHeader('Location', '/admin').end();
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
