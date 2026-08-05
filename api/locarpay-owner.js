@@ -159,13 +159,13 @@ async function handleRegister(db, body) {
       auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
     });
     await transporter.sendMail({
-      from:    'iiLocarPay <denis@dlftech.com.br>',
+      from:    'iLocarPay <denis@dlftech.com.br>',
       to:      email,
       subject: `Bem-vindo ao iLocarPay! Sua conta esta pronta`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#fff">
           <div style="margin-bottom:24px">
-            <span style="background:#2e7d32;color:#fff;font-weight:800;font-size:18px;padding:6px 14px;border-radius:8px">iLocarPay</span>
+            <span style="display:inline-flex;align-items:center;gap:8px;font-weight:900;font-size:20px;color:#4CAF50;letter-spacing:-.5px;">&#9679;&nbsp;iLocarPay</span>
           </div>
           <h2 style="color:#1a1a1a;margin-bottom:8px">Sua conta esta pronta, ${name.split(' ')[0]}!</h2>
           <p style="color:#555;line-height:1.7;margin-bottom:20px">
