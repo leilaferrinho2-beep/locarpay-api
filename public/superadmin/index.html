@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iLocarPay — Super Admin</title>
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+  const SUPER_ADMIN_EMAIL = 'denisfelicio20@gmail.com';
+
+  const app = initializeApp({
+    apiKey: "AIzaSyDTd-f-QTKNhixlYCDVHI5pGe9H8hxwON4",
+    authDomain: "locarpayapp.firebaseapp.com",
+    projectId: "locarpayapp"
+  });
+
+  const auth = getAuth(app);
+  const provider = new GoogleAuthProvider();
+
+  function $(id) { return document.getElementById(id); }
+
+  let owners = [];
+  let filtered = [];
+  let currentFilter = 'all';
+  let searchTerm = '';
+
+  // ── AUTH ────────────────────────────────────────────────────────────────────
+  onAuthStateChanged(auth, async user => {
+    if (!user) { showLogin(); return; }
+    if (user.email !== SUPER_ADMIN_EMAIL) {
+      await signOut(auth);
+      showLogin('Acesso negado. Apenas o super administrador pode acessar esta área.');
+      return;
+    }
+    showDashboard();
+    await loadOwners();
+  });
+
+  window.doLogin = async () => {
+    try {
+      await signInWithPopup(auth, provider);
+    } catch(e) {
+      $('login-err').textContent = e.message;
+    }
+  };
+
+  window.doLogout = async () => {
+    await signOut(auth);
+    showLogin();
+  };
+
+  function showLogin(err = '') {
+    $('login-screen').style.display = 'flex';
+    $('dashboard').style.display = 'none';
+    if (err) $('login-err').textContent = err;
+  }
+
+  function showDashboard() {
+    $('login-screen').style.display = 'none';
+    $('dashboard').style.display = 'block';
+    const user = auth.currentUser;
+    $('user-email').textContent = user?.email || '';
+  }
+
+  // ── LOAD OWNERS ─────────────────────────────────────────────────────────────
+  async function loadOwners() {
+    $('loading').style.display = 'flex';
+    try {
+      const r = await fetch('/api/superadmin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': await auth.currentUser.getIdToken() },
+        body: JSON.stringify({ step: 'list-owners' })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      owners = d.owners || [];
+      updateStats();
+      applyFilter();
+    } catch(e) {
+      showToast('Erro ao carregar: ' + e.message, 'error');
+    } finally {
+      $('loading').style.display = 'none';
+    }
+  }
+
+  function updateStats() {
+    const total    = owners.length;
+    const trial    = owners.filter(o => o.status === 'trial' || !o.status).length;
+    const active   = owners.filter(o => o.status === 'active').length;
+    const suspended = owners.filter(o => o.status === 'suspended').length;
+    const revenue  = owners.filter(o => o.status === 'active').reduce((s, o) => s + (o.monthlyPrice || 0), 0);
+
+    $('stat-total').textContent    = total;
+    $('stat-trial').textContent    = trial;
+    $('stat-active').textContent   = active;
+    $('stat-suspended').textContent = suspended;
+    $('stat-revenue').textContent  = 'R$ ' + revenue.toLocaleString('pt-BR');
+  }
+
+  function applyFilter() {
+    filtered = owners.filter(o => {
+      const matchFilter =
+        currentFilter === 'all' ||
+        (currentFilter === 'trial'     && (o.status === 'trial' || !o.status)) ||
+        (currentFilter === 'active'    && o.status === 'active') ||
+        (currentFilter === 'suspended' && o.status === 'suspended') ||
+        (currentFilter === 'no-asaas'  && !o.asaasConfigured);
+
+      const term = searchTerm.toLowerCase();
+      const matchSearch = !term ||
+        (o.name  || '').toLowerCase().includes(term) ||
+        (o.email || '').toLowerCase().includes(term);
+
+      return matchFilter && matchSearch;
+    });
+    renderTable();
+  }
+
+  window.setFilter = (f) => {
+    currentFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`[data-filter="${f}"]`)?.classList.add('active');
+    applyFilter();
+  };
+
+  window.doSearch = (v) => {
+    searchTerm = v;
+    applyFilter();
+  };
+
+  // ── RENDER TABLE ────────────────────────────────────────────────────────────
+  function renderTable() {
+    const tbody = $('owners-tbody');
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#555;padding:32px">Nenhuma imobiliária encontrada</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(o => {
+      const statusClass = o.status === 'active' ? 'badge-active' : o.status === 'suspended' ? 'badge-suspended' : 'badge-trial';
+      const statusLabel = o.status === 'active' ? 'Ativo' : o.status === 'suspended' ? 'Suspenso' : 'Trial';
+      const asaas = o.asaasConfigured ? '<span style="color:#4CAF50">✓ OK</span>' : '<span style="color:#f59e0b">⚠ Pendente</span>';
+      const trialEnd = o.trialEndsAt ? new Date(o.trialEndsAt).toLocaleDateString('pt-BR') : '—';
+      const price = o.monthlyPrice ? `R$ ${o.monthlyPrice}/mês` : '—';
+      const created = o.createdAt ? new Date(o.createdAt).toLocaleDateString('pt-BR') : '—';
+
+      return `
+        <tr>
+          <td>
+            <div style="font-weight:600;color:#f1f5f9">${esc(o.name || '—')}</div>
+            <div style="font-size:11px;color:#555;margin-top:2px">${esc(o.email || '')}</div>
+          </td>
+          <td><span class="badge ${statusClass}">${statusLabel}</span></td>
+          <td style="color:#aaa;font-size:13px">${esc(o.plan || 'trial')}</td>
+          <td style="color:#aaa;font-size:13px">${price}</td>
+          <td style="font-size:13px">${asaas}</td>
+          <td style="color:#aaa;font-size:12px">${trialEnd}</td>
+          <td style="color:#aaa;font-size:12px">${created}</td>
+          <td>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn-action btn-view"    onclick="viewOwner('${o.ownerId}')">Ver</button>
+              ${o.status !== 'active'    ? `<button class="btn-action btn-activate" onclick="activateOwner('${o.ownerId}')">Ativar</button>` : ''}
+              ${o.status !== 'suspended' ? `<button class="btn-action btn-suspend"  onclick="suspendOwner('${o.ownerId}')">Suspender</button>` : ''}
+              ${!o.asaasConfigured       ? `<button class="btn-action btn-asaas"    onclick="setupAsaas('${o.ownerId}')">Criar Asaas</button>` : ''}
+              <button class="btn-action btn-delete" onclick="deleteOwner('${o.ownerId}', '${esc(o.name)}')">Excluir</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // ── MODAL DETALHES ──────────────────────────────────────────────────────────
+  window.viewOwner = async (ownerId) => {
+    const o = owners.find(x => x.ownerId === ownerId);
+    if (!o) return;
+    $('modal-body').innerHTML = `
+      <div class="detail-grid">
+        <div class="detail-row"><span>Nome</span><strong>${esc(o.name||'—')}</strong></div>
+        <div class="detail-row"><span>E-mail</span><strong>${esc(o.email||'—')}</strong></div>
+        <div class="detail-row"><span>Telefone</span><strong>${esc(o.phone||'—')}</strong></div>
+        <div class="detail-row"><span>CPF/CNPJ</span><strong>${esc(o.cpfCnpj||'—')}</strong></div>
+        <div class="detail-row"><span>Status</span><strong>${esc(o.status||'trial')}</strong></div>
+        <div class="detail-row"><span>Plano</span><strong>${esc(o.plan||'trial')}</strong></div>
+        <div class="detail-row"><span>Valor</span><strong>${o.monthlyPrice ? 'R$ '+o.monthlyPrice+'/mês' : '—'}</strong></div>
+        <div class="detail-row"><span>Trial expira</span><strong>${o.trialEndsAt ? new Date(o.trialEndsAt).toLocaleDateString('pt-BR') : '—'}</strong></div>
+        <div class="detail-row"><span>Asaas</span><strong>${o.asaasConfigured ? '✅ Configurado' : '⚠️ Pendente'}</strong></div>
+        <div class="detail-row"><span>Assinafy</span><strong>${o.assinafyConfigured ? '✅ Configurado' : '—'}</strong></div>
+        <div class="detail-row"><span>Inquilinos</span><strong>${o.maxTenants || '—'} máx</strong></div>
+        <div class="detail-row"><span>ID</span><strong style="font-size:11px;color:#555">${esc(o.ownerId)}</strong></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:20px;flex-wrap:wrap">
+        ${o.status !== 'active'    ? `<button class="btn-action btn-activate" onclick="activateOwner('${o.ownerId}');closeModal()">Ativar plano</button>` : ''}
+        ${o.status !== 'suspended' ? `<button class="btn-action btn-suspend"  onclick="suspendOwner('${o.ownerId}');closeModal()">Suspender</button>` : ''}
+        ${!o.asaasConfigured       ? `<button class="btn-action btn-asaas"    onclick="setupAsaas('${o.ownerId}');closeModal()">Criar subconta Asaas</button>` : ''}
+        <button class="btn-action btn-delete" onclick="deleteOwner('${o.ownerId}','${esc(o.name)}');closeModal()">Excluir conta</button>
+      </div>
+    `;
+    $('modal').style.display = 'flex';
+  };
+
+  window.closeModal = () => { $('modal').style.display = 'none'; };
+
+  // ── AÇÕES ───────────────────────────────────────────────────────────────────
+  async function adminAction(step, ownerId, confirmMsg) {
+    if (confirmMsg && !confirm(confirmMsg)) return;
+    try {
+      const r = await fetch('/api/superadmin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': await auth.currentUser.getIdToken() },
+        body: JSON.stringify({ step, ownerId })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      showToast(d.message || 'Operação realizada com sucesso!', 'success');
+      await loadOwners();
+    } catch(e) {
+      showToast('Erro: ' + e.message, 'error');
+    }
+  }
+
+  window.activateOwner = (id) => adminAction('activate-owner', id);
+  window.suspendOwner  = (id) => adminAction('suspend-owner',  id, 'Suspender esta imobiliária?');
+  window.setupAsaas    = (id) => adminAction('setup-asaas',    id);
+  window.deleteOwner   = (id, name) => adminAction('delete-owner', id, `Excluir permanentemente "${name}"? Esta ação não pode ser desfeita.`);
+
+  window.addOwner = async () => {
+    const name  = prompt('Nome da imobiliária:');
+    if (!name) return;
+    const email = prompt('E-mail:');
+    if (!email) return;
+    const phone = prompt('Telefone (opcional):') || '';
+
+    try {
+      const r = await fetch('/api/locarpay-owner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'register', name, email, phone, plan: 'trial' })
+      });
+      const d = await r.json();
+      if (!r.ok && r.status !== 409) throw new Error(d.error);
+      showToast('Imobiliária cadastrada com sucesso!', 'success');
+      await loadOwners();
+    } catch(e) {
+      showToast('Erro: ' + e.message, 'error');
+    }
+  };
+
+  window.refreshData = () => loadOwners();
+
+  // ── TOAST ───────────────────────────────────────────────────────────────────
+  function showToast(msg, type = 'success') {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast show ' + type;
+    setTimeout(() => t.className = 'toast', 3500);
+  }
+</script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #07080d; color: #e2e8f0; min-height: 100vh; }
+
+  /* Login */
+  #login-screen {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #07080d;
+  }
+  .login-card {
+    background: #0f1117; border: 1px solid #1c1f2a; border-radius: 20px; padding: 40px 36px;
+    width: 100%; max-width: 380px; text-align: center;
+  }
+  .login-logo { font-size: 28px; font-weight: 900; color: #f1f5f9; letter-spacing: -1px; margin-bottom: 4px; }
+  .login-badge { display: inline-block; background: #1a1d2e; border: 1px solid #2a2d3e; color: #f59e0b; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 100px; margin-bottom: 24px; }
+  .login-sub { font-size: 14px; color: #64748b; margin-bottom: 28px; }
+  .btn-google { width: 100%; background: #fff; color: #1a1a1a; border: none; padding: 13px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .btn-google:hover { background: #f0f0f0; }
+  #login-err { margin-top: 12px; font-size: 12px; color: #ef4444; }
+
+  /* Header */
+  .header { background: #0f1117; border-bottom: 1px solid #1c1f2a; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 56px; }
+  .header-brand { font-size: 18px; font-weight: 900; color: #f1f5f9; letter-spacing: -0.5px; }
+  .header-brand span { color: #22c55e; }
+  .header-badge { background: #3a1a00; color: #f59e0b; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 100px; margin-left: 10px; }
+  .header-right { display: flex; align-items: center; gap: 14px; }
+  #user-email { font-size: 12px; color: #64748b; }
+  .btn-logout { background: none; border: 1px solid #252a38; color: #64748b; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; }
+  .btn-logout:hover { color: #ef4444; border-color: #ef4444; }
+
+  /* Dashboard */
+  #dashboard { display: none; }
+  .content { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 24px; }
+  @media (max-width: 900px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat-card { background: #0f1117; border: 1px solid #1c1f2a; border-radius: 14px; padding: 18px 20px; }
+  .stat-label { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .stat-value { font-size: 28px; font-weight: 900; color: #f1f5f9; letter-spacing: -1px; }
+  .stat-value.green { color: #22c55e; }
+  .stat-value.yellow { color: #f59e0b; }
+  .stat-value.red { color: #ef4444; }
+
+  /* Toolbar */
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .search-input { flex: 1; min-width: 220px; background: #0f1117; border: 1px solid #1c1f2a; color: #e2e8f0; padding: 10px 14px; border-radius: 10px; font-size: 14px; outline: none; }
+  .search-input:focus { border-color: #22c55e; }
+  .filter-btn { background: #0f1117; border: 1px solid #1c1f2a; color: #64748b; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .filter-btn.active, .filter-btn:hover { background: #22c55e; border-color: #22c55e; color: #07080d; }
+  .btn-add { background: #22c55e; border: none; color: #07080d; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .btn-add:hover { background: #16a34a; }
+  .btn-refresh { background: #0f1117; border: 1px solid #1c1f2a; color: #64748b; padding: 10px 14px; border-radius: 10px; font-size: 14px; cursor: pointer; }
+  .btn-refresh:hover { border-color: #22c55e; color: #22c55e; }
+
+  /* Table */
+  .table-wrap { background: #0f1117; border: 1px solid #1c1f2a; border-radius: 16px; overflow: hidden; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 800px; }
+  thead th { background: #0b0c11; padding: 12px 16px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; text-align: left; border-bottom: 1px solid #1c1f2a; }
+  tbody tr { border-bottom: 1px solid #1c1f2a; transition: background .15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #0b0c11; }
+  tbody td { padding: 12px 16px; font-size: 13px; vertical-align: middle; }
+
+  /* Badges */
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 100px; }
+  .badge-active    { background: #14281a; color: #22c55e; border: 1px solid #1c5e2a; }
+  .badge-trial     { background: #1a1400; color: #f59e0b; border: 1px solid #4a3800; }
+  .badge-suspended { background: #2a0f0f; color: #ef4444; border: 1px solid #5a1a1a; }
+
+  /* Action buttons */
+  .btn-action   { border: none; padding: 5px 12px; border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .btn-view     { background: #1a1d2e; color: #94a3b8; }
+  .btn-activate { background: #14281a; color: #22c55e; }
+  .btn-suspend  { background: #1a1400; color: #f59e0b; }
+  .btn-asaas    { background: #1a1d2e; color: #60a5fa; }
+  .btn-delete   { background: #2a0f0f; color: #ef4444; }
+  .btn-action:hover { opacity: .8; }
+
+  /* Modal */
+  #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+  .modal-box { background: #0f1117; border: 1px solid #1c1f2a; border-radius: 20px; padding: 28px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
+  .modal-title { font-size: 18px; font-weight: 800; color: #f1f5f9; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
+  .modal-close { background: none; border: none; color: #64748b; font-size: 20px; cursor: pointer; }
+  .detail-grid { display: flex; flex-direction: column; gap: 0; }
+  .detail-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #1c1f2a; font-size: 13px; }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-row span { color: #64748b; }
+  .detail-row strong { color: #f1f5f9; text-align: right; }
+
+  /* Loading */
+  #loading { display: none; position: fixed; inset: 0; background: rgba(7,8,13,.8); z-index: 200; align-items: center; justify-content: center; }
+  .spinner { width: 40px; height: 40px; border: 3px solid #1c1f2a; border-top-color: #22c55e; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: #0f1117; border: 1px solid #1c1f2a; color: #f1f5f9; padding: 14px 20px; border-radius: 12px; font-size: 14px; font-weight: 600; transform: translateY(80px); opacity: 0; transition: all .3s; z-index: 300; max-width: 360px; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: #22c55e; color: #22c55e; }
+  .toast.error   { border-color: #ef4444; color: #ef4444; }
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading"><div class="spinner"></div></div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">iLocarPay</div>
+    <div class="login-badge">⚡ Super Admin</div>
+    <p class="login-sub">Acesso restrito ao administrador do sistema</p>
+    <button class="btn-google" onclick="doLogin()">
+      <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.47 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Entrar com Google
+    </button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div id="dashboard">
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span class="header-brand">i<span>Locar</span>Pay</span>
+      <span class="header-badge">⚡ Super Admin</span>
+    </div>
+    <div class="header-right">
+      <span id="user-email"></span>
+      <button class="btn-logout" onclick="doLogout()">Sair</button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-label">Total</div>
+        <div class="stat-value" id="stat-total">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Em Trial</div>
+        <div class="stat-value yellow" id="stat-trial">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Ativos</div>
+        <div class="stat-value green" id="stat-active">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Suspensos</div>
+        <div class="stat-value red" id="stat-suspended">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Receita/mês</div>
+        <div class="stat-value green" id="stat-revenue">—</div>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <input class="search-input" type="text" placeholder="Buscar por nome ou e-mail..." oninput="doSearch(this.value)">
+      <button class="filter-btn active" data-filter="all"       onclick="setFilter('all')">Todos</button>
+      <button class="filter-btn"        data-filter="trial"     onclick="setFilter('trial')">Trial</button>
+      <button class="filter-btn"        data-filter="active"    onclick="setFilter('active')">Ativos</button>
+      <button class="filter-btn"        data-filter="suspended" onclick="setFilter('suspended')">Suspensos</button>
+      <button class="filter-btn"        data-filter="no-asaas"  onclick="setFilter('no-asaas')">Sem Asaas</button>
+      <button class="btn-refresh" onclick="refreshData()" title="Atualizar">↻</button>
+      <button class="btn-add" onclick="addOwner()">+ Nova imobiliária</button>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Imobiliária</th>
+            <th>Status</th>
+            <th>Plano</th>
+            <th>Valor</th>
+            <th>Asaas</th>
+            <th>Trial até</th>
+            <th>Cadastro</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="owners-tbody">
+          <tr><td colspan="8" style="text-align:center;color:#555;padding:32px">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-title">
+      Detalhes da imobiliária
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+</body>
+</html>
