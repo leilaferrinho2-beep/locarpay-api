@@ -10,7 +10,8 @@
     { "source": "/broker", "destination": "/broker/index.html" },
     { "source": "/broker/", "destination": "/broker/index.html" },
     { "source": "/superadmin", "destination": "/superadmin/index.html" },
-    { "source": "/superadmin/", "destination": "/superadmin/index.html" }
+    { "source": "/superadmin/", "destination": "/superadmin/index.html" },
+    { "source": "/api/version", "destination": "/version.json" }
   ],
   "headers": [
     {
