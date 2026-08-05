@@ -9,7 +9,7 @@ const SUPER_ADMIN_EMAIL = 'denisfelicio20@gmail.com';
 
 function initFirebase() {
   if (getApps().length) return;
-  const sa = process.env.LOCARPAY_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT;
+  const sa = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT;
   if (!sa) throw new Error('ENV: service account não configurada (LOCARPAY_SERVICE_ACCOUNT / FIREBASE_SERVICE_ACCOUNT)');
   initializeApp({ credential: cert(JSON.parse(sa)) });
 }
@@ -38,6 +38,8 @@ async function listOwners(db) {
       monthlyPrice:       data.monthlyPrice    || 0,
       maxTenants:         data.maxTenants      || 3,
       asaasConfigured:    !!data.asaasApiKey,
+      asaasWarning:       data.asaasWarning       || null,
+      asaasSubaccountId:  data.asaasSubaccountId  || null,
       assinafyConfigured: !!data.assinafyApiKey,
       trialEndsAt:        data.trialEndsAt?.toDate?.()?.toISOString()     || null,
       planActiveUntil:    data.planActiveUntil?.toDate?.()?.toISOString() || null,
