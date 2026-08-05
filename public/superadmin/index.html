@@ -3,90 +3,74 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>iLocarPay &ndash; Super Admin</title>
+<title>iLocarPay &mdash; Super Admin</title>
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut }
+    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
   const SUPER_ADMIN_EMAIL = 'denisfelicio20@gmail.com';
+  const _PIN_HASH = '100517cd6867304acb076c61ff81f7212ce1d497dafe6a055012e8d9d202c19a';
 
   const app = initializeApp({
     apiKey: "AIzaSyDTd-f-QTKNhixlYCDVHI5pGe9H8hxwON4",
     authDomain: "locarpayapp.firebaseapp.com",
     projectId: "locarpayapp"
   });
-
   const auth = getAuth(app);
   const provider = new GoogleAuthProvider();
 
   function $(id) { return document.getElementById(id); }
+  let owners = [], filtered = [], currentFilter = 'all', searchTerm = '';
 
-  let owners = [];
-  let filtered = [];
-  let currentFilter = 'all';
-  let searchTerm = '';
-
-  // â”€â”€ AUTH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  onAuthStateChanged(auth, async user => {
-    if (!user) { showLogin(); return; }
-    if (user.email !== SUPER_ADMIN_EMAIL) {
-      await signOut(auth);
-      showLogin('Acesso negado. Apenas o super administrador pode acessar esta área.');
-      return;
-    }
-    showDashboard();
-    await loadOwners();
-  });
-
-  // PIN local antes do Google login
-  const _PIN_HASH = '100517cd6867304acb076c61ff81f7212ce1d497dafe6a055012e8d9d202c19a';
   async function sha256hex(str) {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
   }
-
   window.checkPin = async () => {
     const pin = $('pin-input').value.trim();
     if (!pin) return;
-    const hash = await sha256hex(pin);
-    if (hash !== _PIN_HASH) {
+    if (await sha256hex(pin) !== _PIN_HASH) {
       $('pin-err').textContent = 'Senha incorreta.';
       $('pin-input').value = '';
+      $('pin-input').focus();
       return;
     }
     $('pin-gate').style.display = 'none';
     $('google-gate').style.display = 'block';
   };
 
-  window.doLogin = async () => {
-    try {
-      await signInWithPopup(auth, provider);
-    } catch(e) {
-      $('login-err').textContent = e.message;
+  onAuthStateChanged(auth, async user => {
+    if (!user) { showLogin(); return; }
+    if (user.email !== SUPER_ADMIN_EMAIL) {
+      await signOut(auth);
+      showLogin('Acesso negado.');
+      return;
     }
-  };
+    showDashboard();
+    loadOwners();
+  });
 
-  window.doLogout = async () => {
-    await signOut(auth);
-    showLogin();
+  window.doLogin = async () => {
+    $('google-err').textContent = '';
+    try { await signInWithPopup(auth, provider); }
+    catch(e) { $('google-err').textContent = e.message; }
   };
+  window.doLogout = async () => { await signOut(auth); showLogin(); };
 
   function showLogin(err = '') {
     $('login-screen').style.display = 'flex';
-    $('dashboard').style.display = 'none';
-    if (err) $('login-err').textContent = err;
+    $('app').style.display = 'none';
+    if (err) { $('google-err').textContent = err; $('pin-gate').style.display='none'; $('google-gate').style.display='block'; }
   }
-
   function showDashboard() {
     $('login-screen').style.display = 'none';
-    $('dashboard').style.display = 'block';
-    const user = auth.currentUser;
-    $('user-email').textContent = user?.email || '';
+    $('app').style.display = 'flex';
+    $('user-email').textContent = auth.currentUser?.email || '';
   }
 
-  // â”€â”€ LOAD OWNERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function loadOwners() {
-    $('loading').style.display = 'flex';
+    setLoading(true);
     try {
       const r = await fetch('/api/admin', {
         method: 'POST',
@@ -98,133 +82,115 @@
       owners = d.owners || [];
       updateStats();
       applyFilter();
-    } catch(e) {
-      showToast('Erro ao carregar: ' + e.message, 'error');
-    } finally {
-      $('loading').style.display = 'none';
-    }
+    } catch(e) { toast('Erro ao carregar: ' + e.message, 'error'); }
+    finally { setLoading(false); }
   }
 
   function updateStats() {
-    const total    = owners.length;
-    const trial    = owners.filter(o => o.status === 'trial' || !o.status).length;
-    const active   = owners.filter(o => o.status === 'active').length;
+    const total     = owners.length;
+    const trial     = owners.filter(o => !o.status || o.status === 'trial').length;
+    const active    = owners.filter(o => o.status === 'active').length;
     const suspended = owners.filter(o => o.status === 'suspended').length;
-    const revenue  = owners.filter(o => o.status === 'active').reduce((s, o) => s + (o.monthlyPrice || 0), 0);
-
-    $('stat-total').textContent    = total;
-    $('stat-trial').textContent    = trial;
-    $('stat-active').textContent   = active;
-    $('stat-suspended').textContent = suspended;
-    $('stat-revenue').textContent  = 'R$ ' + revenue.toLocaleString('pt-BR');
+    const revenue   = owners.filter(o => o.status === 'active').reduce((s,o) => s + (o.monthlyPrice||0), 0);
+    $('s-total').textContent  = total;
+    $('s-trial').textContent  = trial;
+    $('s-active').textContent = active;
+    $('s-susp').textContent   = suspended;
+    $('s-rev').textContent    = 'R$ ' + revenue.toLocaleString('pt-BR');
   }
 
   function applyFilter() {
+    const term = searchTerm.toLowerCase();
     filtered = owners.filter(o => {
-      const matchFilter =
-        currentFilter === 'all' ||
-        (currentFilter === 'trial'     && (o.status === 'trial' || !o.status)) ||
-        (currentFilter === 'active'    && o.status === 'active') ||
-        (currentFilter === 'suspended' && o.status === 'suspended') ||
-        (currentFilter === 'no-asaas'  && !o.asaasConfigured);
-
-      const term = searchTerm.toLowerCase();
-      const matchSearch = !term ||
-        (o.name  || '').toLowerCase().includes(term) ||
-        (o.email || '').toLowerCase().includes(term);
-
-      return matchFilter && matchSearch;
+      const mf = currentFilter === 'all'
+        || (currentFilter === 'trial'     && (!o.status || o.status === 'trial'))
+        || (currentFilter === 'active'    && o.status === 'active')
+        || (currentFilter === 'suspended' && o.status === 'suspended')
+        || (currentFilter === 'no-asaas'  && !o.asaasConfigured);
+      const ms = !term || (o.name||'').toLowerCase().includes(term) || (o.email||'').toLowerCase().includes(term);
+      return mf && ms;
     });
     renderTable();
   }
 
-  window.setFilter = (f) => {
+  window.setFilter = f => {
     currentFilter = f;
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector(`[data-filter="${f}"]`)?.classList.add('active');
+    document.querySelectorAll('.flt').forEach(b => b.classList.toggle('active', b.dataset.f === f));
     applyFilter();
   };
+  window.doSearch = v => { searchTerm = v; applyFilter(); };
 
-  window.doSearch = (v) => {
-    searchTerm = v;
-    applyFilter();
-  };
+  function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('pt-BR');
+  }
+  function statusBadge(s) {
+    if (s === 'active')    return '<span class="badge badge-active">Ativo</span>';
+    if (s === 'suspended') return '<span class="badge badge-susp">Suspenso</span>';
+    return '<span class="badge badge-trial">Trial</span>';
+  }
 
-  // â”€â”€ RENDER TABLE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function renderTable() {
-    const tbody = $('owners-tbody');
-    if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#555;padding:32px">Nenhuma imobiliária encontrada</td></tr>`;
+    const tbody = $('tbody');
+    if (!filtered.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">Nenhuma imobiliária encontrada.</td></tr>';
       return;
     }
-
     tbody.innerHTML = filtered.map(o => {
-      const statusClass = o.status === 'active' ? 'badge-active' : o.status === 'suspended' ? 'badge-suspended' : 'badge-trial';
-      const statusLabel = o.status === 'active' ? 'Ativo' : o.status === 'suspended' ? 'Suspenso' : 'Trial';
-      const asaas = o.asaasConfigured ? '<span style="color:#4CAF50">âœ“ OK</span>' : '<span style="color:#f59e0b">âš  Pendente</span>';
-      const trialEnd = o.trialEndsAt ? new Date(o.trialEndsAt).toLocaleDateString('pt-BR') : 'â€”';
-      const price = o.monthlyPrice ? `R$ ${o.monthlyPrice}/mês` : 'â€”';
-      const created = o.createdAt ? new Date(o.createdAt).toLocaleDateString('pt-BR') : 'â€”';
-
-      return `
-        <tr>
-          <td>
-            <div style="font-weight:600;color:#f1f5f9">${esc(o.name || 'â€”')}</div>
-            <div style="font-size:11px;color:#555;margin-top:2px">${esc(o.email || '')}</div>
-          </td>
-          <td><span class="badge ${statusClass}">${statusLabel}</span></td>
-          <td style="color:#aaa;font-size:13px">${esc(o.plan || 'trial')}</td>
-          <td style="color:#aaa;font-size:13px">${price}</td>
-          <td style="font-size:13px">${asaas}</td>
-          <td style="color:#aaa;font-size:12px">${trialEnd}</td>
-          <td style="color:#aaa;font-size:12px">${created}</td>
-          <td>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <button class="btn-action btn-view"    onclick="viewOwner('${o.ownerId}')">Ver</button>
-              ${o.status !== 'active'    ? `<button class="btn-action btn-activate" onclick="activateOwner('${o.ownerId}')">Ativar</button>` : ''}
-              ${o.status !== 'suspended' ? `<button class="btn-action btn-suspend"  onclick="suspendOwner('${o.ownerId}')">Suspender</button>` : ''}
-              ${!o.asaasConfigured       ? `<button class="btn-action btn-asaas"    onclick="setupAsaas('${o.ownerId}')">Criar Asaas</button>` : ''}
-              <button class="btn-action btn-delete" onclick="deleteOwner('${o.ownerId}', '${esc(o.name)}')">Excluir</button>
-            </div>
-          </td>
-        </tr>`;
+      const asaasCell = o.asaasConfigured
+        ? '<span class="chip chip-ok">&#10003;&nbsp;OK</span>'
+        : '<span class="chip chip-warn">Pendente</span>';
+      const price = o.monthlyPrice ? 'R$ ' + o.monthlyPrice : '—';
+      return '<tr data-id="' + esc(o.ownerId) + '">'
+        + '<td class="td-name"><span class="name-text">' + esc(o.name||'—') + '</span>'
+        + '<span class="email-text">' + esc(o.email||'') + '</span></td>'
+        + '<td>' + statusBadge(o.status) + '</td>'
+        + '<td class="td-plan">' + esc(o.plan||'trial') + '</td>'
+        + '<td class="td-num">' + price + '</td>'
+        + '<td>' + asaasCell + '</td>'
+        + '<td class="td-date">' + fmtDate(o.trialEndsAt) + '</td>'
+        + '<td class="td-date">' + fmtDate(o.createdAt) + '</td>'
+        + '<td class="td-actions">'
+        + '<button class="act act-view" onclick="viewOwner(\'' + esc(o.ownerId) + '\')">Ver</button>'
+        + (o.status !== 'active'    ? '<button class="act act-ok"   onclick="activateOwner(\'' + esc(o.ownerId) + '\')">Ativar</button>' : '')
+        + (o.status !== 'suspended' ? '<button class="act act-warn" onclick="suspendOwner(\'' + esc(o.ownerId) + '\')">Suspender</button>' : '')
+        + (!o.asaasConfigured       ? '<button class="act act-blue" onclick="setupAsaas(\'' + esc(o.ownerId) + '\')">Criar Asaas</button>' : '')
+        + '<button class="act act-del" onclick="deleteOwner(\'' + esc(o.ownerId) + '\',\'' + esc(o.name) + '\')">Excluir</button>'
+        + '</td></tr>';
     }).join('');
   }
 
-  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-  // â”€â”€ MODAL DETALHES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  window.viewOwner = async (ownerId) => {
-    const o = owners.find(x => x.ownerId === ownerId);
+  window.viewOwner = id => {
+    const o = owners.find(x => x.ownerId === id);
     if (!o) return;
-    $('modal-body').innerHTML = `
-      <div class="detail-grid">
-        <div class="detail-row"><span>Nome</span><strong>${esc(o.name||'â€”')}</strong></div>
-        <div class="detail-row"><span>E-mail</span><strong>${esc(o.email||'â€”')}</strong></div>
-        <div class="detail-row"><span>Telefone</span><strong>${esc(o.phone||'â€”')}</strong></div>
-        <div class="detail-row"><span>CPF/CNPJ</span><strong>${esc(o.cpfCnpj||'â€”')}</strong></div>
-        <div class="detail-row"><span>Status</span><strong>${esc(o.status||'trial')}</strong></div>
-        <div class="detail-row"><span>Plano</span><strong>${esc(o.plan||'trial')}</strong></div>
-        <div class="detail-row"><span>Valor</span><strong>${o.monthlyPrice ? 'R$ '+o.monthlyPrice+'/mês' : 'â€”'}</strong></div>
-        <div class="detail-row"><span>Trial expira</span><strong>${o.trialEndsAt ? new Date(o.trialEndsAt).toLocaleDateString('pt-BR') : 'â€”'}</strong></div>
-        <div class="detail-row"><span>Asaas</span><strong>${o.asaasConfigured ? '✅ Configurado' : 'âš ï¸ Pendente'}</strong></div>
-        <div class="detail-row"><span>Assinafy</span><strong>${o.assinafyConfigured ? '✅ Configurado' : 'â€”'}</strong></div>
-        <div class="detail-row"><span>Inquilinos</span><strong>${o.maxTenants || 'â€”'} máx</strong></div>
-        <div class="detail-row"><span>ID</span><strong style="font-size:11px;color:#555">${esc(o.ownerId)}</strong></div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:20px;flex-wrap:wrap">
-        ${o.status !== 'active'    ? `<button class="btn-action btn-activate" onclick="activateOwner('${o.ownerId}');closeModal()">Ativar plano</button>` : ''}
-        ${o.status !== 'suspended' ? `<button class="btn-action btn-suspend"  onclick="suspendOwner('${o.ownerId}');closeModal()">Suspender</button>` : ''}
-        ${!o.asaasConfigured       ? `<button class="btn-action btn-asaas"    onclick="setupAsaas('${o.ownerId}');closeModal()">Criar subconta Asaas</button>` : ''}
-        <button class="btn-action btn-delete" onclick="deleteOwner('${o.ownerId}','${esc(o.name)}');closeModal()">Excluir conta</button>
-      </div>
-    `;
-    $('modal').style.display = 'flex';
+    const rows = [
+      ['Nome', o.name], ['E-mail', o.email], ['Telefone', o.phone||'—'],
+      ['CPF/CNPJ', o.cpfCnpj||'—'], ['Status', o.status||'trial'],
+      ['Plano', o.plan||'trial'],
+      ['Valor/mês', o.monthlyPrice ? 'R$ '+o.monthlyPrice : '—'],
+      ['Trial expira', fmtDate(o.trialEndsAt)],
+      ['Plano ativo até', fmtDate(o.planActiveUntil)],
+      ['Asaas', o.asaasConfigured ? 'Configurado' : 'Pendente'],
+      ['Assinafy', o.assinafyConfigured ? 'Configurado' : '—'],
+      ['Máx. inquilinos', o.maxTenants||'—'],
+      ['Cadastro', fmtDate(o.createdAt)], ['ID', o.ownerId],
+    ];
+    $('modal-rows').innerHTML = rows.map(([l,v]) =>
+      '<div class="mrow"><span class="mlabel">'+l+'</span><strong class="mval">'+esc(v)+'</strong></div>'
+    ).join('');
+    $('modal-actions').innerHTML =
+      (o.status !== 'active'    ? '<button class="act act-ok"   onclick="activateOwner(\''+esc(o.ownerId)+'\');closeModal()">Ativar plano</button>' : '')
+    + (o.status !== 'suspended' ? '<button class="act act-warn" onclick="suspendOwner(\''+esc(o.ownerId)+'\');closeModal()">Suspender</button>' : '')
+    + (!o.asaasConfigured       ? '<button class="act act-blue" onclick="setupAsaas(\''+esc(o.ownerId)+'\');closeModal()">Criar subconta Asaas</button>' : '')
+    + '<button class="act act-del" onclick="deleteOwner(\''+esc(o.ownerId)+'\',\''+esc(o.name)+'\');closeModal()">Excluir conta</button>';
+    $('modal-name').textContent = o.name || 'Imobiliária';
+    $('modal').classList.add('open');
   };
+  window.closeModal = () => $('modal').classList.remove('open');
 
-  window.closeModal = () => { $('modal').style.display = 'none'; };
-
-  // â”€â”€ AÇÕES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function adminAction(step, ownerId, confirmMsg) {
     if (confirmMsg && !confirm(confirmMsg)) return;
     try {
@@ -235,25 +201,21 @@
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
-      showToast(d.message || 'Operação realizada com sucesso!', 'success');
-      await loadOwners();
-    } catch(e) {
-      showToast('Erro: ' + e.message, 'error');
-    }
+      toast(d.message || 'Operação realizada.', 'ok');
+      loadOwners();
+    } catch(e) { toast('Erro: ' + e.message, 'error'); }
   }
 
-  window.activateOwner = (id) => adminAction('activate-owner', id);
-  window.suspendOwner  = (id) => adminAction('suspend-owner',  id, 'Suspender esta imobiliária?');
-  window.setupAsaas    = (id) => adminAction('setup-asaas',    id);
-  window.deleteOwner   = (id, name) => adminAction('delete-owner', id, `Excluir permanentemente "${name}"? Esta ação não pode ser desfeita.`);
+  window.activateOwner = id  => adminAction('activate-owner', id);
+  window.suspendOwner  = id  => adminAction('suspend-owner',  id, 'Suspender esta imobiliária?');
+  window.setupAsaas    = id  => adminAction('setup-asaas',    id);
+  window.deleteOwner   = (id, name) => adminAction('delete-owner', id,
+    'Excluir permanentemente "' + name + '"?\nEsta ação não pode ser desfeita.');
 
   window.addOwner = async () => {
-    const name  = prompt('Nome da imobiliária:');
-    if (!name) return;
-    const email = prompt('E-mail:');
-    if (!email) return;
+    const name  = prompt('Nome da imobiliária:'); if (!name) return;
+    const email = prompt('E-mail:');                   if (!email) return;
     const phone = prompt('Telefone (opcional):') || '';
-
     try {
       const r = await fetch('/api/locarpay-owner', {
         method: 'POST',
@@ -262,247 +224,350 @@
       });
       const d = await r.json();
       if (!r.ok && r.status !== 409) throw new Error(d.error);
-      showToast('Imobiliária cadastrada com sucesso!', 'success');
-      await loadOwners();
-    } catch(e) {
-      showToast('Erro: ' + e.message, 'error');
-    }
+      toast('Imobiliária cadastrada!', 'ok');
+      loadOwners();
+    } catch(e) { toast('Erro: ' + e.message, 'error'); }
   };
 
-  window.refreshData = () => loadOwners();
+  window.refreshData = loadOwners;
 
-  // â”€â”€ TOAST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  function showToast(msg, type = 'success') {
-    const t = $('toast');
-    t.textContent = msg;
-    t.className = 'toast show ' + type;
-    setTimeout(() => t.className = 'toast', 3500);
+  function toast(msg, type = 'ok') {
+    const el = $('toast');
+    el.textContent = msg;
+    el.className = 'toast show ' + type;
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.className = 'toast', 3500);
   }
+  function setLoading(v) { $('loading').style.display = v ? 'flex' : 'none'; }
 </script>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #07080d; color: #e2e8f0; min-height: 100vh; }
-
-  /* Login */
-  #login-screen {
-    min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #07080d;
-  }
-  .login-card {
-    background: #0f1117; border: 1px solid #1c1f2a; border-radius: 20px; padding: 40px 36px;
-    width: 100%; max-width: 380px; text-align: center;
-  }
-  .login-logo { font-size: 28px; font-weight: 900; color: #f1f5f9; letter-spacing: -1px; margin-bottom: 4px; }
-  .login-badge { display: inline-block; background: #1a1d2e; border: 1px solid #2a2d3e; color: #f59e0b; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 100px; margin-bottom: 24px; }
-  .login-sub { font-size: 14px; color: #64748b; margin-bottom: 28px; }
-  .btn-google { width: 100%; background: #fff; color: #1a1a1a; border: none; padding: 13px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
-  .btn-google:hover { background: #f0f0f0; }
-  #login-err { margin-top: 12px; font-size: 12px; color: #ef4444; }
-
-  /* Header */
-  .header { background: #0f1117; border-bottom: 1px solid #1c1f2a; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 56px; }
-  .header-brand { font-size: 18px; font-weight: 900; color: #f1f5f9; letter-spacing: -0.5px; }
-  .header-brand span { color: #22c55e; }
-  .header-badge { background: #3a1a00; color: #f59e0b; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 100px; margin-left: 10px; }
-  .header-right { display: flex; align-items: center; gap: 14px; }
-  #user-email { font-size: 12px; color: #64748b; }
-  .btn-logout { background: none; border: 1px solid #252a38; color: #64748b; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; }
-  .btn-logout:hover { color: #ef4444; border-color: #ef4444; }
-
-  /* Dashboard */
-  #dashboard { display: none; }
-  .content { max-width: 1400px; margin: 0 auto; padding: 24px; }
-
-  /* Stats */
-  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 24px; }
-  @media (max-width: 900px) { .stats { grid-template-columns: repeat(2, 1fr); } }
-  .stat-card { background: #0f1117; border: 1px solid #1c1f2a; border-radius: 14px; padding: 18px 20px; }
-  .stat-label { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
-  .stat-value { font-size: 28px; font-weight: 900; color: #f1f5f9; letter-spacing: -1px; }
-  .stat-value.green { color: #22c55e; }
-  .stat-value.yellow { color: #f59e0b; }
-  .stat-value.red { color: #ef4444; }
-
-  /* Toolbar */
-  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
-  .search-input { flex: 1; min-width: 220px; background: #0f1117; border: 1px solid #1c1f2a; color: #e2e8f0; padding: 10px 14px; border-radius: 10px; font-size: 14px; outline: none; }
-  .search-input:focus { border-color: #22c55e; }
-  .filter-btn { background: #0f1117; border: 1px solid #1c1f2a; color: #64748b; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
-  .filter-btn.active, .filter-btn:hover { background: #22c55e; border-color: #22c55e; color: #07080d; }
-  .btn-add { background: #22c55e; border: none; color: #07080d; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
-  .btn-add:hover { background: #16a34a; }
-  .btn-refresh { background: #0f1117; border: 1px solid #1c1f2a; color: #64748b; padding: 10px 14px; border-radius: 10px; font-size: 14px; cursor: pointer; }
-  .btn-refresh:hover { border-color: #22c55e; color: #22c55e; }
-
-  /* Table */
-  .table-wrap { background: #0f1117; border: 1px solid #1c1f2a; border-radius: 16px; overflow: hidden; overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; min-width: 800px; }
-  thead th { background: #0b0c11; padding: 12px 16px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; text-align: left; border-bottom: 1px solid #1c1f2a; }
-  tbody tr { border-bottom: 1px solid #1c1f2a; transition: background .15s; }
-  tbody tr:last-child { border-bottom: none; }
-  tbody tr:hover { background: #0b0c11; }
-  tbody td { padding: 12px 16px; font-size: 13px; vertical-align: middle; }
-
-  /* Badges */
-  .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 100px; }
-  .badge-active    { background: #14281a; color: #22c55e; border: 1px solid #1c5e2a; }
-  .badge-trial     { background: #1a1400; color: #f59e0b; border: 1px solid #4a3800; }
-  .badge-suspended { background: #2a0f0f; color: #ef4444; border: 1px solid #5a1a1a; }
-
-  /* Action buttons */
-  .btn-action   { border: none; padding: 5px 12px; border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; }
-  .btn-view     { background: #1a1d2e; color: #94a3b8; }
-  .btn-activate { background: #14281a; color: #22c55e; }
-  .btn-suspend  { background: #1a1400; color: #f59e0b; }
-  .btn-asaas    { background: #1a1d2e; color: #60a5fa; }
-  .btn-delete   { background: #2a0f0f; color: #ef4444; }
-  .btn-action:hover { opacity: .8; }
-
-  /* Modal */
-  #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
-  .modal-box { background: #0f1117; border: 1px solid #1c1f2a; border-radius: 20px; padding: 28px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
-  .modal-title { font-size: 18px; font-weight: 800; color: #f1f5f9; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
-  .modal-close { background: none; border: none; color: #64748b; font-size: 20px; cursor: pointer; }
-  .detail-grid { display: flex; flex-direction: column; gap: 0; }
-  .detail-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #1c1f2a; font-size: 13px; }
-  .detail-row:last-child { border-bottom: none; }
-  .detail-row span { color: #64748b; }
-  .detail-row strong { color: #f1f5f9; text-align: right; }
-
-  /* Loading */
-  #loading { display: none; position: fixed; inset: 0; background: rgba(7,8,13,.8); z-index: 200; align-items: center; justify-content: center; }
-  .spinner { width: 40px; height: 40px; border: 3px solid #1c1f2a; border-top-color: #22c55e; border-radius: 50%; animation: spin .8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* Toast */
-  .toast { position: fixed; bottom: 24px; right: 24px; background: #0f1117; border: 1px solid #1c1f2a; color: #f1f5f9; padding: 14px 20px; border-radius: 12px; font-size: 14px; font-weight: 600; transform: translateY(80px); opacity: 0; transition: all .3s; z-index: 300; max-width: 360px; }
-  .toast.show { transform: translateY(0); opacity: 1; }
-  .toast.success { border-color: #22c55e; color: #22c55e; }
-  .toast.error   { border-color: #ef4444; color: #ef4444; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:    #05060a; --surf:  #0c0e14; --surf2: #101318;
+  --bdr:   #151b26; --bdr2:  #1e2535;
+  --txt:   #e8edf5; --txt2:  #6b7a94; --txt3: #3a4558;
+  --green: #10b981; --green-d: #059669; --green-b: rgba(16,185,129,.08);
+  --amber: #f59e0b; --amber-b: rgba(245,158,11,.08);
+  --red:   #ef4444; --red-b:   rgba(239,68,68,.08);
+  --blue:  #3b82f6; --blue-b:  rgba(59,130,246,.08);
+  --r: 10px;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg); color: var(--txt); min-height: 100vh;
+  font-size: 14px; -webkit-font-smoothing: antialiased;
+}
+/* LOGIN */
+#login-screen {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(16,185,129,.06) 0%, transparent 70%), var(--bg);
+}
+.login-card {
+  width: 100%; max-width: 360px;
+  background: var(--surf); border: 1px solid var(--bdr); border-radius: 18px;
+  padding: 44px 36px 36px; text-align: center;
+}
+.login-wordmark { font-size: 26px; font-weight: 900; letter-spacing: -1px; color: var(--txt); margin-bottom: 4px; }
+.login-wordmark em { color: var(--green); font-style: normal; }
+.login-chip {
+  display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--amber);
+  background: var(--amber-b); border: 1px solid rgba(245,158,11,.2);
+  border-radius: 100px; padding: 3px 10px; margin-bottom: 28px;
+}
+.login-sub { font-size: 13px; color: var(--txt2); margin-bottom: 28px; line-height: 1.5; }
+.login-input {
+  width: 100%; background: var(--bg); border: 1px solid var(--bdr2); border-radius: var(--r);
+  color: var(--txt); font-size: 14px; padding: 12px 14px; margin-bottom: 10px;
+  outline: none; transition: border-color .15s;
+}
+.login-input:focus { border-color: var(--green); }
+.login-input::placeholder { color: var(--txt3); }
+.btn-continue {
+  width: 100%; background: var(--green-b); border: 1px solid rgba(16,185,129,.25);
+  border-radius: var(--r); color: var(--green); font-size: 14px; font-weight: 700;
+  padding: 12px; cursor: pointer; margin-bottom: 6px; transition: background .15s, border-color .15s;
+}
+.btn-continue:hover { background: rgba(16,185,129,.15); border-color: var(--green); }
+.btn-google {
+  width: 100%; background: #fff; border: none; border-radius: var(--r); color: #111;
+  font-size: 14px; font-weight: 700; padding: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px; transition: background .15s;
+}
+.btn-google:hover { background: #f5f5f5; }
+.login-err { margin-top: 10px; font-size: 12px; color: var(--red); min-height: 16px; }
+/* APP */
+#app { display: none; flex-direction: column; min-height: 100vh; }
+/* TOPBAR */
+.topbar {
+  position: sticky; top: 0; z-index: 50; height: 52px;
+  background: rgba(5,6,10,.9); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--bdr);
+  display: flex; align-items: center; padding: 0 24px; gap: 12px;
+}
+.wordmark { font-size: 17px; font-weight: 900; letter-spacing: -.5px; color: var(--txt); flex-shrink: 0; }
+.wordmark em { color: var(--green); font-style: normal; }
+.top-chip {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--amber); background: var(--amber-b); border: 1px solid rgba(245,158,11,.2);
+  border-radius: 100px; padding: 2px 9px;
+}
+.topbar-gap { flex: 1; }
+#user-email { font-size: 12px; color: var(--txt2); }
+.btn-logout {
+  background: none; border: 1px solid var(--bdr2); border-radius: 8px;
+  color: var(--txt2); font-size: 12px; font-weight: 600; padding: 5px 13px; cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.btn-logout:hover { color: var(--red); border-color: var(--red); }
+/* CONTENT */
+.content { flex: 1; max-width: 1480px; width: 100%; margin: 0 auto; padding: 28px 24px 48px; }
+/* STATS */
+.stats { display: grid; grid-template-columns: repeat(5,1fr); gap: 12px; margin-bottom: 28px; }
+@media (max-width: 900px) { .stats { grid-template-columns: repeat(2,1fr); } }
+.stat {
+  background: var(--surf); border: 1px solid var(--bdr);
+  border-top: 2px solid var(--bdr2); border-radius: var(--r); padding: 18px 20px 16px;
+}
+.stat.c-total  { border-top-color: var(--txt3); }
+.stat.c-trial  { border-top-color: var(--amber); }
+.stat.c-active { border-top-color: var(--green); }
+.stat.c-susp   { border-top-color: var(--red); }
+.stat.c-rev    { border-top-color: var(--blue); }
+.stat-label {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--txt2); margin-bottom: 10px;
+}
+.stat-value {
+  font-size: 30px; font-weight: 900; letter-spacing: -1.5px;
+  font-variant-numeric: tabular-nums; color: var(--txt);
+}
+.stat.c-trial  .stat-value { color: var(--amber); }
+.stat.c-active .stat-value { color: var(--green); }
+.stat.c-susp   .stat-value { color: var(--red); }
+.stat.c-rev    .stat-value { color: var(--blue); font-size: 22px; letter-spacing: -.5px; }
+/* TOOLBAR */
+.toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.search {
+  flex: 1; min-width: 200px; background: var(--surf); border: 1px solid var(--bdr);
+  border-radius: var(--r); color: var(--txt); font-size: 13px; padding: 9px 14px;
+  outline: none; transition: border-color .15s;
+}
+.search:focus { border-color: var(--bdr2); }
+.search::placeholder { color: var(--txt3); }
+.filters { display: flex; gap: 4px; }
+.flt {
+  background: var(--surf); border: 1px solid var(--bdr); border-radius: 8px;
+  color: var(--txt2); font-size: 12px; font-weight: 600; padding: 7px 13px;
+  cursor: pointer; transition: background .12s, color .12s, border-color .12s; white-space: nowrap;
+}
+.flt:hover { border-color: var(--bdr2); color: var(--txt); }
+.flt.active { background: var(--green); border-color: var(--green); color: #05060a; }
+.btn-icon {
+  background: var(--surf); border: 1px solid var(--bdr); border-radius: 8px;
+  color: var(--txt2); width: 36px; height: 36px; display: flex; align-items: center;
+  justify-content: center; cursor: pointer; font-size: 16px;
+  transition: border-color .12s, color .12s;
+}
+.btn-icon:hover { border-color: var(--green); color: var(--green); }
+.btn-add {
+  background: var(--green); border: none; border-radius: 8px; color: #05060a;
+  font-size: 13px; font-weight: 700; padding: 8px 18px; cursor: pointer;
+  white-space: nowrap; transition: background .12s;
+}
+.btn-add:hover { background: var(--green-d); }
+/* TABLE */
+.table-wrap {
+  background: var(--surf); border: 1px solid var(--bdr);
+  border-radius: 14px; overflow: hidden; overflow-x: auto;
+}
+table { width: 100%; border-collapse: collapse; min-width: 860px; }
+thead th {
+  background: var(--surf2); padding: 10px 16px;
+  font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--txt3); text-align: left; border-bottom: 1px solid var(--bdr);
+}
+tbody tr { border-bottom: 1px solid var(--bdr); transition: background .1s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: rgba(255,255,255,.018); }
+tbody td { padding: 13px 16px; vertical-align: middle; }
+.empty-cell { text-align: center; color: var(--txt3); padding: 40px 16px !important; font-size: 13px; }
+.td-name { min-width: 180px; }
+.name-text { display: block; font-weight: 600; color: var(--txt); }
+.email-text { display: block; font-size: 11px; color: var(--txt2); margin-top: 2px; }
+.td-plan { font-size: 12px; color: var(--txt2); text-transform: capitalize; }
+.td-num  { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--txt2); }
+.td-date { font-size: 12px; color: var(--txt2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.td-actions { white-space: nowrap; }
+/* BADGES */
+.badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 100px; }
+.badge-active { background: var(--green-b); color: var(--green); border: 1px solid rgba(16,185,129,.2); }
+.badge-trial  { background: var(--amber-b); color: var(--amber); border: 1px solid rgba(245,158,11,.2); }
+.badge-susp   { background: var(--red-b);   color: var(--red);   border: 1px solid rgba(239,68,68,.2); }
+.chip { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 6px; }
+.chip-ok   { background: var(--green-b); color: var(--green); }
+.chip-warn { background: var(--amber-b); color: var(--amber); }
+/* ACTION BUTTONS */
+.act {
+  border: none; border-radius: 6px; font-size: 11.5px; font-weight: 700;
+  padding: 5px 11px; cursor: pointer; margin-right: 4px; margin-bottom: 2px;
+  transition: opacity .12s;
+}
+.act:hover { opacity: .8; }
+.act-view { background: var(--surf2); color: var(--txt2); border: 1px solid var(--bdr2); }
+.act-ok   { background: var(--green-b); color: var(--green); }
+.act-warn { background: var(--amber-b); color: var(--amber); }
+.act-blue { background: var(--blue-b);  color: var(--blue); }
+.act-del  { background: var(--red-b);   color: var(--red); }
+/* MODAL */
+#modal { display: none; position: fixed; inset: 0; z-index: 100; }
+#modal.open { display: flex; }
+.modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.6); backdrop-filter: blur(4px); }
+.modal-panel {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 100%; max-width: 420px;
+  background: var(--surf); border-left: 1px solid var(--bdr);
+  display: flex; flex-direction: column; overflow-y: auto;
+}
+.modal-header {
+  padding: 22px 24px 18px; border-bottom: 1px solid var(--bdr);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.modal-title { font-size: 16px; font-weight: 800; color: var(--txt); }
+.modal-subtitle { font-size: 11px; color: var(--txt2); margin-top: 2px; }
+.btn-close {
+  background: none; border: 1px solid var(--bdr2); border-radius: 7px;
+  color: var(--txt2); width: 30px; height: 30px; cursor: pointer; font-size: 16px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  transition: color .12s, border-color .12s;
+}
+.btn-close:hover { color: var(--txt); }
+.modal-body { padding: 20px 24px; flex: 1; }
+.mrow {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--bdr); font-size: 13px;
+}
+.mrow:last-child { border-bottom: none; }
+.mlabel { color: var(--txt2); flex-shrink: 0; }
+.mval   { color: var(--txt); text-align: right; word-break: break-all; font-size: 13px; font-weight: 500; }
+.modal-footer { padding: 16px 24px 24px; border-top: 1px solid var(--bdr); display: flex; gap: 8px; flex-wrap: wrap; }
+/* LOADING */
+#loading {
+  display: none; position: fixed; inset: 0; background: rgba(5,6,10,.7);
+  z-index: 200; align-items: center; justify-content: center;
+}
+.spinner {
+  width: 36px; height: 36px; border: 2.5px solid var(--bdr2);
+  border-top-color: var(--green); border-radius: 50%; animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+/* TOAST */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 300;
+  background: var(--surf); border: 1px solid var(--bdr2); border-radius: 12px;
+  color: var(--txt); font-size: 13px; font-weight: 600; padding: 13px 20px;
+  max-width: 340px; transform: translateY(12px); opacity: 0;
+  transition: transform .25s, opacity .25s; pointer-events: none;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.ok    { border-color: rgba(16,185,129,.35); color: var(--green); }
+.toast.error { border-color: rgba(239,68,68,.35);  color: var(--red); }
 </style>
 </head>
 <body>
 
-<!-- Loading -->
 <div id="loading"><div class="spinner"></div></div>
-
-<!-- Toast -->
 <div class="toast" id="toast"></div>
 
-<!-- Login -->
+<!-- LOGIN -->
 <div id="login-screen">
   <div class="login-card">
-    <div class="login-logo">iLocarPay</div>
-    <div class="login-badge">Super Admin</div>
+    <div class="login-wordmark">i<em>Locar</em>Pay</div>
+    <div class="login-chip">Super Admin</div>
     <p class="login-sub">Acesso restrito ao administrador do sistema</p>
-
-    <!-- Etapa 1: PIN -->
     <div id="pin-gate">
-      <input id="pin-input" type="password" placeholder="Senha de acesso" autocomplete="off"
-        style="width:100%;padding:12px 14px;border-radius:8px;border:1px solid #2a2d3e;background:#0d0f1a;color:#e2e8f0;font-size:15px;margin-bottom:10px;outline:none;box-sizing:border-box;"
+      <input id="pin-input" type="password" class="login-input"
+        placeholder="Senha de acesso" autocomplete="off"
         onkeydown="if(event.key==='Enter')checkPin()">
-      <button class="btn-google" onclick="checkPin()" style="background:#1a2e1a;border:1px solid #22c55e;color:#22c55e;">
-        Continuar
-      </button>
-      <div id="pin-err" style="color:#ef4444;font-size:13px;margin-top:8px;"></div>
+      <button class="btn-continue" onclick="checkPin()">Continuar</button>
+      <div id="pin-err" class="login-err"></div>
     </div>
-
-    <!-- Etapa 2: Google -->
-    <div id="google-gate" style="display:none;">
+    <div id="google-gate" style="display:none">
       <button class="btn-google" onclick="doLogin()">
-        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.47 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        <svg width="18" height="18" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.47 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
         Entrar com Google
       </button>
-      <div id="login-err" style="color:#ef4444;font-size:13px;margin-top:8px;"></div>
+      <div id="google-err" class="login-err"></div>
     </div>
   </div>
 </div>
 
-<!-- Dashboard -->
-<div id="dashboard">
-  <div class="header">
-    <div style="display:flex;align-items:center;gap:6px">
-      <span class="header-brand">i<span>Locar</span>Pay</span>
-      <span class="header-badge">Super Admin</span>
-    </div>
-    <div class="header-right">
-      <span id="user-email"></span>
-      <button class="btn-logout" onclick="doLogout()">Sair</button>
-    </div>
-  </div>
+<!-- APP -->
+<div id="app">
+  <header class="topbar">
+    <span class="wordmark">i<em>Locar</em>Pay</span>
+    <span class="top-chip">Super Admin</span>
+    <div class="topbar-gap"></div>
+    <span id="user-email"></span>
+    <button class="btn-logout" onclick="doLogout()">Sair</button>
+  </header>
 
-  <div class="content">
-
-    <!-- Stats -->
+  <main class="content">
     <div class="stats">
-      <div class="stat-card">
-        <div class="stat-label">Total</div>
-        <div class="stat-value" id="stat-total">â€”</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Em Trial</div>
-        <div class="stat-value yellow" id="stat-trial">â€”</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Ativos</div>
-        <div class="stat-value green" id="stat-active">â€”</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Suspensos</div>
-        <div class="stat-value red" id="stat-suspended">â€”</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Receita/mês</div>
-        <div class="stat-value green" id="stat-revenue">â€”</div>
-      </div>
+      <div class="stat c-total"><div class="stat-label">Total</div><div class="stat-value" id="s-total">&mdash;</div></div>
+      <div class="stat c-trial"><div class="stat-label">Em Trial</div><div class="stat-value" id="s-trial">&mdash;</div></div>
+      <div class="stat c-active"><div class="stat-label">Ativos</div><div class="stat-value" id="s-active">&mdash;</div></div>
+      <div class="stat c-susp"><div class="stat-label">Suspensos</div><div class="stat-value" id="s-susp">&mdash;</div></div>
+      <div class="stat c-rev"><div class="stat-label">Receita / m&ecirc;s</div><div class="stat-value" id="s-rev">&mdash;</div></div>
     </div>
 
-    <!-- Toolbar -->
     <div class="toolbar">
-      <input class="search-input" type="text" placeholder="Buscar por nome ou e-mail..." oninput="doSearch(this.value)">
-      <button class="filter-btn active" data-filter="all"       onclick="setFilter('all')">Todos</button>
-      <button class="filter-btn"        data-filter="trial"     onclick="setFilter('trial')">Trial</button>
-      <button class="filter-btn"        data-filter="active"    onclick="setFilter('active')">Ativos</button>
-      <button class="filter-btn"        data-filter="suspended" onclick="setFilter('suspended')">Suspensos</button>
-      <button class="filter-btn"        data-filter="no-asaas"  onclick="setFilter('no-asaas')">Sem Asaas</button>
-      <button class="btn-refresh" onclick="refreshData()" title="Atualizar">↻</button>
-      <button class="btn-add" onclick="addOwner()">+ Nova imobiliária</button>
+      <input class="search" type="text" placeholder="Buscar por nome ou e-mail&hellip;" oninput="doSearch(this.value)">
+      <div class="filters">
+        <button class="flt active" data-f="all"       onclick="setFilter('all')">Todos</button>
+        <button class="flt"        data-f="trial"     onclick="setFilter('trial')">Trial</button>
+        <button class="flt"        data-f="active"    onclick="setFilter('active')">Ativos</button>
+        <button class="flt"        data-f="suspended" onclick="setFilter('suspended')">Suspensos</button>
+        <button class="flt"        data-f="no-asaas"  onclick="setFilter('no-asaas')">Sem Asaas</button>
+      </div>
+      <button class="btn-icon" onclick="refreshData()" title="Atualizar">&#8635;</button>
+      <button class="btn-add" onclick="addOwner()">+ Nova imobili&aacute;ria</button>
     </div>
 
-    <!-- Table -->
     <div class="table-wrap">
       <table>
-        <thead>
-          <tr>
-            <th>Imobiliária</th>
-            <th>Status</th>
-            <th>Plano</th>
-            <th>Valor</th>
-            <th>Asaas</th>
-            <th>Trial até</th>
-            <th>Cadastro</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody id="owners-tbody">
-          <tr><td colspan="8" style="text-align:center;color:#555;padding:32px">Carregando...</td></tr>
+        <thead><tr>
+          <th>Imobili&aacute;ria</th><th>Status</th><th>Plano</th>
+          <th>Valor</th><th>Asaas</th><th>Trial at&eacute;</th>
+          <th>Cadastro</th><th>A&ccedil;&otilde;es</th>
+        </tr></thead>
+        <tbody id="tbody">
+          <tr><td colspan="8" class="empty-cell">Carregando&hellip;</td></tr>
         </tbody>
       </table>
     </div>
-
-  </div>
+  </main>
 </div>
 
-<!-- Modal -->
-<div id="modal" onclick="if(event.target===this)closeModal()">
-  <div class="modal-box">
-    <div class="modal-title">
-      Detalhes da imobiliária
-      <button class="modal-close" onclick="closeModal()">✕</button>
+<!-- MODAL -->
+<div id="modal" onclick="if(event.target===this||event.target.classList.contains('modal-backdrop'))closeModal()">
+  <div class="modal-backdrop"></div>
+  <div class="modal-panel">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-name">Imobili&aacute;ria</div>
+        <div class="modal-subtitle">Detalhes da conta</div>
+      </div>
+      <button class="btn-close" onclick="closeModal()">&#215;</button>
     </div>
-    <div id="modal-body"></div>
+    <div class="modal-body"><div id="modal-rows"></div></div>
+    <div class="modal-footer" id="modal-actions"></div>
   </div>
 </div>
 
 </body>
 </html>
-
