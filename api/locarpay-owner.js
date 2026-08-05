@@ -1,8 +1,8 @@
-// POST /api/locarpay-owner
-// step:"register"     â†’ { name, email, phone?, cpfCnpj?, companyType?, address?, addressNumber?, province?, postalCode?, plan?, firebaseUid? }
-// step:"setup-asaas"  â†’ { ownerId } â†’ (re)cria subconta Asaas para owner existente
-// step:"migrate"      â†’ { secret, ownerId } â†’ backfill ownerId em docs legados (requer MIGRATE_SECRET)
-// step:"get"          â†’ { ownerId } â†’ retorna dados publicos do owner
+﻿// POST /api/locarpay-owner
+// step:"register"     â†' { name, email, phone?, cpfCnpj?, companyType?, address?, addressNumber?, province?, postalCode?, plan?, firebaseUid? }
+// step:"setup-asaas"  â†' { ownerId } â†' (re)cria subconta Asaas para owner existente
+// step:"migrate"      â†' { secret, ownerId } â†' backfill ownerId em docs legados (requer MIGRATE_SECRET)
+// step:"get"          â†' { ownerId } â†' retorna dados publicos do owner
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, Timestamp }       from 'firebase-admin/firestore';
@@ -163,30 +163,30 @@ async function handleRegister(db, body) {
       to:      email,
       subject: `Bem-vindo ao iLocarPay! Sua conta esta pronta`,
       html: `
-        <div style=”font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#fff”>
-          <div style=”margin-bottom:24px”>
-            <span style=”background:#2e7d32;color:#fff;font-weight:800;font-size:18px;padding:6px 14px;border-radius:8px”>iLocarPay</span>
+        <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#fff">
+          <div style="margin-bottom:24px">
+            <span style="background:#2e7d32;color:#fff;font-weight:800;font-size:18px;padding:6px 14px;border-radius:8px">iLocarPay</span>
           </div>
-          <h2 style=”color:#1a1a1a;margin-bottom:8px”>Sua conta esta pronta, ${name.split(‘ ‘)[0]}!</h2>
-          <p style=”color:#555;line-height:1.7;margin-bottom:20px”>
+          <h2 style="color:#1a1a1a;margin-bottom:8px">Sua conta esta pronta, ${name.split(' ')[0]}!</h2>
+          <p style="color:#555;line-height:1.7;margin-bottom:20px">
             Seu trial de <strong>14 dias gratis</strong> foi ativado. Voce tem acesso completo ao iLocarPay ate <strong>${trialFmt}</strong>.
           </p>
-          <div style=”background:#f0f7f0;border-radius:10px;padding:20px;margin-bottom:24px”>
-            <h3 style=”color:#2e7d32;font-size:14px;margin-bottom:12px”>Primeiros passos</h3>
-            <ol style=”color:#555;line-height:2;padding-left:20px;margin:0”>
-              <li>Acesse o painel em <a href=”https://ilocarpay.com.br/admin” style=”color:#2e7d32”>ilocarpay.com.br/admin</a></li>
+          <div style="background:#f0f7f0;border-radius:10px;padding:20px;margin-bottom:24px">
+            <h3 style="color:#2e7d32;font-size:14px;margin-bottom:12px">Primeiros passos</h3>
+            <ol style="color:#555;line-height:2;padding-left:20px;margin:0">
+              <li>Acesse o painel em <a href="https://ilocarpay.com.br/admin" style="color:#2e7d32">ilocarpay.com.br/admin</a></li>
               <li>Cadastre seus inquilinos com nome, e-mail e valor do aluguel</li>
               <li>Gere contratos digitais (assinatura eletronica inclusa)</li>
               <li>Ative as cobrancas automaticas mensais com PIX</li>
             </ol>
           </div>
-          <a href=”https://ilocarpay.com.br/admin” style=”display:inline-block;background:#4CAF50;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:700;font-size:15px;margin-bottom:24px”>
+          <a href="https://ilocarpay.com.br/admin" style="display:inline-block;background:#4CAF50;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:700;font-size:15px;margin-bottom:24px">
             Acessar painel agora &rarr;
           </a>
-          <hr style=”border:none;border-top:1px solid #eee;margin:24px 0”>
-          <p style=”color:#aaa;font-size:12px”>
+          <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+          <p style="color:#aaa;font-size:12px">
             Duvidas? Responda este e-mail ou acesse o painel em qualquer momento.<br>
-            ID da sua conta: <code style=”font-size:11px;color:#888”>${docRef.id}</code>
+            ID da sua conta: <code style="font-size:11px;color:#888">${docRef.id}</code>
           </p>
         </div>
       `
@@ -354,7 +354,7 @@ async function handleActivatePlan(db, body) {
       value,
       nextDueDate: nextDueDateStr,
       cycle:       'MONTHLY',
-      description: `iLocarPay ${plan.charAt(0).toUpperCase() + plan.slice(1)} â€” ${ownerData.name}`
+      description: `iLocarPay ${plan.charAt(0).toUpperCase() + plan.slice(1)} â€" ${ownerData.name}`
     })
   });
   const sub = await subResp.json();
@@ -464,7 +464,7 @@ async function handleNotifyTrial(db, body) {
   });
 
   const subject = daysLeft !== null && daysLeft <= 0
-    ? 'Seu trial LocarPay expirou â€” ative um plano'
+    ? 'Seu trial LocarPay expirou â€" ative um plano'
     : `Seu trial LocarPay expira em ${daysLeft} dia${daysLeft !== 1 ? 's' : ''}`;
 
   const urgencyMsg = daysLeft !== null && daysLeft <= 0
@@ -497,7 +497,7 @@ async function handleNotifyTrial(db, body) {
           </div>
         </div>
         <a href="https://ilocarpay.com.br/admin" style="display:inline-block;background:#4CAF50;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:700;font-size:15px;margin-bottom:24px">
-          Ativar plano agora â†’
+          Ativar plano agora â†'
         </a>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
         <p style="color:#aaa;font-size:12px">Duvidas? Responda este e-mail ou acesse o painel em ilocarpay.com.br/admin</p>
@@ -509,7 +509,7 @@ async function handleNotifyTrial(db, body) {
   return { ok: true, notified: true, email: d.email };
 }
 
-// â”€â”€ CRON DIÃRIO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ CRON DIÃRIO â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 // Chamado pelo Vercel Cron (GET) todo dia Ã s 08:00 BRT (11:00 UTC)
 // Executa para todos os owners ativos: mark-overdue, generate-charges, notify-upcoming
 // No dia 1: envia relatorio mensal. Para trial: verifica notificacao de expiracao.
