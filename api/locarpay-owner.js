@@ -87,7 +87,7 @@ async function handleRegister(db, body) {
   }
 
   const now = Timestamp.now();
-  const trialEndsAt = Timestamp.fromMillis(Date.now() + 14 * 24 * 60 * 60 * 1000);
+  const trialEndsAt = Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000);
   const planConfig = PLANS[plan] || PLANS.trial;
 
   const docRef = firebaseUid
@@ -169,7 +169,7 @@ async function handleRegister(db, body) {
           </div>
           <h2 style="color:#1a1a1a;margin-bottom:8px">Sua conta esta pronta, ${name.split(' ')[0]}!</h2>
           <p style="color:#555;line-height:1.7;margin-bottom:20px">
-            Seu trial de <strong>14 dias gratis</strong> foi ativado. Voce tem acesso completo ao iLocarPay ate <strong>${trialFmt}</strong>.
+            Seu trial de <strong>30 dias gratis</strong> foi ativado. Voce tem acesso completo ao iLocarPay ate <strong>${trialFmt}</strong>.
           </p>
           <div style="background:#f0f7f0;border-radius:10px;padding:20px;margin-bottom:24px">
             <h3 style="color:#2e7d32;font-size:14px;margin-bottom:12px">Primeiros passos</h3>
@@ -200,7 +200,7 @@ async function handleRegister(db, body) {
     asaasSubaccountId: updates.asaasSubaccountId || null,
     asaasConfigured:   !!updates.asaasApiKey,
     assinafyConfigured: !!updates.assinafyApiKey,
-    message: 'Owner cadastrado com sucesso. Trial de 14 dias ativo.',
+    message: 'Owner cadastrado com sucesso. Trial de 30 dias ativo.',
     ...(asaasError ? { asaasWarning: asaasError } : {}),
   };
 }
