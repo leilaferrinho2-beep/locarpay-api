@@ -142,7 +142,7 @@
     tbody.innerHTML = filtered.map(o => {
       const asaasCell = o.asaasConfigured
         ? '<span class="chip chip-ok">&#10003;&nbsp;OK</span>'
-        : '<span class="chip chip-warn">Pendente</span>';
+        : '<span class="chip chip-warn" title="' + esc(o.asaasWarning||'Não criada no cadastro') + '">&#9888;&nbsp;Pendente</span>';
       const price = o.monthlyPrice ? 'R$ ' + o.monthlyPrice : '—';
       return '<tr data-id="' + esc(o.ownerId) + '">'
         + '<td class="td-name"><span class="name-text">' + esc(o.name||'—') + '</span>'
@@ -173,7 +173,7 @@
       ['Valor/mês', o.monthlyPrice ? 'R$ '+o.monthlyPrice : '—'],
       ['Trial expira', fmtDate(o.trialEndsAt)],
       ['Plano ativo até', fmtDate(o.planActiveUntil)],
-      ['Asaas', o.asaasConfigured ? 'Configurado' : 'Pendente'],
+      ['Asaas', o.asaasConfigured ? 'Configurado' : ('Pendente' + (o.asaasWarning ? ' — ' + o.asaasWarning : ''))],
       ['Assinafy', o.assinafyConfigured ? 'Configurado' : '—'],
       ['Máx. inquilinos', o.maxTenants||'—'],
       ['Cadastro', fmtDate(o.createdAt)], ['ID', o.ownerId],
