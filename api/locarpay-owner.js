@@ -1,8 +1,8 @@
-﻿// POST /api/locarpay-owner
+// POST /api/locarpay-owner
 // step:"register"     â†’ { name, email, phone?, cpfCnpj?, companyType?, address?, addressNumber?, province?, postalCode?, plan?, firebaseUid? }
 // step:"setup-asaas"  â†’ { ownerId } â†’ (re)cria subconta Asaas para owner existente
 // step:"migrate"      â†’ { secret, ownerId } â†’ backfill ownerId em docs legados (requer MIGRATE_SECRET)
-// step:"get"          â†’ { ownerId } â†’ retorna dados pÃºblicos do owner
+// step:"get"          â†’ { ownerId } â†’ retorna dados publicos do owner
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, Timestamp }       from 'firebase-admin/firestore';
@@ -19,7 +19,7 @@ function initFirebase() {
   initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
 }
 
-// LÃª a chave master Asaas (da conta principal)
+// Le a chave master Asaas (da conta principal)
 async function getMasterAsaasKey(db) {
   // Tenta primeiro no owner master (transgu-owner-001), fallback para /config/asaas
   try {
@@ -30,7 +30,7 @@ async function getMasterAsaasKey(db) {
   return configSnap.data()?.apiKey;
 }
 
-// LÃª a chave Assinafy compartilhada (centralizada)
+// Le a chave Assinafy compartilhada (centralizada)
 async function getSharedAssinafyKey(db) {
   try {
     const masterSnap = await db.collection('owners').doc('transgu-owner-001').get();
@@ -79,11 +79,11 @@ async function handleRegister(db, body) {
     address, addressNumber, province, postalCode,
     plan = 'trial', firebaseUid
   } = body;
-  if (!name || !email) throw Object.assign(new Error('name e email sÃ£o obrigatÃ³rios'), { status: 400 });
+  if (!name || !email) throw Object.assign(new Error('name e email sao obrigatorios'), { status: 400 });
 
   const existing = await db.collection('owners').where('email', '==', email).limit(1).get();
   if (!existing.empty) {
-    throw Object.assign(new Error('Email jÃ¡ cadastrado'), { status: 409, ownerId: existing.docs[0].id });
+    throw Object.assign(new Error('Email ja cadastrado'), { status: 409, ownerId: existing.docs[0].id });
   }
 
   const now = Timestamp.now();
@@ -94,7 +94,7 @@ async function handleRegister(db, body) {
     ? db.collection('owners').doc(firebaseUid)
     : db.collection('owners').doc();
 
-  // Cria documento bÃ¡sico primeiro
+  // Cria documento basico primeiro
   const ownerData = {
     name,
     email,
@@ -159,39 +159,39 @@ async function handleRegister(db, body) {
       auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
     });
     await transporter.sendMail({
-      from:    'iLocarPay <denis@dlftech.com.br>',
+      from:    'iiLocarPay <denis@dlftech.com.br>',
       to:      email,
-      subject: 'Bem-vindo ao iLocarPay! ðŸŽ‰ Sua conta estÃ¡ pronta',
+      subject: `Bem-vindo ao iLocarPay! Sua conta esta pronta`,
       html: `
-        <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#fff">
-          <div style="margin-bottom:24px">
-            <span style="background:#2e7d32;color:#fff;font-weight:800;font-size:18px;padding:6px 14px;border-radius:8px">iLocarPay</span>
+        <div style=”font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#fff”>
+          <div style=”margin-bottom:24px”>
+            <span style=”background:#2e7d32;color:#fff;font-weight:800;font-size:18px;padding:6px 14px;border-radius:8px”>iLocarPay</span>
           </div>
-          <h2 style="color:#1a1a1a;margin-bottom:8px">Sua conta estÃ¡ pronta, ${name.split(' ')[0]}! ðŸŽ‰</h2>
-          <p style="color:#555;line-height:1.7;margin-bottom:20px">
-            Seu trial de <strong>14 dias grÃ¡tis</strong> foi ativado. VocÃª tem acesso completo ao iLocarPay atÃ© <strong>${trialFmt}</strong>.
+          <h2 style=”color:#1a1a1a;margin-bottom:8px”>Sua conta esta pronta, ${name.split(‘ ‘)[0]}!</h2>
+          <p style=”color:#555;line-height:1.7;margin-bottom:20px”>
+            Seu trial de <strong>14 dias gratis</strong> foi ativado. Voce tem acesso completo ao iLocarPay ate <strong>${trialFmt}</strong>.
           </p>
-          <div style="background:#f0f7f0;border-radius:10px;padding:20px;margin-bottom:24px">
-            <h3 style="color:#2e7d32;font-size:14px;margin-bottom:12px">ðŸ“‹ Primeiros passos</h3>
-            <ol style="color:#555;line-height:2;padding-left:20px;margin:0">
-              <li>Acesse o painel em <a href="https://ilocarpay.com.br/admin" style="color:#2e7d32">ilocarpay.com.br/admin</a></li>
+          <div style=”background:#f0f7f0;border-radius:10px;padding:20px;margin-bottom:24px”>
+            <h3 style=”color:#2e7d32;font-size:14px;margin-bottom:12px”>Primeiros passos</h3>
+            <ol style=”color:#555;line-height:2;padding-left:20px;margin:0”>
+              <li>Acesse o painel em <a href=”https://ilocarpay.com.br/admin” style=”color:#2e7d32”>ilocarpay.com.br/admin</a></li>
               <li>Cadastre seus inquilinos com nome, e-mail e valor do aluguel</li>
-              <li>Gere contratos digitais (assinatura eletrÃ´nica inclusa)</li>
-              <li>Ative as cobranÃ§as automÃ¡ticas mensais com PIX</li>
+              <li>Gere contratos digitais (assinatura eletronica inclusa)</li>
+              <li>Ative as cobrancas automaticas mensais com PIX</li>
             </ol>
           </div>
-          <a href="https://ilocarpay.com.br/admin" style="display:inline-block;background:#4CAF50;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:700;font-size:15px;margin-bottom:24px">
-            Acessar painel agora â†’
+          <a href=”https://ilocarpay.com.br/admin” style=”display:inline-block;background:#4CAF50;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:700;font-size:15px;margin-bottom:24px”>
+            Acessar painel agora &rarr;
           </a>
-          <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-          <p style="color:#aaa;font-size:12px">
-            DÃºvidas? Responda este e-mail ou acesse o painel em qualquer momento.<br>
-            ID da sua conta: <code style="font-size:11px;color:#888">${docRef.id}</code>
+          <hr style=”border:none;border-top:1px solid #eee;margin:24px 0”>
+          <p style=”color:#aaa;font-size:12px”>
+            Duvidas? Responda este e-mail ou acesse o painel em qualquer momento.<br>
+            ID da sua conta: <code style=”font-size:11px;color:#888”>${docRef.id}</code>
           </p>
         </div>
       `
     });
-  } catch (_) {} // falha no e-mail nÃ£o bloqueia cadastro
+  } catch (_) {} // falha no e-mail nao bloqueia cadastro
 
   return {
     ownerId:    docRef.id,
@@ -207,14 +207,14 @@ async function handleRegister(db, body) {
 
 async function handleSetupAsaas(db, body) {
   const { ownerId } = body;
-  if (!ownerId) throw Object.assign(new Error('ownerId obrigatÃ³rio'), { status: 400 });
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatorio'), { status: 400 });
 
   const ownerSnap = await db.collection('owners').doc(ownerId).get();
-  if (!ownerSnap.exists) throw Object.assign(new Error('Owner nÃ£o encontrado'), { status: 404 });
+  if (!ownerSnap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
 
   const ownerData = ownerSnap.data();
   const masterKey = await getMasterAsaasKey(db);
-  if (!masterKey) throw Object.assign(new Error('Chave master Asaas nÃ£o configurada'), { status: 500 });
+  if (!masterKey) throw Object.assign(new Error('Chave master Asaas nao configurada'), { status: 500 });
 
   const subaccount = await createAsaasSubaccount(masterKey, ownerData);
 
@@ -224,7 +224,7 @@ async function handleSetupAsaas(db, body) {
     asaasSubaccountId: subaccount.walletId || subaccount.id || '',
   });
 
-  // Registra webhook de pagamento na subconta recÃ©m-criada
+  // Registra webhook de pagamento na subconta recem-criada
   let webhookResult = null;
   if (newApiKey) {
     try {
@@ -253,11 +253,11 @@ async function migrateCollection(db, collectionName, ownerId) {
 
 async function handleMigrate(db, body) {
   const { secret, ownerId } = body;
-  if (secret !== process.env.MIGRATE_SECRET) throw Object.assign(new Error('NÃ£o autorizado'), { status: 403 });
-  if (!ownerId) throw Object.assign(new Error('ownerId obrigatÃ³rio'), { status: 400 });
+  if (secret !== process.env.MIGRATE_SECRET) throw Object.assign(new Error('nao autorizado'), { status: 403 });
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatorio'), { status: 400 });
 
   const ownerSnap = await db.collection('owners').doc(ownerId).get();
-  if (!ownerSnap.exists) throw Object.assign(new Error('Owner nÃ£o encontrado'), { status: 404 });
+  if (!ownerSnap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
 
   const [users, contracts, charges] = await Promise.all([
     migrateCollection(db, 'users',     ownerId),
@@ -270,9 +270,9 @@ async function handleMigrate(db, body) {
 
 async function handleGet(db, body) {
   const { ownerId } = body;
-  if (!ownerId) throw Object.assign(new Error('ownerId obrigatÃ³rio'), { status: 400 });
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatorio'), { status: 400 });
   const snap = await db.collection('owners').doc(ownerId).get();
-  if (!snap.exists) throw Object.assign(new Error('Owner nÃ£o encontrado'), { status: 404 });
+  if (!snap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
   const d = snap.data();
   return {
     ownerId: snap.id,
@@ -317,14 +317,14 @@ async function findOrCreateBillingCustomer(masterKey, ownerData) {
 
 async function handleActivatePlan(db, body) {
   const { ownerId, plan = 'basic', billingType = 'PIX' } = body;
-  if (!ownerId) throw Object.assign(new Error('ownerId obrigatÃ³rio'), { status: 400 });
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatorio'), { status: 400 });
 
   const ownerSnap = await db.collection('owners').doc(ownerId).get();
-  if (!ownerSnap.exists) throw Object.assign(new Error('Owner nÃ£o encontrado'), { status: 404 });
+  if (!ownerSnap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
   const ownerData = ownerSnap.data();
 
   const masterKey = await getMasterAsaasKey(db);
-  if (!masterKey) throw Object.assign(new Error('Chave master Asaas nÃ£o configurada'), { status: 500 });
+  if (!masterKey) throw Object.assign(new Error('Chave master Asaas nao configurada'), { status: 500 });
 
   const value = PLAN_PRICES[plan] ?? 49;
 
@@ -376,9 +376,9 @@ async function handleActivatePlan(db, body) {
 
 async function handleBillingStatus(db, body) {
   const { ownerId } = body;
-  if (!ownerId) throw Object.assign(new Error('ownerId obrigatÃ³rio'), { status: 400 });
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatorio'), { status: 400 });
   const snap = await db.collection('owners').doc(ownerId).get();
-  if (!snap.exists) throw Object.assign(new Error('Owner nÃ£o encontrado'), { status: 404 });
+  if (!snap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
   const d = snap.data();
   return {
     ownerId: snap.id,
@@ -394,10 +394,10 @@ async function handleBillingStatus(db, body) {
 
 async function handleSetupWebhook(db, body) {
   const { secret } = body;
-  if (secret !== process.env.MIGRATE_SECRET) throw Object.assign(new Error('NÃ£o autorizado'), { status: 403 });
+  if (secret !== process.env.MIGRATE_SECRET) throw Object.assign(new Error('nao autorizado'), { status: 403 });
 
   const masterKey = await getMasterAsaasKey(db);
-  if (!masterKey) throw Object.assign(new Error('Chave master Asaas nÃ£o encontrada'), { status: 500 });
+  if (!masterKey) throw Object.assign(new Error('Chave master Asaas nao encontrada'), { status: 500 });
 
   const webhookUrl = 'https://ilocarpay.com.br/billing-webhook';
   const events = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_OVERDUE', 'SUBSCRIPTION_DELETED'];
@@ -410,7 +410,7 @@ async function handleSetupWebhook(db, body) {
   const existing = (listJson.data || []).find(w => w.url === webhookUrl);
 
   if (existing) {
-    // Atualiza para garantir que os eventos estÃ£o corretos
+    // Atualiza para garantir que os eventos estao corretos
     const updResp = await fetch(`https://api.asaas.com/v3/webhooks/${existing.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'access_token': masterKey },
@@ -436,10 +436,10 @@ async function handleSetupWebhook(db, body) {
 
 async function handleNotifyTrial(db, body) {
   const { ownerId } = body;
-  if (!ownerId) throw Object.assign(new Error('ownerId obrigatÃ³rio'), { status: 400 });
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatorio'), { status: 400 });
 
   const snap = await db.collection('owners').doc(ownerId).get();
-  if (!snap.exists) throw Object.assign(new Error('Owner nÃ£o encontrado'), { status: 404 });
+  if (!snap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
   const d = snap.data();
 
   // Evita reenvio em menos de 20h
@@ -453,7 +453,7 @@ async function handleNotifyTrial(db, body) {
     ? Math.ceil((trialEnd.getTime() - Date.now()) / 86400000)
     : null;
 
-  // SÃ³ notifica se trial estÃ¡ expirando em â‰¤ 5 dias ou jÃ¡ expirou
+  // So notifica se trial esta expirando em â‰¤ 5 dias ou ja expirou
   if (daysLeft !== null && daysLeft > 5) {
     return { ok: true, skipped: true, reason: 'too_early' };
   }
@@ -468,11 +468,11 @@ async function handleNotifyTrial(db, body) {
     : `Seu trial LocarPay expira em ${daysLeft} dia${daysLeft !== 1 ? 's' : ''}`;
 
   const urgencyMsg = daysLeft !== null && daysLeft <= 0
-    ? 'Seu perÃ­odo de trial <strong>jÃ¡ expirou</strong>. Para continuar usando o LocarPay e receber pagamentos dos seus inquilinos, ative um plano.'
-    : `Seu perÃ­odo de trial expira em <strong>${daysLeft} dia${daysLeft !== 1 ? 's' : ''}</strong>. Ative um plano para nÃ£o perder o acesso.`;
+    ? 'Seu periodo de trial <strong>ja expirou</strong>. Para continuar usando o LocarPay e receber pagamentos dos seus inquilinos, ative um plano.'
+    : `Seu periodo de trial expira em <strong>${daysLeft} dia${daysLeft !== 1 ? 's' : ''}</strong>. Ative um plano para nao perder o acesso.`;
 
   await transporter.sendMail({
-    from: 'LocarPay <denis@dlftech.com.br>',
+    from: 'iLocarPay <denis@dlftech.com.br>',
     to: d.email,
     subject,
     html: `
@@ -482,25 +482,25 @@ async function handleNotifyTrial(db, body) {
           <span style="font-size:18px;font-weight:700;color:#1a1a1a">LocarPay</span>
         </div>
         <h2 style="color:#1a1a1a;font-size:22px;margin-bottom:12px">${subject}</h2>
-        <p style="color:#555;line-height:1.7;margin-bottom:20px">OlÃ¡, <strong>${d.name || d.email}</strong>!</p>
+        <p style="color:#555;line-height:1.7;margin-bottom:20px">Ola, <strong>${d.name || d.email}</strong>!</p>
         <p style="color:#555;line-height:1.7;margin-bottom:28px">${urgencyMsg}</p>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
           <div style="background:#f0f7f0;border:1px solid #c8e6c9;border-radius:10px;padding:16px 20px;flex:1;min-width:140px">
             <div style="font-size:13px;color:#555;margin-bottom:4px">Basic</div>
-            <div style="font-size:24px;font-weight:800;color:#2D6A2D">R$49<span style="font-size:14px;font-weight:400">/mÃªs</span></div>
-            <div style="font-size:12px;color:#888">atÃ© 10 inquilinos</div>
+            <div style="font-size:24px;font-weight:800;color:#2D6A2D">R$49<span style="font-size:14px;font-weight:400">/mes</span></div>
+            <div style="font-size:12px;color:#888">ate 10 inquilinos</div>
           </div>
           <div style="background:#f0f7f0;border:2px solid #4CAF50;border-radius:10px;padding:16px 20px;flex:1;min-width:140px">
-            <div style="font-size:13px;color:#555;margin-bottom:4px">Pro â­</div>
-            <div style="font-size:24px;font-weight:800;color:#2D6A2D">R$99<span style="font-size:14px;font-weight:400">/mÃªs</span></div>
-            <div style="font-size:12px;color:#888">atÃ© 30 inquilinos</div>
+            <div style="font-size:13px;color:#555;margin-bottom:4px">Pro </div>
+            <div style="font-size:24px;font-weight:800;color:#2D6A2D">R$99<span style="font-size:14px;font-weight:400">/mes</span></div>
+            <div style="font-size:12px;color:#888">ate 30 inquilinos</div>
           </div>
         </div>
         <a href="https://ilocarpay.com.br/admin" style="display:inline-block;background:#4CAF50;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:700;font-size:15px;margin-bottom:24px">
           Ativar plano agora â†’
         </a>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-        <p style="color:#aaa;font-size:12px">DÃºvidas? Responda este e-mail ou acesse o painel em ilocarpay.com.br/admin</p>
+        <p style="color:#aaa;font-size:12px">Duvidas? Responda este e-mail ou acesse o painel em ilocarpay.com.br/admin</p>
       </div>
     `
   });
@@ -512,15 +512,15 @@ async function handleNotifyTrial(db, body) {
 // â”€â”€ CRON DIÃRIO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Chamado pelo Vercel Cron (GET) todo dia Ã s 08:00 BRT (11:00 UTC)
 // Executa para todos os owners ativos: mark-overdue, generate-charges, notify-upcoming
-// No dia 1: envia relatÃ³rio mensal. Para trial: verifica notificaÃ§Ã£o de expiraÃ§Ã£o.
+// No dia 1: envia relatorio mensal. Para trial: verifica notificacao de expiracao.
 // Registra webhook de pagamento na subconta Asaas do owner
 // URL: https://ilocarpay.com.br/payment-webhook
 async function handleSetupPaymentWebhook(db, body) {
   const { ownerId } = body;
-  if (!ownerId) throw Object.assign(new Error('ownerId obrigatÃ³rio'), { status: 400 });
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatorio'), { status: 400 });
 
   const ownerSnap = await db.collection('owners').doc(ownerId).get();
-  if (!ownerSnap.exists) throw Object.assign(new Error('Owner nÃ£o encontrado'), { status: 404 });
+  if (!ownerSnap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
 
   const apiKey = ownerSnap.data().asaasApiKey;
   if (!apiKey) throw Object.assign(new Error('Owner sem chave Asaas configurada'), { status: 400 });
@@ -591,24 +591,24 @@ async function handleCronDaily(db) {
 
     const ops = [];
 
-    // 1. Marca cobranÃ§as vencidas + calcula multa/juros
+    // 1. Marca cobrancas vencidas + calcula multa/juros
     ops.push(post(BASE, { step: 'mark-overdue', ownerId }));
 
-    // 2. Gera cobranÃ§as: mÃªs atual nos primeiros 3 dias, prÃ³ximo mÃªs nos Ãºltimos 5
+    // 2. Gera cobrancas: mes atual nos primeiros 3 dias, proximo mes nos ultimos 5
     if (dayOfMonth <= 3)  ops.push(post(BASE, { step: 'generate-charges', ownerId, monthOffset: 0 }));
     if (isEndOfMonth)     ops.push(post(BASE, { step: 'generate-charges', ownerId, monthOffset: 1 }));
 
     // 3. Avisa vencimentos em 3 dias
     ops.push(post(BASE, { step: 'notify-upcoming', ownerId, daysAhead: 3 }));
 
-    // 4. RelatÃ³rio mensal no dia 1 (mÃªs anterior)
+    // 4. Relatorio mensal no dia 1 (mes anterior)
     if (isFirstOfMonth) {
       const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const monthStr = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
       ops.push(post(BASE, { step: 'monthly-report', ownerId, month: monthStr }));
     }
 
-    // 5. Notifica trial expirando (a cada atÃ© 20h, controlado internamente)
+    // 5. Notifica trial expirando (a cada ate 20h, controlado internamente)
     if (d.status === 'trial' || !d.status) {
       ops.push(post(OWNER_URL, { step: 'notify-trial', ownerId }));
     }
@@ -686,7 +686,7 @@ export default async function handler(req, res) {
     if (step === 'notify-trial')   return res.status(200).json(await handleNotifyTrial(db, body));
     if (step === 'setup-webhook')          return res.status(200).json(await handleSetupWebhook(db, body));
     if (step === 'setup-payment-webhook')  return res.status(200).json(await handleSetupPaymentWebhook(db, body));
-    return res.status(400).json({ error: 'step invÃ¡lido' });
+    return res.status(400).json({ error: 'step invalido' });
 
   } catch (e) {
     console.error('locarpay-owner error:', e.message);
