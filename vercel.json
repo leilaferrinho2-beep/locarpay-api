@@ -11,7 +11,9 @@
     { "source": "/broker/", "destination": "/broker/index.html" },
     { "source": "/superadmin", "destination": "/superadmin/index.html" },
     { "source": "/superadmin/", "destination": "/superadmin/index.html" },
-    { "source": "/api/version", "destination": "/version.json" }
+    { "source": "/api/version", "destination": "/version.json" },
+    { "source": "/api/locarpay-reassign-contract", "destination": "/api/locarpay-fix-contract" },
+    { "source": "/api/locarpay-sync-status", "destination": "/api/locarpay-card" }
   ],
   "headers": [
     {
