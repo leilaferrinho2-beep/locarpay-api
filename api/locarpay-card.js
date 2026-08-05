@@ -1907,6 +1907,84 @@ async function handleAsaasPaymentWebhook(db, body) {
 }
 
 // ── HANDLER ──────────────────────────────────────────────────────────────────
+// ── SYNC SIGNATURES (Assinafy) ──────────────────────────────────────────────
+// Legado: POST /api/locarpay-sync-status → reescrito para /api/locarpay-card
+const _ASSINAFY_DONE    = ['completed','signed','finished','done','approved','executed','manual','concluded','closed','active','certificated'];
+const _ASSINAFY_SIGNED  = ['signed','completed','approved','finished','done','concluded','active'];
+
+async function handleSyncSignatures(db, body) {
+  const { tenantEmail, contractId } = body || {};
+  if (!tenantEmail && !contractId) throw Object.assign(new Error('tenantEmail ou contractId obrigatório'), { status: 400 });
+
+  let contractSnap;
+  if (contractId) {
+    const doc = await db.collection('contracts').doc(contractId).get();
+    contractSnap = doc.exists ? { empty: false, docs: [doc] } : { empty: true };
+  } else {
+    const email = tenantEmail.toLowerCase().trim();
+    const snap  = await db.collection('contracts').where('tenantEmail', '==', email).where('active', '==', true).limit(1).get();
+    contractSnap = snap;
+  }
+  if (contractSnap.empty) throw Object.assign(new Error('Contrato não encontrado'), { status: 404 });
+
+  const contractDoc = contractSnap.docs[0];
+  const contract    = contractDoc.data();
+
+  if (_ASSINAFY_DONE.includes((contract.assinafyStatus || '').toLowerCase()))
+    return { signed: true, status: contract.assinafyStatus };
+
+  const documentId   = contract.assinafyDocumentId;
+  const assignmentId = contract.assinafyAssignmentId;
+  if (!documentId) return { signed: false, status: 'no_document' };
+
+  const configDoc = await db.collection('config').doc('assinafy').get();
+  const apiKey    = configDoc.exists ? configDoc.data().apiKey : null;
+  if (!apiKey) return { signed: false, status: 'no_api_key' };
+
+  async function afFetch(path) {
+    const r    = await fetch(`https://api.assinafy.com.br/v1/${path}`, { headers: { 'X-Api-Key': apiKey, 'Accept': 'application/json' } });
+    const text = await r.text();
+    try { return { ok: r.ok, status: r.status, data: JSON.parse(text) }; }
+    catch { return { ok: r.ok, status: r.status, data: text }; }
+  }
+
+  const accountsRes = await afFetch('accounts');
+  const accountId   = accountsRes.data?.data?.[0]?.id;
+  if (!accountId) return { signed: false, status: 'no_account' };
+
+  const docRes    = await afFetch(`accounts/${accountId}/documents/${documentId}`);
+  const docStatus = (docRes.data?.data?.status || '').toLowerCase();
+  if (_ASSINAFY_DONE.some(s => docStatus.includes(s))) {
+    const updates = { assinafyStatus: 'completed', ownerSigned: true };
+    const signedUrl = docRes.data?.data?.signed_url || docRes.data?.data?.signedUrl;
+    if (signedUrl) updates.signedFileUrl = signedUrl;
+    await contractDoc.ref.update(updates);
+    return { signed: true, status: 'completed' };
+  }
+
+  if (assignmentId) {
+    const assignRes = await afFetch(`accounts/${accountId}/documents/${documentId}/assignments/${assignmentId}`);
+    const signers   = assignRes.data?.data?.signers || [];
+    const ownerSigner  = signers.find(s => s.step === 1) || signers[0];
+    const tenantSigner = signers.find(s => s.step === 2) || signers[1];
+    const ownerSignedApi  = ownerSigner?.signed_at  != null || _ASSINAFY_SIGNED.includes((ownerSigner?.status  || '').toLowerCase());
+    const tenantSignedApi = tenantSigner?.signed_at != null || _ASSINAFY_SIGNED.includes((tenantSigner?.status || '').toLowerCase());
+
+    if (ownerSignedApi && tenantSignedApi) {
+      await contractDoc.ref.update({ assinafyStatus: 'completed', ownerSigned: true });
+      return { signed: true, status: 'completed' };
+    }
+    if (ownerSignedApi && !contract.ownerSigned) await contractDoc.ref.update({ ownerSigned: true });
+    return {
+      signed:        false,
+      ownerSigned:   ownerSignedApi || contract.ownerSigned || false,
+      tenantSigned:  tenantSignedApi,
+      tenantSignUrl: !tenantSignedApi ? (tenantSigner?.sign_url || null) : null,
+    };
+  }
+  return { signed: false, status: docStatus || 'pending' };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -1959,6 +2037,11 @@ export default async function handler(req, res) {
     // Webhook Asaas sem step (evento direto da subconta)
     if (!step && req.body?.event && req.body?.payment) {
       return res.status(200).json(await handleAsaasPaymentWebhook(db, req.body));
+    }
+
+    // Rota legada: /api/locarpay-sync-status → verifica assinaturas Assinafy
+    if (!step && (req.body?.tenantEmail || req.body?.contractId)) {
+      return res.status(200).json(await handleSyncSignatures(db, req.body));
     }
 
     return res.status(400).json({ error: 'step inválido' });
