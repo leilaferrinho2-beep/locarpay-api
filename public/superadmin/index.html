@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -31,7 +31,7 @@
     if (!user) { showLogin(); return; }
     if (user.email !== SUPER_ADMIN_EMAIL) {
       await signOut(auth);
-      showLogin('Acesso negado. Apenas o super administrador pode acessar esta Ã¡rea.');
+      showLogin('Acesso negado. Apenas o super administrador pode acessar esta área.');
       return;
     }
     showDashboard();
@@ -154,7 +154,7 @@
   function renderTable() {
     const tbody = $('owners-tbody');
     if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#555;padding:32px">Nenhuma imobiliÃ¡ria encontrada</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#555;padding:32px">Nenhuma imobiliária encontrada</td></tr>`;
       return;
     }
 
@@ -163,7 +163,7 @@
       const statusLabel = o.status === 'active' ? 'Ativo' : o.status === 'suspended' ? 'Suspenso' : 'Trial';
       const asaas = o.asaasConfigured ? '<span style="color:#4CAF50">âœ“ OK</span>' : '<span style="color:#f59e0b">âš  Pendente</span>';
       const trialEnd = o.trialEndsAt ? new Date(o.trialEndsAt).toLocaleDateString('pt-BR') : 'â€”';
-      const price = o.monthlyPrice ? `R$ ${o.monthlyPrice}/mÃªs` : 'â€”';
+      const price = o.monthlyPrice ? `R$ ${o.monthlyPrice}/mês` : 'â€”';
       const created = o.createdAt ? new Date(o.createdAt).toLocaleDateString('pt-BR') : 'â€”';
 
       return `
@@ -205,11 +205,11 @@
         <div class="detail-row"><span>CPF/CNPJ</span><strong>${esc(o.cpfCnpj||'â€”')}</strong></div>
         <div class="detail-row"><span>Status</span><strong>${esc(o.status||'trial')}</strong></div>
         <div class="detail-row"><span>Plano</span><strong>${esc(o.plan||'trial')}</strong></div>
-        <div class="detail-row"><span>Valor</span><strong>${o.monthlyPrice ? 'R$ '+o.monthlyPrice+'/mÃªs' : 'â€”'}</strong></div>
+        <div class="detail-row"><span>Valor</span><strong>${o.monthlyPrice ? 'R$ '+o.monthlyPrice+'/mês' : 'â€”'}</strong></div>
         <div class="detail-row"><span>Trial expira</span><strong>${o.trialEndsAt ? new Date(o.trialEndsAt).toLocaleDateString('pt-BR') : 'â€”'}</strong></div>
-        <div class="detail-row"><span>Asaas</span><strong>${o.asaasConfigured ? 'âœ… Configurado' : 'âš ï¸ Pendente'}</strong></div>
-        <div class="detail-row"><span>Assinafy</span><strong>${o.assinafyConfigured ? 'âœ… Configurado' : 'â€”'}</strong></div>
-        <div class="detail-row"><span>Inquilinos</span><strong>${o.maxTenants || 'â€”'} mÃ¡x</strong></div>
+        <div class="detail-row"><span>Asaas</span><strong>${o.asaasConfigured ? '✅ Configurado' : 'âš ï¸ Pendente'}</strong></div>
+        <div class="detail-row"><span>Assinafy</span><strong>${o.assinafyConfigured ? '✅ Configurado' : 'â€”'}</strong></div>
+        <div class="detail-row"><span>Inquilinos</span><strong>${o.maxTenants || 'â€”'} máx</strong></div>
         <div class="detail-row"><span>ID</span><strong style="font-size:11px;color:#555">${esc(o.ownerId)}</strong></div>
       </div>
       <div style="display:flex;gap:8px;margin-top:20px;flex-wrap:wrap">
@@ -224,7 +224,7 @@
 
   window.closeModal = () => { $('modal').style.display = 'none'; };
 
-  // â”€â”€ AÃ‡Ã•ES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€ AÇÕES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function adminAction(step, ownerId, confirmMsg) {
     if (confirmMsg && !confirm(confirmMsg)) return;
     try {
@@ -235,7 +235,7 @@
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
-      showToast(d.message || 'OperaÃ§Ã£o realizada com sucesso!', 'success');
+      showToast(d.message || 'Operação realizada com sucesso!', 'success');
       await loadOwners();
     } catch(e) {
       showToast('Erro: ' + e.message, 'error');
@@ -243,12 +243,12 @@
   }
 
   window.activateOwner = (id) => adminAction('activate-owner', id);
-  window.suspendOwner  = (id) => adminAction('suspend-owner',  id, 'Suspender esta imobiliÃ¡ria?');
+  window.suspendOwner  = (id) => adminAction('suspend-owner',  id, 'Suspender esta imobiliária?');
   window.setupAsaas    = (id) => adminAction('setup-asaas',    id);
-  window.deleteOwner   = (id, name) => adminAction('delete-owner', id, `Excluir permanentemente "${name}"? Esta aÃ§Ã£o nÃ£o pode ser desfeita.`);
+  window.deleteOwner   = (id, name) => adminAction('delete-owner', id, `Excluir permanentemente "${name}"? Esta ação não pode ser desfeita.`);
 
   window.addOwner = async () => {
-    const name  = prompt('Nome da imobiliÃ¡ria:');
+    const name  = prompt('Nome da imobiliária:');
     if (!name) return;
     const email = prompt('E-mail:');
     if (!email) return;
@@ -262,7 +262,7 @@
       });
       const d = await r.json();
       if (!r.ok && r.status !== 409) throw new Error(d.error);
-      showToast('ImobiliÃ¡ria cadastrada com sucesso!', 'success');
+      showToast('Imobiliária cadastrada com sucesso!', 'success');
       await loadOwners();
     } catch(e) {
       showToast('Erro: ' + e.message, 'error');
@@ -451,7 +451,7 @@
         <div class="stat-value red" id="stat-suspended">â€”</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Receita/mÃªs</div>
+        <div class="stat-label">Receita/mês</div>
         <div class="stat-value green" id="stat-revenue">â€”</div>
       </div>
     </div>
@@ -464,8 +464,8 @@
       <button class="filter-btn"        data-filter="active"    onclick="setFilter('active')">Ativos</button>
       <button class="filter-btn"        data-filter="suspended" onclick="setFilter('suspended')">Suspensos</button>
       <button class="filter-btn"        data-filter="no-asaas"  onclick="setFilter('no-asaas')">Sem Asaas</button>
-      <button class="btn-refresh" onclick="refreshData()" title="Atualizar">â†»</button>
-      <button class="btn-add" onclick="addOwner()">+ Nova imobiliÃ¡ria</button>
+      <button class="btn-refresh" onclick="refreshData()" title="Atualizar">↻</button>
+      <button class="btn-add" onclick="addOwner()">+ Nova imobiliária</button>
     </div>
 
     <!-- Table -->
@@ -473,14 +473,14 @@
       <table>
         <thead>
           <tr>
-            <th>ImobiliÃ¡ria</th>
+            <th>Imobiliária</th>
             <th>Status</th>
             <th>Plano</th>
             <th>Valor</th>
             <th>Asaas</th>
-            <th>Trial atÃ©</th>
+            <th>Trial até</th>
             <th>Cadastro</th>
-            <th>AÃ§Ãµes</th>
+            <th>Ações</th>
           </tr>
         </thead>
         <tbody id="owners-tbody">
@@ -496,8 +496,8 @@
 <div id="modal" onclick="if(event.target===this)closeModal()">
   <div class="modal-box">
     <div class="modal-title">
-      Detalhes da imobiliÃ¡ria
-      <button class="modal-close" onclick="closeModal()">âœ•</button>
+      Detalhes da imobiliária
+      <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div id="modal-body"></div>
   </div>

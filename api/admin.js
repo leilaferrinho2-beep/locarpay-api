@@ -15,7 +15,7 @@ const SUPER_ADMIN_EMAIL = 'denisfelicio20@gmail.com';
 
 function initFirebase() {
   if (getApps().length) return;
-  initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
+  initializeApp({ credential: cert(JSON.parse(process.env.LOCARPAY_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT)) });
 }
 
 async function verifyAdmin(req) {
