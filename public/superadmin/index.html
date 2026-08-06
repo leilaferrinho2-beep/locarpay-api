@@ -9,6 +9,8 @@
 <script>
   const SUPER_ADMIN_EMAIL = 'denisfelicio20@gmail.com';
 
+  document.addEventListener('DOMContentLoaded', function() {
+
   firebase.initializeApp({
     apiKey: "AIzaSyDTd-f-QTKNhixlYCDVHI5pGe9H8hxwON4",
     authDomain: "locarpayapp.firebaseapp.com",
@@ -245,6 +247,8 @@
     el._t = setTimeout(() => el.className = 'toast', 3500);
   }
   function setLoading(v) { $('loading').style.display = v ? 'flex' : 'none'; }
+
+  }); // DOMContentLoaded
 </script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
