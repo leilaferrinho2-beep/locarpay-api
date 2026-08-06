@@ -34,9 +34,20 @@
     loadOwners();
   });
 
+  // Trata redirect de volta apos Google login
+  auth.getRedirectResult().then(result => {
+    if (result && result.user) {
+      if (result.user.email !== SUPER_ADMIN_EMAIL) {
+        auth.signOut();
+        $('google-err').textContent = 'Acesso negado: email nao autorizado.';
+      }
+    }
+  }).catch(e => {
+    if (e.code !== 'auth/no-auth-event') $('google-err').textContent = e.message;
+  });
+
   window.doLogin = async () => {
-    $('google-err').textContent = '';
-    try { await auth.signInWithPopup(provider); }
+    try { await auth.signInWithRedirect(provider); }
     catch(e) { $('google-err').textContent = e.message; }
   };
   window.doLogout = async () => { await auth.signOut(); showLogin(); };
