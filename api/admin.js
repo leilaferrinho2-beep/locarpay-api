@@ -84,6 +84,143 @@ async function setupAsaas(db, ownerId) {
   return { message: 'Subconta Asaas criada com sucesso.' };
 }
 
+async function getMasterAsaasKey(db) {
+  try {
+    const masterSnap = await db.collection('owners').doc('transgu-owner-001').get();
+    if (masterSnap.exists && masterSnap.data().asaasApiKey) return masterSnap.data().asaasApiKey;
+  } catch (_) {}
+  const configSnap = await db.collection('config').doc('asaas').get();
+  const key = configSnap.data()?.apiKey;
+  if (!key) throw new Error('Chave Asaas master nao configurada');
+  return key;
+}
+
+async function asaasPost(path, body, apiKey) {
+  const r = await fetch(`https://api.asaas.com/v3${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
+    body: JSON.stringify(body)
+  });
+  const json = await r.json();
+  if (!r.ok) throw new Error(`Asaas ${path}: ${JSON.stringify(json?.errors || json)}`);
+  return json;
+}
+
+async function asaasGet(path, apiKey) {
+  const r = await fetch(`https://api.asaas.com/v3${path}`, {
+    headers: { 'access_token': apiKey }
+  });
+  const json = await r.json();
+  if (!r.ok) throw new Error(`Asaas ${path}: ${JSON.stringify(json?.errors || json)}`);
+  return json;
+}
+
+async function createSubscription(db, ownerId, plan) {
+  const ref  = db.collection('owners').doc(ownerId);
+  const snap = await ref.get();
+  if (!snap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
+
+  const data = snap.data();
+  const PLANS = {
+    trial: { monthlyPrice: 0,  label: 'Trial'  },
+    basic: { monthlyPrice: 49, label: 'Basic'  },
+    pro:   { monthlyPrice: 99, label: 'Pro'    },
+  };
+  const selectedPlan = plan || data.plan || 'basic';
+  const planInfo = PLANS[selectedPlan] || PLANS.basic;
+  if (planInfo.monthlyPrice === 0) throw Object.assign(new Error('Plano trial nao gera assinatura paga'), { status: 400 });
+
+  const masterKey = await getMasterAsaasKey(db);
+
+  // Busca ou cria customer na conta master
+  const searchR = await fetch(
+    `https://api.asaas.com/v3/customers?email=${encodeURIComponent(data.email)}&limit=1`,
+    { headers: { 'access_token': masterKey } }
+  );
+  const searchJson = await searchR.json();
+  let customerId;
+  if (searchJson.data?.length > 0) {
+    customerId = searchJson.data[0].id;
+  } else {
+    const cpfCnpj = (data.cpfCnpj || '').replace(/\D/g, '');
+    const phone   = (data.phone   || '').replace(/\D/g, '');
+    const custBody = { name: data.name, email: data.email };
+    if (cpfCnpj) custBody.cpfCnpj    = cpfCnpj;
+    if (phone)   custBody.mobilePhone = phone;
+    const cust = await asaasPost('/customers', custBody, masterKey);
+    customerId = cust.id;
+  }
+
+  // Cancela assinatura anterior se existir
+  if (data.subscriptionId) {
+    try { await fetch(`https://api.asaas.com/v3/subscriptions/${data.subscriptionId}`, {
+      method: 'DELETE', headers: { 'access_token': masterKey }
+    }); } catch (_) {}
+  }
+
+  // Cria assinatura mensal PIX
+  const nextDueDate = new Date();
+  nextDueDate.setDate(nextDueDate.getDate() + 1);
+  const sub = await asaasPost('/subscriptions', {
+    customer:     customerId,
+    billingType:  'PIX',
+    value:        planInfo.monthlyPrice,
+    nextDueDate:  nextDueDate.toISOString().slice(0, 10),
+    cycle:        'MONTHLY',
+    description:  `iLocarPay - Plano ${planInfo.label}`,
+  }, masterKey);
+
+  // Atualiza Firestore
+  const { Timestamp } = await import('firebase-admin/firestore');
+  const planActiveUntil = Timestamp.fromMillis(Date.now() + 32 * 24 * 60 * 60 * 1000);
+  await ref.update({
+    status:           'active',
+    plan:             selectedPlan,
+    monthlyPrice:     planInfo.monthlyPrice,
+    subscriptionId:   sub.id,
+    asaasCustomerId:  customerId,
+    billingStatus:    'ACTIVE',
+    planActiveUntil,
+  });
+
+  return {
+    message:        `Assinatura ${planInfo.label} criada com sucesso.`,
+    subscriptionId: sub.id,
+    customerId,
+    nextDueDate:    nextDueDate.toISOString().slice(0, 10),
+    value:          planInfo.monthlyPrice,
+  };
+}
+
+async function getSubscriptionStatus(db, ownerId) {
+  const ref  = db.collection('owners').doc(ownerId);
+  const snap = await ref.get();
+  if (!snap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
+  const data = snap.data();
+  if (!data.subscriptionId) return { hasSubscription: false };
+  const masterKey = await getMasterAsaasKey(db);
+  try {
+    const sub = await asaasGet(`/subscriptions/${data.subscriptionId}`, masterKey);
+    return { hasSubscription: true, subscription: sub };
+  } catch (e) {
+    return { hasSubscription: false, error: e.message };
+  }
+}
+
+async function cancelSubscription(db, ownerId) {
+  const ref  = db.collection('owners').doc(ownerId);
+  const snap = await ref.get();
+  if (!snap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
+  const data = snap.data();
+  if (!data.subscriptionId) throw Object.assign(new Error('Nenhuma assinatura ativa'), { status: 400 });
+  const masterKey = await getMasterAsaasKey(db);
+  await fetch(`https://api.asaas.com/v3/subscriptions/${data.subscriptionId}`, {
+    method: 'DELETE', headers: { 'access_token': masterKey }
+  });
+  await ref.update({ subscriptionId: null, billingStatus: 'CANCELLED', status: 'suspended' });
+  return { message: 'Assinatura cancelada e imobiliaria suspensa.' };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -101,11 +238,14 @@ export default async function handler(req, res) {
     const db = getFirestore();
     const { step, ownerId } = req.body || {};
 
-    if (step === 'list-owners')    return res.status(200).json(await listOwners(db));
-    if (step === 'activate-owner') return res.status(200).json(await activateOwner(db, ownerId));
-    if (step === 'suspend-owner')  return res.status(200).json(await suspendOwner(db, ownerId));
-    if (step === 'delete-owner')   return res.status(200).json(await deleteOwner(db, ownerId));
-    if (step === 'setup-asaas')    return res.status(200).json(await setupAsaas(db, ownerId));
+    if (step === 'list-owners')           return res.status(200).json(await listOwners(db));
+    if (step === 'activate-owner')        return res.status(200).json(await activateOwner(db, ownerId));
+    if (step === 'suspend-owner')         return res.status(200).json(await suspendOwner(db, ownerId));
+    if (step === 'delete-owner')          return res.status(200).json(await deleteOwner(db, ownerId));
+    if (step === 'setup-asaas')           return res.status(200).json(await setupAsaas(db, ownerId));
+    if (step === 'create-subscription')   return res.status(200).json(await createSubscription(db, ownerId, req.body.plan));
+    if (step === 'subscription-status')   return res.status(200).json(await getSubscriptionStatus(db, ownerId));
+    if (step === 'cancel-subscription')   return res.status(200).json(await cancelSubscription(db, ownerId));
 
     return res.status(400).json({ error: 'step inválido' });
   } catch(e) {

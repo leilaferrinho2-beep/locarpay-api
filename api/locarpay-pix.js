@@ -195,8 +195,17 @@ export default async function handler(req, res) {
     const interestRate      = configData.interestRate      ?? 1;
     const cardFeePercentage = configData.cardFeePercentage ?? 2.99;
 
-    // Cria cobrança PIX no Asaas com configuração de juros/multa
-    const asaasCharge = await asaasPost('/payments', {
+    // Lê walletId master e percentual de comissão para split automático
+    let splitEntry = null;
+    try {
+      const configAsaas = await db.collection('config').doc('asaas').get();
+      const masterWalletId = configAsaas.data()?.walletId || process.env.ASAAS_MASTER_WALLET_ID;
+      const commissionPct  = configData.commissionPercentage ?? configAsaas.data()?.commissionPercentage ?? 1;
+      if (masterWalletId) splitEntry = { walletId: masterWalletId, percentualValor: commissionPct };
+    } catch (_) {}
+
+    // Cria cobrança PIX no Asaas com configuração de juros/multa + split plataforma
+    const paymentBody = {
       customer:    customerId,
       billingType: 'PIX',
       value,
@@ -204,7 +213,10 @@ export default async function handler(req, res) {
       description: `Aluguel ${dueDate.slice(0, 7)}`,
       fine:     { value: finePercentage },
       interest: { value: interestRate }
-    }, apiKey);
+    };
+    if (splitEntry) paymentBody.split = [splitEntry];
+
+    const asaasCharge = await asaasPost('/payments', paymentBody, apiKey);
 
     // Busca QR Code
     const pix = await asaasGet(`/payments/${asaasCharge.id}/pixQrCode`, apiKey);
