@@ -172,20 +172,25 @@
       ['Plano', o.plan||'trial'],
       ['Valor/mês', o.monthlyPrice ? 'R$ '+o.monthlyPrice : '—'],
       ['Trial expira', fmtDate(o.trialEndsAt)],
-      ['Plano ativo até', fmtDate(o.planActiveUntil)],
-      ['Asaas', o.asaasConfigured ? 'Configurado' : ('Pendente' + (o.asaasWarning ? ' — ' + o.asaasWarning : ''))],
+      ['Plano ativo ate', fmtDate(o.planActiveUntil)],
+      ['Asaas', o.asaasConfigured ? 'Configurado' : ('Pendente' + (o.asaasWarning ? ' - ' + o.asaasWarning : ''))],
       ['Assinafy', o.assinafyConfigured ? 'Configurado' : '—'],
-      ['Máx. inquilinos', o.maxTenants||'—'],
+      ['Assinatura', o.subscriptionId ? ('Ativa - ID: ' + o.subscriptionId) : 'Sem assinatura'],
+      ['Cobranca', o.billingStatus || '—'],
+      ['Max. inquilinos', o.maxTenants||'—'],
       ['Cadastro', fmtDate(o.createdAt)], ['ID', o.ownerId],
     ];
     $('modal-rows').innerHTML = rows.map(([l,v]) =>
       '<div class="mrow"><span class="mlabel">'+l+'</span><strong class="mval">'+esc(v)+'</strong></div>'
     ).join('');
+    const id = esc(o.ownerId), nm = esc(o.name);
     $('modal-actions').innerHTML =
-      (o.status !== 'active'    ? '<button class="act act-ok"   onclick="activateOwner(\''+esc(o.ownerId)+'\');closeModal()">Ativar plano</button>' : '')
-    + (o.status !== 'suspended' ? '<button class="act act-warn" onclick="suspendOwner(\''+esc(o.ownerId)+'\');closeModal()">Suspender</button>' : '')
-    + (!o.asaasConfigured       ? '<button class="act act-blue" onclick="setupAsaas(\''+esc(o.ownerId)+'\');closeModal()">Criar subconta Asaas</button>' : '')
-    + '<button class="act act-del" onclick="deleteOwner(\''+esc(o.ownerId)+'\',\''+esc(o.name)+'\');closeModal()">Excluir conta</button>';
+      (o.status !== 'active'    ? '<button class="act act-ok"   onclick="activateOwner(\''+id+'\');closeModal()">Ativar plano</button>' : '')
+    + (o.status !== 'suspended' ? '<button class="act act-warn" onclick="suspendOwner(\''+id+'\');closeModal()">Suspender</button>' : '')
+    + (!o.asaasConfigured       ? '<button class="act act-blue" onclick="setupAsaas(\''+id+'\');closeModal()">Criar subconta Asaas</button>' : '')
+    + '<button class="act act-blue" onclick="createSubscription(\''+id+'\');closeModal()">&#128179;&nbsp;Cobrar assinatura</button>'
+    + (o.subscriptionId ? '<button class="act act-warn" onclick="cancelSubscription(\''+id+'\');closeModal()">Cancelar assinatura</button>' : '')
+    + '<button class="act act-del"  onclick="deleteOwner(\''+id+'\',\''+nm+'\');closeModal()">Excluir conta</button>';
     $('modal-name').textContent = o.name || 'Imobiliária';
     $('modal').classList.add('open');
   };
@@ -207,10 +212,30 @@
   }
 
   window.activateOwner = id  => adminAction('activate-owner', id);
-  window.suspendOwner  = id  => adminAction('suspend-owner',  id, 'Suspender esta imobiliária?');
+  window.suspendOwner  = id  => adminAction('suspend-owner',  id, 'Suspender esta imobiliaria?');
   window.setupAsaas    = id  => adminAction('setup-asaas',    id);
   window.deleteOwner   = (id, name) => adminAction('delete-owner', id,
-    'Excluir permanentemente "' + name + '"?\nEsta ação não pode ser desfeita.');
+    'Excluir permanentemente "' + name + '"?\nEsta acao nao pode ser desfeita.');
+
+  window.createSubscription = async (id) => {
+    const plan = prompt('Plano (basic = R$49/mes | pro = R$99/mes):', 'basic');
+    if (!plan) return;
+    if (!['basic','pro'].includes(plan)) { toast('Plano invalido. Use basic ou pro.', 'error'); return; }
+    try {
+      const r = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': await auth.currentUser.getIdToken() },
+        body: JSON.stringify({ step: 'create-subscription', ownerId: id, plan })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      toast(d.message + ' Vencimento: ' + (d.nextDueDate || ''), 'ok');
+      loadOwners();
+    } catch(e) { toast('Erro: ' + e.message, 'error'); }
+  };
+
+  window.cancelSubscription = (id) => adminAction('cancel-subscription', id,
+    'Cancelar assinatura e suspender imobiliaria?');
 
   window.addOwner = async () => {
     const name  = prompt('Nome da imobiliária:'); if (!name) return;
