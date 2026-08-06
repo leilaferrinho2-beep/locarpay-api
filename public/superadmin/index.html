@@ -10,7 +10,6 @@
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
   const SUPER_ADMIN_EMAIL = 'denisfelicio20@gmail.com';
-  const _PIN_B64 = 'QDFBMmEzYTRhNQ==';
 
   const app = initializeApp({
     apiKey: "AIzaSyDTd-f-QTKNhixlYCDVHI5pGe9H8hxwON4",
@@ -23,18 +22,6 @@
   function $(id) { return document.getElementById(id); }
   let owners = [], filtered = [], currentFilter = 'all', searchTerm = '';
 
-  window.checkPin = () => {
-    const pin = $('pin-input').value;
-    if (!pin) return;
-    if (btoa(unescape(encodeURIComponent(pin))) !== _PIN_B64) {
-      $('pin-err').textContent = 'Senha incorreta.';
-      $('pin-input').value = '';
-      $('pin-input').focus();
-      return;
-    }
-    $('pin-gate').style.display = 'none';
-    $('google-gate').style.display = 'block';
-  };
 
   onAuthStateChanged(auth, async user => {
     if (!user) { showLogin(); return; }
@@ -508,19 +495,7 @@ tbody td { padding: 13px 16px; vertical-align: middle; }
     </div>
     <div class="login-chip">Super Admin</div>
     <p class="login-sub">Acesso restrito ao administrador do sistema</p>
-    <div id="pin-gate">
-      <div style="position:relative;">
-        <input id="pin-input" type="password" class="login-input"
-          placeholder="Senha de acesso" autocomplete="new-password"
-          onkeydown="if(event.key==='Enter')checkPin()"
-          style="padding-right:48px;">
-        <button type="button" onclick="(function(){var i=$('pin-input');i.type=i.type==='password'?'text':'password';})()"
-          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#888;cursor:pointer;font-size:18px;">&#128065;</button>
-      </div>
-      <button class="btn-continue" onclick="checkPin()">Continuar</button>
-      <div id="pin-err" class="login-err"></div>
-    </div>
-    <div id="google-gate" style="display:none">
+    <div id="google-gate">
       <button class="btn-google" onclick="doLogin()">
         <svg width="18" height="18" viewBox="0 0 24 24">
           <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
