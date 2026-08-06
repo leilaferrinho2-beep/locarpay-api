@@ -4,29 +4,27 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>iLocarPay &mdash; Super Admin</title>
-<script type="module">
-  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut }
-    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script>
   const SUPER_ADMIN_EMAIL = 'denisfelicio20@gmail.com';
 
-  const app = initializeApp({
+  firebase.initializeApp({
     apiKey: "AIzaSyDTd-f-QTKNhixlYCDVHI5pGe9H8hxwON4",
     authDomain: "locarpayapp.firebaseapp.com",
     projectId: "locarpayapp"
   });
-  const auth = getAuth(app);
-  const provider = new GoogleAuthProvider();
+  const auth = firebase.auth();
+  const provider = new firebase.auth.GoogleAuthProvider();
 
   function $(id) { return document.getElementById(id); }
   let owners = [], filtered = [], currentFilter = 'all', searchTerm = '';
 
 
-  onAuthStateChanged(auth, async user => {
+  auth.onAuthStateChanged(async user => {
     if (!user) { showLogin(); return; }
     if (user.email !== SUPER_ADMIN_EMAIL) {
-      await signOut(auth);
+      await auth.signOut();
       showLogin('Acesso negado.');
       return;
     }
@@ -36,10 +34,10 @@
 
   window.doLogin = async () => {
     $('google-err').textContent = '';
-    try { await signInWithPopup(auth, provider); }
+    try { await auth.signInWithPopup(provider); }
     catch(e) { $('google-err').textContent = e.message; }
   };
-  window.doLogout = async () => { await signOut(auth); showLogin(); };
+  window.doLogout = async () => { await auth.signOut(); showLogin(); };
 
   function showLogin(err = '') {
     $('login-screen').style.display = 'flex';
