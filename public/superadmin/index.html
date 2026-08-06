@@ -44,7 +44,7 @@
   function showLogin(err = '') {
     $('login-screen').style.display = 'flex';
     $('app').style.display = 'none';
-    if (err) { $('google-err').textContent = err; $('pin-gate').style.display='none'; $('google-gate').style.display='block'; }
+    if (err) $('google-err').textContent = err;
   }
   function showDashboard() {
     $('login-screen').style.display = 'none';
