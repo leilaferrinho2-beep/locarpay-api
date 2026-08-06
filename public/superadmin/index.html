@@ -513,9 +513,14 @@ tbody td { padding: 13px 16px; vertical-align: middle; }
     <div class="login-chip">Super Admin</div>
     <p class="login-sub">Acesso restrito ao administrador do sistema</p>
     <div id="pin-gate">
-      <input id="pin-input" type="password" class="login-input"
-        placeholder="Senha de acesso" autocomplete="off"
-        onkeydown="if(event.key==='Enter')checkPin()">
+      <div style="position:relative;">
+        <input id="pin-input" type="password" class="login-input"
+          placeholder="Senha de acesso" autocomplete="new-password"
+          onkeydown="if(event.key==='Enter')checkPin()"
+          style="padding-right:48px;">
+        <button type="button" onclick="(function(){var i=$('pin-input');i.type=i.type==='password'?'text':'password';})()"
+          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#888;cursor:pointer;font-size:18px;">&#128065;</button>
+      </div>
       <button class="btn-continue" onclick="checkPin()">Continuar</button>
       <div id="pin-err" class="login-err"></div>
     </div>
