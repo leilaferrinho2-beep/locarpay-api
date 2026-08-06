@@ -10,7 +10,7 @@
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
   const SUPER_ADMIN_EMAIL = 'denisfelicio20@gmail.com';
-  const _PIN_HASH = '100517cd6867304acb076c61ff81f7212ce1d497dafe6a055012e8d9d202c19a';
+  const _PIN_B64 = 'QDFBMmEzYTRhNQ==';
 
   const app = initializeApp({
     apiKey: "AIzaSyDTd-f-QTKNhixlYCDVHI5pGe9H8hxwON4",
@@ -23,14 +23,10 @@
   function $(id) { return document.getElementById(id); }
   let owners = [], filtered = [], currentFilter = 'all', searchTerm = '';
 
-  async function sha256hex(str) {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-  }
-  window.checkPin = async () => {
-    const pin = $('pin-input').value.trim();
+  window.checkPin = () => {
+    const pin = $('pin-input').value;
     if (!pin) return;
-    if (await sha256hex(pin) !== _PIN_HASH) {
+    if (btoa(unescape(encodeURIComponent(pin))) !== _PIN_B64) {
       $('pin-err').textContent = 'Senha incorreta.';
       $('pin-input').value = '';
       $('pin-input').focus();
