@@ -71,7 +71,10 @@ export default async function handler(req, res) {
 
     const temLicenca = licenseDoc.exists && licenseDoc.data().active === true;
     const temOwner   = !ownerSnap.empty;
-    const temCadastro = !tenantSnap.empty; // qualquer role na coleção users
+
+    // Inquilino: deve existir e nao estar suspenso/excluido
+    const tenantDoc  = tenantSnap.empty ? null : tenantSnap.docs[0].data();
+    const temCadastro = tenantDoc !== null && tenantDoc.suspended !== true;
 
     if (!temLicenca && !temOwner && !temCadastro) {
       return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com o proprietário.' });
