@@ -162,6 +162,19 @@ async function handleGoogleLogin(req, res, idToken) {
       : (tenantData?.ownerId || null);
 
     await auth.setCustomUserClaims(uid, { role, ownerId: ownerId || '' });
+
+    // Garante que users/{uid} existe com o nome correto do cadastro
+    if (tenantData) {
+      const uidRef = db.collection('users').doc(uid);
+      const uidSnap = await uidRef.get();
+      const savedName = tenantData.name || '';
+      if (!uidSnap.exists) {
+        await uidRef.set({ ...tenantData, id: uid, authUid: uid }, { merge: true });
+      } else if (savedName && (!uidSnap.data().name || uidSnap.data().name === email.split('@')[0])) {
+        await uidRef.update({ name: savedName });
+      }
+    }
+
     return res.status(200).json({ ok: true, role, ownerId });
   } catch (e) {
     if (e.code === 'auth/id-token-expired' || e.code === 'auth/argument-error') {
