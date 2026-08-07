@@ -165,14 +165,14 @@
     $('modal-rows').innerHTML = rows.map(([l,v]) =>
       '<div class="mrow"><span class="mlabel">'+l+'</span><strong class="mval">'+esc(v)+'</strong></div>'
     ).join('');
-    const id = esc(o.ownerId), nm = esc(o.name);
+    const eid = esc(o.ownerId), nm = esc(o.name);
     $('modal-actions').innerHTML =
-      (o.status !== 'active'    ? '<button class="act act-ok"   onclick="activateOwner(\''+id+'\');closeModal()">Ativar plano</button>' : '')
-    + (o.status !== 'suspended' ? '<button class="act act-warn" onclick="suspendOwner(\''+id+'\');closeModal()">Suspender</button>' : '')
-    + (!o.asaasConfigured       ? '<button class="act act-blue" onclick="setupAsaas(\''+id+'\');closeModal()">Criar subconta Asaas</button>' : '')
-    + '<button class="act act-blue" onclick="createSubscription(\''+id+'\');closeModal()">&#128179;&nbsp;Cobrar assinatura</button>'
-    + (o.subscriptionId ? '<button class="act act-warn" onclick="cancelSubscription(\''+id+'\');closeModal()">Cancelar assinatura</button>' : '')
-    + '<button class="act act-del"  onclick="deleteOwner(\''+id+'\',\''+nm+'\');closeModal()">Excluir conta</button>';
+      (o.status !== 'active'    ? '<button class="act act-ok"   onclick="activateOwner(\''+eid+'\');closeModal()">Ativar plano</button>' : '')
+    + (o.status !== 'suspended' ? '<button class="act act-warn" onclick="suspendOwner(\''+eid+'\');closeModal()">Suspender</button>' : '')
+    + (!o.asaasConfigured       ? '<button class="act act-blue" onclick="setupAsaas(\''+eid+'\');closeModal()">Criar subconta Asaas</button>' : '')
+    + '<button class="act act-blue" onclick="createSubscription(\''+eid+'\');closeModal()">&#128179;&nbsp;Cobrar assinatura</button>'
+    + (o.subscriptionId ? '<button class="act act-warn" onclick="cancelSubscription(\''+eid+'\');closeModal()">Cancelar assinatura</button>' : '')
+    + '<button class="act act-del"  onclick="deleteOwner(\''+eid+'\',\''+nm+'\');closeModal()">Excluir conta</button>';
     $('modal-name').textContent = o.name || 'Imobiliária';
     $('modal').classList.add('open');
   };
