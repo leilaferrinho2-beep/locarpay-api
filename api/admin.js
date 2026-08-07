@@ -4,6 +4,7 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth }                        from 'firebase-admin/auth';
 import { getFirestore, Timestamp }        from 'firebase-admin/firestore';
+import nodemailer from 'nodemailer';
 import {
   setCorsHeaders, getClientIp,
   checkRateLimit, recordFailedAttempt, resetRateLimit,
@@ -41,6 +42,51 @@ async function verifyAdmin(req) {
     throw Object.assign(new Error('Token inválido'), { status: 401 });
   }
 }
+
+// ─── OTP 2FA ─────────────────────────────────────────────────────────────────
+
+function generateOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function sendOtpEmail(otp) {
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.titan.email',
+    port: 465,
+    secure: true,
+    auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD },
+  });
+  await transporter.sendMail({
+    from: '"iLocarPay" <denis@dlftech.com.br>',
+    to:   SUPER_ADMIN_EMAIL,
+    subject: 'Código de acesso Super Admin',
+    html: `<p>Seu código de acesso é: <strong style="font-size:24px;letter-spacing:4px;">${otp}</strong></p>
+           <p>Válido por 5 minutos. Não compartilhe com ninguém.</p>`,
+  });
+}
+
+async function requestOtp(db, ip) {
+  const otp     = generateOtp();
+  const expires = Date.now() + 5 * 60 * 1000;
+  await db.collection('_admin_otp').doc('current').set({ otp, expires, ip });
+  await sendOtpEmail(otp);
+  return { message: 'Código enviado para o e-mail do administrador.' };
+}
+
+async function verifyOtp(db, ip, code) {
+  const snap = await db.collection('_admin_otp').doc('current').get();
+  if (!snap.exists) throw Object.assign(new Error('Nenhum código ativo'), { status: 401 });
+  const { otp, expires } = snap.data();
+  if (Date.now() > expires) {
+    await db.collection('_admin_otp').doc('current').delete();
+    throw Object.assign(new Error('Código expirado'), { status: 401 });
+  }
+  if (code !== otp) throw Object.assign(new Error('Código incorreto'), { status: 401 });
+  await db.collection('_admin_otp').doc('current').delete();
+  return { ok: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function listOwners(db) {
   const snap = await db.collection('owners').orderBy('createdAt', 'desc').get();
@@ -251,13 +297,43 @@ export default async function handler(req, res) {
   const ip   = getClientIp(req);
   const body = req.body || {};
 
-  // Config pública (sem auth) — apenas dados não-secretos para o cliente
-  if (body.step === 'public-config') {
-    return res.status(200).json({
-      apiKey:     process.env.LOCARPAY_FIREBASE_API_KEY || '',
-      authDomain: 'transgu-web-6d50f.firebaseapp.com',
-      projectId:  'transgu-web-6d50f',
-    });
+  // Etapa 1: verifica senha e envia OTP (sem auth completa ainda)
+  if (body.step === 'request-otp') {
+    const rl = await (async () => {
+      try { initFirebase(); return await checkRateLimit(getFirestore(), ip); } catch(_) { return { blocked: false }; }
+    })();
+    if (rl.blocked) return res.status(429).json({ error: rl.message });
+    const secret = process.env.ADMIN_SECRET;
+    const token  = req.headers['x-admin-token'] || '';
+    if (!secret || token !== secret) {
+      try { initFirebase(); await recordFailedAttempt(getFirestore(), ip); } catch(_) {}
+      return res.status(401).json({ error: 'Senha incorreta' });
+    }
+    try {
+      initFirebase();
+      const db = getFirestore();
+      await requestOtp(db, ip);
+      return res.status(200).json({ message: 'Código enviado para o e-mail do administrador.' });
+    } catch(e) {
+      return res.status(500).json({ error: 'Erro ao enviar código: ' + e.message });
+    }
+  }
+
+  // Etapa 2: verifica OTP + emite sessão
+  if (body.step === 'verify-otp') {
+    const { code } = body;
+    if (!code || typeof code !== 'string') return res.status(400).json({ error: 'Código obrigatório' });
+    try {
+      initFirebase();
+      const db = getFirestore();
+      await verifyOtp(db, ip, code.trim());
+      await resetRateLimit(db, ip);
+      await logAdminAccess(db, { ip, success: true, detail: '2fa-otp' });
+      return res.status(200).json({ ok: true });
+    } catch(e) {
+      try { await recordFailedAttempt(getFirestore(), ip); } catch(_) {}
+      return res.status(e.status || 500).json({ error: e.message });
+    }
   }
 
   // Validação de input antes de qualquer coisa
