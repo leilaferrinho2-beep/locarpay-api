@@ -141,18 +141,25 @@ async function handleGoogleLogin(req, res, idToken) {
     const ownerDoc   = ownerSnap.empty ? null : ownerSnap.docs[0];
     const isAdmin    = hasLicense || !!ownerDoc;
 
+    const tenantData = tenantSnap.empty ? null : tenantSnap.docs[0].data();
+
     if (!isAdmin) {
-      const tenantData = tenantSnap.empty ? null : tenantSnap.docs[0].data();
       if (!tenantData || tenantData.suspended === true) {
         await auth.revokeRefreshTokens(uid);
         return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com a imobiliária.' });
       }
     }
 
-    const role    = isAdmin ? 'admin' : 'tenant';
+    let role = 'tenant';
+    if (isAdmin) {
+      role = 'admin';
+    } else if (tenantData?.role === 'broker') {
+      role = 'broker';
+    }
+
     const ownerId = ownerDoc
       ? ownerDoc.id
-      : (tenantSnap.empty ? null : (tenantSnap.docs[0].data().ownerId || null));
+      : (tenantData?.ownerId || null);
 
     await auth.setCustomUserClaims(uid, { role, ownerId: ownerId || '' });
     return res.status(200).json({ ok: true, role, ownerId });
