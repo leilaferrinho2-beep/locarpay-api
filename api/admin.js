@@ -138,6 +138,41 @@ async function deleteOwner(db, ownerId) {
   return { message: 'Imobiliária excluída permanentemente.' };
 }
 
+async function deleteTenant(db, tenantId) {
+  const auth = getAuth();
+
+  // 1. Busca o documento do inquilino
+  const userRef = db.collection('users').doc(tenantId);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) throw Object.assign(new Error('Inquilino nao encontrado'), { status: 404 });
+
+  const email = userSnap.data().email;
+
+  // 2. Marca como suspenso — dispara listener em tempo real no app do inquilino
+  await userRef.update({ suspended: true });
+
+  // 3. Revoga tokens Firebase — invalida sessao em QUALQUER versao do app
+  try {
+    const fbUser = await auth.getUserByEmail(email);
+    await auth.revokeRefreshTokens(fbUser.uid);
+  } catch (_) {
+    // Pode nao ter conta Firebase Auth — continua a exclusao
+  }
+
+  // 4. Deleta cobranças, contratos e usuario
+  const [charges, contracts] = await Promise.all([
+    db.collection('charges').where('tenantId', '==', tenantId).get(),
+    db.collection('contracts').where('tenantId', '==', tenantId).get(),
+  ]);
+  const batch = db.batch();
+  charges.docs.forEach(d => batch.delete(d.ref));
+  contracts.docs.forEach(d => batch.delete(d.ref));
+  batch.delete(userRef);
+  await batch.commit();
+
+  return { message: 'Inquilino removido e sessao invalidada.' };
+}
+
 async function setupAsaas(db, ownerId) {
   const r = await fetch('https://ilocarpay.com.br/api/locarpay-owner', {
     method: 'POST',
@@ -368,12 +403,13 @@ export default async function handler(req, res) {
     if (step === 'activate-owner')        return res.status(200).json(await activateOwner(db, ownerId));
     if (step === 'suspend-owner')         return res.status(200).json(await suspendOwner(db, ownerId));
     if (step === 'delete-owner')          return res.status(200).json(await deleteOwner(db, ownerId));
+    if (step === 'delete-tenant')         return res.status(200).json(await deleteTenant(db, body.tenantId));
     if (step === 'setup-asaas')           return res.status(200).json(await setupAsaas(db, ownerId));
     if (step === 'create-subscription')   return res.status(200).json(await createSubscription(db, ownerId, body.plan));
     if (step === 'subscription-status')   return res.status(200).json(await getSubscriptionStatus(db, ownerId));
     if (step === 'cancel-subscription')   return res.status(200).json(await cancelSubscription(db, ownerId));
 
-    return res.status(400).json({ error: 'step inválido' });
+    return res.status(400).json({ error: 'step invalido' });
   } catch(e) {
     console.error('admin error:', e.message);
     return res.status(e.status || 500).json({ error: e.message });

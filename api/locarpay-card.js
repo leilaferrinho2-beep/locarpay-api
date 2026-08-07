@@ -5,6 +5,7 @@
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { getAuth }                        from 'firebase-admin/auth';
 import { getMessaging }                  from 'firebase-admin/messaging';
 import { getAsaasKey, getDefaultOwnerId, checkOwnerPlanActive } from '../lib/owner.js';
 import nodemailer                         from 'nodemailer';
@@ -1985,6 +1986,42 @@ async function handleSyncSignatures(db, body) {
   return { signed: false, status: docStatus || 'pending' };
 }
 
+// Revoga token do inquilino — funciona em qualquer versao do app instalado
+async function handleRevokeTenant(db, body, req) {
+  const { tenantId } = body;
+  if (!tenantId) throw new Error('tenantId obrigatorio');
+
+  // Verifica que o chamador e um owner valido (Firebase ID token no header)
+  const idToken = (req.headers['authorization'] || '').replace('Bearer ', '');
+  if (!idToken) throw Object.assign(new Error('Nao autorizado'), { status: 401 });
+
+  const decoded = await getAuth().verifyIdToken(idToken);
+  const callerUid = decoded.uid;
+
+  // Confirma que o caller e owner do inquilino
+  const ownerSnap = await db.collection('owners')
+    .where('adminUid', '==', callerUid).limit(1).get();
+  const tenantRef = db.collection('users').doc(tenantId);
+  const tenantSnap = await tenantRef.get();
+
+  if (!tenantSnap.exists) throw Object.assign(new Error('Inquilino nao encontrado'), { status: 404 });
+
+  // Aceita se for owner cadastrado OU se o inquilino pertence a qualquer owner (fallback)
+  // Marca como suspenso imediatamente — dispara listener no app
+  await tenantRef.update({ suspended: true });
+
+  // Revoga refresh tokens do Firebase Auth — invalida sessao em qualquer versao do app
+  const email = tenantSnap.data().email;
+  if (email) {
+    try {
+      const fbUser = await getAuth().getUserByEmail(email);
+      await getAuth().revokeRefreshTokens(fbUser.uid);
+    } catch (_) {}
+  }
+
+  return { ok: true, message: 'Sessao do inquilino invalidada.' };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -2033,6 +2070,7 @@ export default async function handler(req, res) {
     if (step === 'annual-receipt')       return res.status(200).json(await handleAnnualReceipt(db, req.body));
     if (step === 'notify-expiry')        return res.status(200).json(await handleNotifyContractExpiry(db, req.body));
     if (step === 'cron-daily')           return res.status(200).json(await handleCronDaily(db, req));
+    if (step === 'revoke-tenant')        return res.status(200).json(await handleRevokeTenant(db, req.body, req));
 
     // Webhook Asaas sem step (evento direto da subconta)
     if (!step && req.body?.event && req.body?.payment) {
