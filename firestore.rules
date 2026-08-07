@@ -4,28 +4,33 @@ service cloud.firestore {
 
     function isAuth()   { return request.auth != null; }
     function myEmail()  { return request.auth.token.email; }
-    function isMaster() { return isAuth() && myEmail() == 'contatotransgu@gmail.com'; }
+    function isMaster() { return isAuth() && (myEmail() == 'denisfelicio20@gmail.com' || myEmail() == 'contatotransgu@gmail.com'); }
+
+    // Verifica se o usuario autenticado nao foi suspenso/removido
+    // Se o documento nao existir OU suspended=true → bloqueia tudo
+    function isActiveTenant() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true;
+    }
 
     // ── owners ─────────────────────────────────────────────────────────────
-    // Apenas o próprio owner lê o seu doc; apenas master (server) escreve
     match /owners/{ownerId} {
       allow read:   if isMaster() || (isAuth() && resource.data.get('email','') == myEmail());
       allow write:  if isMaster();
     }
 
     // ── users ───────────────────────────────────────────────────────────────
-    // Leitura: qualquer autenticado (owner panel lista tenants por ownerId)
-    // Escrita: cria → autenticado; atualiza → próprio user OU master; deleta → master
-    // TODO: custom claim 'ownerId' para isolar leitura entre owners
     match /users/{userId} {
-      allow read:   if isAuth();
+      // Leitura do proprio doc: permite mesmo que suspended (para o listener detectar)
+      // Leitura de outros docs: owner (isAuth) ou master
+      allow read:   if isAuth() && (request.auth.uid == userId || isMaster() || isActiveTenant());
       allow create: if isAuth();
       allow update: if isAuth() && (
         resource.data.get('email', '') == myEmail() || isMaster()
       );
-      allow delete: if isMaster();
+      // Qualquer owner autenticado pode suspender/deletar (para o delete funcionar no app)
+      allow delete: if isAuth();
 
-      // Cartões salvos: somente o próprio inquilino (email) ou master
       match /savedCards/{cardId} {
         allow read, write: if isAuth() &&
           get(/databases/$(database)/documents/users/$(userId)).data.get('email','') == myEmail()
@@ -34,36 +39,32 @@ service cloud.firestore {
     }
 
     // ── contracts ────────────────────────────────────────────────────────────
-    // Leitura: autenticado (tenant lê o próprio via tenantEmail, owner lista os seus)
-    // Escrita: autenticado (owner panel cria/fecha contratos)
+    // Inquilinos suspensos nao conseguem ler contratos
     match /contracts/{contractId} {
-      allow read:   if isAuth();
+      allow read:   if isMaster() || (isAuth() && isActiveTenant());
       allow create: if isAuth();
-      allow update: if isAuth();
-      allow delete: if isMaster();
+      allow update: if isAuth() && isActiveTenant();
+      allow delete: if isAuth();
     }
 
     // ── charges ──────────────────────────────────────────────────────────────
-    // Leitura: autenticado (tenant vê as próprias por tenantEmail, owner lista as suas)
-    // Cria/atualiza: autenticado; deleta: master
+    // Inquilinos suspensos nao conseguem ler cobranças
     match /charges/{chargeId} {
-      allow read:   if isAuth();
-      allow create: if isAuth();
+      allow read:   if isMaster() || (isAuth() && isActiveTenant());
+      allow create: if isAuth() && isActiveTenant();
       allow update: if isAuth() && (
         resource.data.get('tenantEmail', '') == myEmail() || isMaster()
       );
-      allow delete: if isMaster();
+      allow delete: if isAuth();
     }
 
     // ── cardVerifications ────────────────────────────────────────────────────
-    // Apenas o servidor (Admin SDK) escreve; cliente só lê (para polling de status)
     match /cardVerifications/{verId} {
-      allow read:  if isAuth();
-      allow write: if false; // Admin SDK bypasses rules
+      allow read:  if isAuth() && isActiveTenant();
+      allow write: if false;
     }
 
     // ── termsAuditLog (LGPD) ────────────────────────────────────────────────
-    // Imutável após criação — preserva integridade do audit trail
     match /termsAuditLog/{logId} {
       allow read:             if isMaster();
       allow create:           if isAuth();
@@ -71,9 +72,8 @@ service cloud.firestore {
     }
 
     // ── config ───────────────────────────────────────────────────────────────
-    // Chaves API (Asaas, Assinafy) — NUNCA acessível pelo cliente
     match /config/{docId} {
-      allow read, write: if false; // somente Admin SDK
+      allow read, write: if false;
     }
 
     // ── licenses (legado) ────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ service cloud.firestore {
       allow read, write: if isMaster();
     }
 
-    // ── default: nega tudo não declarado ─────────────────────────────────────
+    // ── default: nega tudo nao declarado ─────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }
