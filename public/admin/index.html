@@ -1078,6 +1078,7 @@
     const name  = $('broker-name')?.value?.trim();
     const email = $('broker-email')?.value?.trim();
     const phone = $('broker-phone')?.value?.trim();
+    if (!name)  { showToast('Nome do corretor obrigatório', 'error'); return; }
     if (!email) { showToast('E-mail do corretor obrigatório', 'error'); return; }
     const btn = $('broker-save-btn');
     btn.disabled = true; btn.textContent = 'Cadastrando...';
