@@ -4,6 +4,11 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth }                        from 'firebase-admin/auth';
 import { getFirestore, Timestamp }        from 'firebase-admin/firestore';
+import {
+  setCorsHeaders, getClientIp,
+  checkRateLimit, recordFailedAttempt, resetRateLimit,
+  logAdminAccess, validateAdminInput,
+} from '../lib/security.js';
 
 const SUPER_ADMIN_EMAIL = 'denisfelicio20@gmail.com';
 
@@ -236,44 +241,65 @@ async function cancelSubscription(db, ownerId) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-token');
+  setCorsHeaders(req, res, { restrictToSite: true });
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   if (req.method === 'GET') return res.status(302).setHeader('Location', '/admin').end();
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // Config pública (sem auth) — retorna apenas dados não-secretos para o cliente
-  const rawBody = req.body || {};
-  if (rawBody.step === 'public-config') {
+  const ip   = getClientIp(req);
+  const body = req.body || {};
+
+  // Config pública (sem auth) — apenas dados não-secretos para o cliente
+  if (body.step === 'public-config') {
     return res.status(200).json({
-      apiKey:    process.env.LOCARPAY_FIREBASE_API_KEY || '',
+      apiKey:     process.env.LOCARPAY_FIREBASE_API_KEY || '',
       authDomain: 'transgu-web-6d50f.firebaseapp.com',
       projectId:  'transgu-web-6d50f',
     });
   }
 
+  // Validação de input antes de qualquer coisa
+  const inputErr = validateAdminInput(body);
+  if (inputErr) return res.status(400).json({ error: inputErr });
+
   // POST → superadmin API
   try {
     initFirebase();
-    await verifyAdmin(req);
     const db = getFirestore();
-    const { step, ownerId } = req.body || {};
+
+    // Rate limiting
+    const rl = await checkRateLimit(db, ip);
+    if (rl.blocked) return res.status(429).json({ error: rl.message });
+
+    // Autenticação
+    try {
+      await verifyAdmin(req);
+    } catch(authErr) {
+      await recordFailedAttempt(db, ip);
+      await logAdminAccess(db, { ip, success: false, detail: authErr.message });
+      return res.status(authErr.status || 401).json({ error: authErr.message });
+    }
+
+    // Login bem-sucedido — reseta contador e loga
+    await resetRateLimit(db, ip);
+    await logAdminAccess(db, { ip, success: true, detail: body.step });
+
+    const { step, ownerId } = body;
 
     if (step === 'list-owners')           return res.status(200).json(await listOwners(db));
     if (step === 'activate-owner')        return res.status(200).json(await activateOwner(db, ownerId));
     if (step === 'suspend-owner')         return res.status(200).json(await suspendOwner(db, ownerId));
     if (step === 'delete-owner')          return res.status(200).json(await deleteOwner(db, ownerId));
     if (step === 'setup-asaas')           return res.status(200).json(await setupAsaas(db, ownerId));
-    if (step === 'create-subscription')   return res.status(200).json(await createSubscription(db, ownerId, req.body.plan));
+    if (step === 'create-subscription')   return res.status(200).json(await createSubscription(db, ownerId, body.plan));
     if (step === 'subscription-status')   return res.status(200).json(await getSubscriptionStatus(db, ownerId));
     if (step === 'cancel-subscription')   return res.status(200).json(await cancelSubscription(db, ownerId));
 
     return res.status(400).json({ error: 'step inválido' });
   } catch(e) {
-    console.error('admin/superadmin error:', e.message);
+    console.error('admin error:', e.message);
     return res.status(e.status || 500).json({ error: e.message });
   }
 }
