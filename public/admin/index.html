@@ -2527,7 +2527,9 @@
   $('tab-owners').addEventListener('click',  () => { setTab('owners');  loadOwners(); });
   $('tab-overdue').addEventListener('click', () => { setTab('overdue'); loadOverdue(); });
   $('tab-licenses').addEventListener('click',() => { setTab('licenses'); loadLicenses(); });
-  $('tab-plano').addEventListener('click',   () => { setTab('plano'); });
+  $('tab-config').addEventListener('click',  () => { setTab('config'); loadBrokers(); loadConfigTab(); });
+  $('tab-leads').addEventListener('click',   () => { setTab('leads'); loadLeads(); });
+  $('tab-plano').addEventListener('click',   () => { setTab('plano'); renderPlanoTab?.(); });
 
   // ── Gestão de Licenças (acesso admin no app) ──────────────────────────────
 
