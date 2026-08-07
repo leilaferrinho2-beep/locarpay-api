@@ -17,10 +17,24 @@ function initFirebase() {
 async function verifyAdmin(req) {
   const token = req.headers['x-admin-token'];
   if (!token) throw Object.assign(new Error('Token ausente'), { status: 401 });
-  const decoded = await getAuth().verifyIdToken(token);
-  if (decoded.email !== SUPER_ADMIN_EMAIL)
-    throw Object.assign(new Error('Acesso negado'), { status: 403 });
-  return decoded;
+
+  // Aceita senha direta via env var ADMIN_SECRET (sem Firebase)
+  const secret = process.env.ADMIN_SECRET;
+  if (secret) {
+    if (token === secret) return { email: SUPER_ADMIN_EMAIL };
+    throw Object.assign(new Error('Senha incorreta'), { status: 401 });
+  }
+
+  // Fallback: Firebase ID token (somente se ADMIN_SECRET não estiver configurado)
+  try {
+    const decoded = await getAuth().verifyIdToken(token);
+    if (decoded.email !== SUPER_ADMIN_EMAIL)
+      throw Object.assign(new Error('Acesso negado'), { status: 403 });
+    return decoded;
+  } catch (e) {
+    if (e.status) throw e;
+    throw Object.assign(new Error('Token inválido'), { status: 401 });
+  }
 }
 
 async function listOwners(db) {

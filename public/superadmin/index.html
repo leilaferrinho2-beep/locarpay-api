@@ -26,12 +26,12 @@
         headers: { 'Content-Type': 'application/json', 'x-admin-token': pwd },
         body: JSON.stringify({ step: 'list-owners' })
       });
-      if (r.status === 401 || r.status === 403) {
-        $('pin-err').textContent = 'Senha incorreta.';
+      const d = await r.json();
+      if (!r.ok) {
+        $('pin-err').textContent = d.error || 'Senha incorreta.';
         $('pin-input').value = '';
         return;
       }
-      const d = await r.json();
       sessionStorage.setItem('sa_token', pwd);
       owners = d.owners || [];
       showDashboard();
