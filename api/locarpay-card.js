@@ -2071,6 +2071,29 @@ export default async function handler(req, res) {
     if (step === 'notify-expiry')        return res.status(200).json(await handleNotifyContractExpiry(db, req.body));
     if (step === 'cron-daily')           return res.status(200).json(await handleCronDaily(db, req));
     if (step === 'revoke-tenant')        return res.status(200).json(await handleRevokeTenant(db, req.body, req));
+    if (step === 'deploy-rules-temp') {
+      const secret = req.headers['x-admin-token'] || '';
+      if (!secret || secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'nao autorizado' });
+      const rulesSource = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n\n    function isAuth()   { return request.auth != null; }\n    function myEmail()  { return request.auth.token.email; }\n    function isMaster() { return isAuth() && (myEmail() == 'denisfelicio20@gmail.com' || myEmail() == 'contatotransgu@gmail.com'); }\n\n    function isActiveTenant() {\n      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&\n        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true;\n    }\n\n    match /owners/{ownerId} {\n      allow read:   if isMaster() || (isAuth() && resource.data.get('email','') == myEmail());\n      allow write:  if isMaster();\n    }\n\n    match /users/{userId} {\n      allow read:   if isAuth() && (request.auth.uid == userId || isMaster() || isActiveTenant());\n      allow create: if isAuth();\n      allow update: if isAuth() && (resource.data.get('email', '') == myEmail() || isMaster());\n      allow delete: if isAuth();\n      match /savedCards/{cardId} {\n        allow read, write: if isAuth() &&\n          get(/databases/$(database)/documents/users/$(userId)).data.get('email','') == myEmail()\n          || isMaster();\n      }\n    }\n\n    match /contracts/{contractId} {\n      allow read:   if isMaster() || (isAuth() && isActiveTenant());\n      allow create: if isAuth();\n      allow update: if isAuth() && isActiveTenant();\n      allow delete: if isAuth();\n    }\n\n    match /charges/{chargeId} {\n      allow read:   if isMaster() || (isAuth() && isActiveTenant());\n      allow create: if isAuth() && isActiveTenant();\n      allow update: if isAuth() && (resource.data.get('tenantEmail', '') == myEmail() || isMaster());\n      allow delete: if isAuth();\n    }\n\n    match /cardVerifications/{verId} {\n      allow read:  if isAuth() && isActiveTenant();\n      allow write: if false;\n    }\n\n    match /termsAuditLog/{logId} {\n      allow read:             if isMaster();\n      allow create:           if isAuth();\n      allow update, delete:   if false;\n    }\n\n    match /config/{docId} {\n      allow read, write: if false;\n    }\n\n    match /licenses/{licId} {\n      allow read, write: if isMaster();\n    }\n\n    match /{document=**} {\n      allow read, write: if false;\n    }\n  }\n}`;
+      const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      const project = sa.project_id;
+      const { createSign } = await import('crypto');
+      const now = Math.floor(Date.now() / 1000);
+      const hdr = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+      const pay = Buffer.from(JSON.stringify({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/cloud-platform', aud: 'https://oauth2.googleapis.com/token', exp: now + 3600, iat: now })).toString('base64url');
+      const sign = createSign('RSA-SHA256'); sign.update(`${hdr}.${pay}`);
+      const jwt = `${hdr}.${pay}.${sign.sign(sa.private_key, 'base64url')}`;
+      const tokRes = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}` });
+      const { access_token } = await tokRes.json();
+      const rsRes = await fetch(`https://firebaserules.googleapis.com/v1/projects/${project}/rulesets`, { method: 'POST', headers: { Authorization: `Bearer ${access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ source: { files: [{ name: 'firestore.rules', content: rulesSource }] } }) });
+      const rs = await rsRes.json();
+      if (!rs.name) return res.status(500).json({ error: 'ruleset falhou', rs });
+      const relName = `projects/${project}/releases/cloud.firestore`;
+      const relRes = await fetch(`https://firebaserules.googleapis.com/v1/${relName}`, { method: 'PATCH', headers: { Authorization: `Bearer ${access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ release: { name: relName, rulesetName: rs.name } }) });
+      const rel = await relRes.json();
+      if (rel.error) return res.status(500).json({ error: 'release falhou', rel });
+      return res.status(200).json({ ok: true, ruleset: rs.name });
+    }
 
     // Webhook Asaas sem step (evento direto da subconta)
     if (!step && req.body?.event && req.body?.payment) {
