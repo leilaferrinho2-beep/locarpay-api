@@ -765,8 +765,23 @@
     } catch (_) {}
   }
 
+  function maskPhone(input) {
+    input.addEventListener('input', function() {
+      let v = this.value.replace(/\D/g, '').slice(0, 11);
+      if (v.length <= 10) {
+        v = v.replace(/(\d{2})(\d)/, '($1) $2')
+             .replace(/(\d{4})(\d{1,4})$/, '$1-$2');
+      } else {
+        v = v.replace(/(\d{2})(\d)/, '($1) $2')
+             .replace(/(\d{5})(\d{1,4})$/, '$1-$2');
+      }
+      this.value = v;
+    });
+  }
+
   maskCpfCnpj(document.getElementById('f-cpfcnpj'));
   maskCep(document.getElementById('f-cep'));
+  maskPhone(document.getElementById('f-phone'));
 
   // OTP pós-cadastro
   document.getElementById('btn-success-send-otp').addEventListener('click', async () => {
