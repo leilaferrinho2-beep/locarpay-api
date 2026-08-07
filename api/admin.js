@@ -245,6 +245,16 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  // Config pública (sem auth) — retorna apenas dados não-secretos para o cliente
+  const rawBody = req.body || {};
+  if (rawBody.step === 'public-config') {
+    return res.status(200).json({
+      apiKey:    process.env.LOCARPAY_FIREBASE_API_KEY || '',
+      authDomain: 'transgu-web-6d50f.firebaseapp.com',
+      projectId:  'transgu-web-6d50f',
+    });
+  }
+
   // POST → superadmin API
   try {
     initFirebase();
