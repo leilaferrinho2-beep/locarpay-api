@@ -170,7 +170,7 @@ async function handleRegisterBroker(db, body) {
 // ── SUBMIT LEAD ───────────────────────────────────────────────────────────────
 
 async function handleSubmitLead(db, body) {
-  const { ownerId, brokerEmail, brokerName, tenant, docs, propertyCode, propertyDescription } = body;
+  const { ownerId, brokerEmail, brokerName, tenant, spouse, property, guarantee, docs, propertyCode, propertyDescription } = body;
   if (!ownerId || !tenant?.email) throw Object.assign(new Error('Dados obrigatórios ausentes'), { status: 400 });
 
   const leadRef = db.collection('leads').doc();
@@ -179,13 +179,26 @@ async function handleSubmitLead(db, body) {
     brokerEmail: brokerEmail || '',
     brokerName:  brokerName  || '',
     tenant: {
-      name:  tenant.name  || '',
-      email: tenant.email.toLowerCase().trim(),
-      cpf:   tenant.cpf   || '',
-      phone: tenant.phone || ''
+      name:           tenant.name           || '',
+      email:          tenant.email.toLowerCase().trim(),
+      cpf:            tenant.cpf            || '',
+      phone:          tenant.phone          || '',
+      birthDate:      tenant.birthDate      || '',
+      nationality:    tenant.nationality    || '',
+      maritalStatus:  tenant.maritalStatus  || '',
+      rg:             tenant.rg             || '',
+      rgIssuer:       tenant.rgIssuer       || '',
+      currentAddress: tenant.currentAddress || '',
+      profession:     tenant.profession     || '',
+      company:        tenant.company        || '',
+      income:         tenant.income         || '',
+      employmentType: tenant.employmentType || ''
     },
+    spouse:   spouse   || null,
+    property: property || null,
+    guarantee: guarantee || null,
     docs:                docs || [],
-    propertyCode:        propertyCode || '',
+    propertyCode:        propertyCode || (property?.code) || '',
     propertyDescription: propertyDescription || '',
     status:    'pending',
     createdAt: FieldValue.serverTimestamp(),
@@ -313,17 +326,34 @@ async function handleApproveLead(db, body) {
     updatedAt:   FieldValue.serverTimestamp()
   });
 
-  // Envia e-mail de boas-vindas ao inquilino
+  // Envia e-mail de boas-vindas ao inquilino com link do app
   try {
-    await sendEmail(tenantEmail, 'Bem-vindo ao iLocarPay!', `
-      <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px">
-        <h2 style="color:#4CAF50">iLocarPay</h2>
-        <p>Olá, <strong>${lead.tenant.name || 'inquilino'}</strong>!</p>
-        <p><strong>${owner.name || 'Sua imobiliária'}</strong> aprovou sua locação.</p>
-        ${lead.propertyDescription ? `<p><strong>Imóvel:</strong> ${lead.propertyDescription}</p>` : ''}
-        <p>Em breve você receberá o contrato para assinar digitalmente. Acesse o app iLocarPay com o e-mail <strong>${tenantEmail}</strong>.</p>
-        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-        <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay</p>
+    const prop = lead.property || {};
+    const propAddr = [prop.street, prop.number, prop.complement, prop.neighborhood, prop.city, prop.state]
+      .filter(Boolean).join(', ') || lead.propertyDescription || '';
+    await sendEmail(tenantEmail, '🎉 Sua locação foi aprovada — iLocarPay', `
+      <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
+        <div style="background:#1a1a1a;padding:32px;text-align:center">
+          <h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1>
+          <p style="color:#ccc;margin:8px 0 0">Gestão inteligente de aluguéis</p>
+        </div>
+        <div style="padding:32px">
+          <p style="font-size:18px;font-weight:bold;color:#1a1a1a">Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉</p>
+          <p style="color:#444"><strong>${owner.name || 'Sua imobiliária'}</strong> aprovou a sua locação.</p>
+          ${propAddr ? `<div style="background:#f0f7f0;border-left:4px solid #4CAF50;padding:12px 16px;border-radius:4px;margin:16px 0">
+            <strong>Imóvel:</strong> ${propAddr}
+          </div>` : ''}
+          <p style="color:#444">Você receberá o contrato por e-mail para assinar digitalmente. Acompanhe tudo pelo aplicativo:</p>
+          <div style="text-align:center;margin:28px 0">
+            <a href="https://www.ilocarpay.com.br/download/locarpay-v135.apk"
+               style="background:#4CAF50;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
+              📱 Baixar app iLocarPay
+            </a>
+          </div>
+          <p style="color:#888;font-size:13px">Após instalar, entre com o e-mail <strong>${tenantEmail}</strong> para acessar seu contrato e acompanhar as cobranças.</p>
+          <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+          <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay • <a href="https://www.ilocarpay.com.br" style="color:#4CAF50">ilocarpay.com.br</a></p>
+        </div>
       </div>
     `);
   } catch (e) { console.warn('[approve-lead] email error:', e.message); }
