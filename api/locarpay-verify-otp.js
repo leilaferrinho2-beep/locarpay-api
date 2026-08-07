@@ -153,8 +153,8 @@ async function handleGoogleLogin(req, res, idToken) {
     let role = 'tenant';
     if (isAdmin) {
       role = 'admin';
-    } else if (tenantData?.role === 'broker') {
-      role = 'broker';
+    } else if (tenantData?.role === 'broker' || tenantData?.role === 'corretor') {
+      role = 'corretor';
     }
 
     const ownerId = ownerDoc
