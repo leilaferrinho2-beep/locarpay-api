@@ -42,7 +42,7 @@
   }
 
   function setTab(tab) {
-    ['tab-tenants','tab-owners','tab-overdue','tab-licenses','tab-config','tab-leads'].forEach(t => {
+    ['tab-tenants','tab-owners','tab-overdue','tab-licenses','tab-config','tab-leads','tab-plano'].forEach(t => {
       $(t)?.classList.remove('active');
       const panel = $(t.replace('tab-', 'panel-'));
       if (panel) panel.style.display = 'none';
@@ -51,6 +51,7 @@
     const p = $('panel-' + tab); if (p) p.style.display = 'block';
     if (tab === 'config') loadConfigTab();
     if (tab === 'leads')  loadLeads();
+    if (tab === 'plano')  renderPlanoTab();
   }
 
   function loadConfigTab() {
@@ -1212,6 +1213,58 @@
 
   // ── Banner de plano ────────────────────────────────────────
 
+  function renderPlanoTab() {
+    const o   = currentOwnerData;
+    const now = Date.now();
+    const ms  = (ts) => ts?.seconds ? ts.seconds * 1000 : null;
+    const trialEnd    = ms(o?.trialEndsAt);
+    const activeUntil = ms(o?.planActiveUntil);
+    const isPaid      = o?.status === 'active' && activeUntil && activeUntil > now;
+    const trialDays   = trialEnd && trialEnd > now ? Math.ceil((trialEnd - now) / 86400000) : 0;
+
+    let statusHtml, statusColor;
+    if (isPaid) {
+      statusColor = '#4CAF50';
+      statusHtml  = `✅ <strong>Plano ${(o.plan || 'basic').toUpperCase()} ativo</strong> — válido até ${new Date(activeUntil).toLocaleDateString('pt-BR')}`;
+    } else if (trialDays > 0) {
+      statusColor = trialDays <= 5 ? '#FFD54F' : '#64B5F6';
+      statusHtml  = `🕐 Trial — <strong>${trialDays} dia${trialDays !== 1 ? 's' : ''} restante${trialDays !== 1 ? 's' : ''}</strong>`;
+    } else {
+      statusColor = '#EF5350';
+      statusHtml  = `⛔ <strong>Trial expirado</strong> — ative um plano para continuar`;
+    }
+
+    $('plano-status-box').style.borderColor = statusColor;
+    $('plano-status-text').innerHTML        = statusHtml;
+    $('plano-status-text').style.color      = statusColor;
+
+    const upgradeArea = $('plano-upgrade-area');
+    if (isPaid) {
+      upgradeArea.innerHTML = `<p style="color:#aaa;font-size:13px;margin-top:8px">Para trocar de plano ou cancelar, entre em contato com o suporte.</p>`;
+    } else {
+      upgradeArea.innerHTML = `
+        <div style="display:flex;gap:12px;margin-top:24px">
+          <div onclick="upgSelectPlanCard('basic')" id="card-basic" style="flex:1;border:2px solid #4CAF50;border-radius:12px;padding:16px;cursor:pointer;background:#0f2a0f;transition:all .2s">
+            <div style="font-weight:700;font-size:15px;color:#4CAF50">Basic</div>
+            <div style="font-size:22px;font-weight:800;color:#fff;margin:4px 0">R$49<span style="font-size:13px;font-weight:400;color:#aaa">/mês</span></div>
+            <div style="font-size:12px;color:#aaa">até 10 inquilinos</div>
+          </div>
+          <div onclick="upgSelectPlanCard('pro')" id="card-pro" style="flex:1;border:2px solid #2a4a2a;border-radius:12px;padding:16px;cursor:pointer;background:#132213;transition:all .2s">
+            <div style="font-weight:700;font-size:15px;color:#aaa">Pro ⭐</div>
+            <div style="font-size:22px;font-weight:800;color:#fff;margin:4px 0">R$99<span style="font-size:13px;font-weight:400;color:#aaa">/mês</span></div>
+            <div style="font-size:12px;color:#aaa">até 30 inquilinos</div>
+          </div>
+        </div>
+        <button onclick="openUpgradeModal()" style="margin-top:16px;width:100%;padding:14px;background:#4CAF50;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">Ativar via PIX ou Cartão</button>
+        <p style="color:#666;font-size:12px;margin-top:10px;text-align:center">Pagamento seguro via Asaas · Cancele quando quiser</p>
+      `;
+    }
+  }
+
+  window.upgSelectPlanCard = (plan) => {
+    upgSelectPlan(plan);
+  };
+
   function renderPlanBanner() {
     if (isMaster) { $('plan-banner').style.display = 'none'; return; }
     const o = currentOwnerData;
@@ -2295,6 +2348,7 @@
   $('tab-owners').addEventListener('click',  () => { setTab('owners');  loadOwners(); });
   $('tab-overdue').addEventListener('click', () => { setTab('overdue'); loadOverdue(); });
   $('tab-licenses').addEventListener('click',() => { setTab('licenses'); loadLicenses(); });
+  $('tab-plano').addEventListener('click',   () => { setTab('plano'); });
 
   // ── Gestão de Licenças (acesso admin no app) ──────────────────────────────
 
@@ -2454,6 +2508,7 @@
       $('tab-owners').style.display = 'none';
       $('tab-config').style.display = 'block';
       $('tab-leads').style.display  = 'block';
+      $('tab-plano').style.display  = 'block';
     } else {
       $('tab-licenses').style.display = 'block';
       $('tab-leads').style.display    = 'block';
@@ -2671,6 +2726,7 @@
     <div class="tab" id="tab-owners">Imobiliárias</div>
     <div class="tab" id="tab-licenses" style="display:none">🔑 Licenças</div>
     <div class="tab" id="tab-config" style="display:none">⚙ Configurações</div>
+    <div class="tab" id="tab-plano" style="display:none">💳 Meu Plano</div>
   </div>
 
   <!-- Painel: Inquilinos -->
@@ -2847,6 +2903,26 @@
           <tr><td colspan="7" class="empty">Carregando...</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Painel: Meu Plano (só owner não-master) -->
+  <div class="panel" id="panel-plano" style="display:none;max-width:520px;margin:32px auto;padding:0 16px">
+    <h2 style="font-size:20px;font-weight:700;color:#fff;margin-bottom:20px">💳 Meu Plano</h2>
+    <div id="plano-status-box" style="border:2px solid #444;border-radius:14px;padding:20px;margin-bottom:8px">
+      <div id="plano-status-text" style="font-size:15px"></div>
+    </div>
+    <div id="plano-upgrade-area"></div>
+    <div style="margin-top:32px;background:#1a1d2e;border-radius:12px;padding:20px">
+      <div style="font-size:13px;font-weight:600;color:#fff;margin-bottom:12px">Recursos incluídos em todos os planos</div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:8px">
+        <li style="color:#aaa;font-size:13px">✅ Cobranças automáticas mensais via PIX</li>
+        <li style="color:#aaa;font-size:13px">✅ Contratos digitais com assinatura eletrônica</li>
+        <li style="color:#aaa;font-size:13px">✅ Portal do inquilino (app Android)</li>
+        <li style="color:#aaa;font-size:13px">✅ Relatórios mensais por e-mail</li>
+        <li style="color:#aaa;font-size:13px">✅ Alertas de vencimento e inadimplência</li>
+        <li style="color:#aaa;font-size:13px">✅ Comprovante anual para o inquilino</li>
+      </ul>
     </div>
   </div>
 
