@@ -81,6 +81,32 @@ service cloud.firestore {
       allow read, write: if isMaster();
     }
 
+    // ── brokers ──────────────────────────────────────────────────────────────
+    match /brokers/{brokerId} {
+      allow read: if isAuth() && (
+        resource.data.get('email','') == myEmail() || isMaster()
+      );
+      allow write: if isMaster();
+    }
+
+    // ── leads ─────────────────────────────────────────────────────────────────
+    // Corretor só lê leads onde é o brokerEmail; owner/master lê todos do ownerId
+    match /leads/{leadId} {
+      allow read: if isAuth() && (
+        isMaster() ||
+        resource.data.get('brokerEmail','') == myEmail() ||
+        exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
+          get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail()
+      );
+      allow create: if isAuth();
+      allow update: if isAuth() && (
+        isMaster() ||
+        exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
+          get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail()
+      );
+      allow delete: if isMaster();
+    }
+
     // ── default: nega tudo nao declarado ─────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
