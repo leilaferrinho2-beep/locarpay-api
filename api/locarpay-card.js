@@ -2071,18 +2071,6 @@ export default async function handler(req, res) {
     if (step === 'notify-expiry')        return res.status(200).json(await handleNotifyContractExpiry(db, req.body));
     if (step === 'cron-daily')           return res.status(200).json(await handleCronDaily(db, req));
     if (step === 'revoke-tenant')        return res.status(200).json(await handleRevokeTenant(db, req.body, req));
-    if (step === 'admin-suspend-temp') {
-      if (req.headers['x-admin-token'] !== 'ilocarpay-suspend-2026') return res.status(401).json({ error: 'nao autorizado' });
-      const snap = await db.collection('users').get();
-      const users = snap.docs.map(d => ({ id: d.id, name: d.data().name, email: d.data().email, suspended: d.data().suspended }));
-      if (req.body.suspend) {
-        const uid = req.body.suspend;
-        await db.collection('users').doc(uid).update({ suspended: true });
-        try { const u = await getAuth().getUserByEmail((await db.collection('users').doc(uid).get()).data()?.email || ''); await getAuth().revokeRefreshTokens(u.uid); } catch(_) {}
-        return res.status(200).json({ ok: true, suspended: uid });
-      }
-      return res.status(200).json({ users });
-    }
 
     // Webhook Asaas sem step (evento direto da subconta)
     if (!step && req.body?.event && req.body?.payment) {
