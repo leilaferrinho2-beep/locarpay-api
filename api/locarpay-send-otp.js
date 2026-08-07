@@ -77,7 +77,7 @@ export default async function handler(req, res) {
     const temCadastro = tenantDoc !== null && tenantDoc.suspended !== true;
 
     if (!temLicenca && !temOwner && !temCadastro) {
-      return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com o proprietário.' });
+      return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com a imobiliária.' });
     }
 
     const otp = String(Math.floor(100000 + crypto.randomInt(900000)));
