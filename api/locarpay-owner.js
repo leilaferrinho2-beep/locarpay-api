@@ -40,6 +40,15 @@ async function getSharedAssinafyKey(db) {
   return configSnap.data()?.apiKey;
 }
 
+// Converte DD/MM/AAAA ou DDMMAAAA para YYYY-MM-DD (formato Asaas)
+function toAsaasDate(raw) {
+  if (!raw) return undefined;
+  const d = raw.replace(/\D/g, '');
+  if (d.length === 8) return `${d.slice(4)}-${d.slice(2,4)}-${d.slice(0,2)}`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  return undefined;
+}
+
 // Cria subconta Asaas Connect
 async function createAsaasSubaccount(masterKey, ownerData) {
   const cpfCnpj = (ownerData.cpfCnpj || ownerData.cnpj || '').replace(/\D/g, '');
@@ -58,6 +67,7 @@ async function createAsaasSubaccount(masterKey, ownerData) {
     addressNumber: ownerData.addressNumber || undefined,
     province:      ownerData.province      || undefined,
     postalCode:    (ownerData.postalCode || '').replace(/\D/g, '') || undefined,
+    birthDate:     (cpfCnpj.length === 11 && ownerData.birthDate) ? toAsaasDate(ownerData.birthDate) : undefined,
   };
 
   // Remove campos undefined
@@ -77,6 +87,7 @@ async function handleRegister(db, body) {
   const {
     name, email, phone, cpfCnpj, cnpj, companyType,
     address, addressNumber, province, postalCode,
+    birthDate,
     plan = 'trial', firebaseUid
   } = body;
   if (!name || !email) throw Object.assign(new Error('name e email sao obrigatorios'), { status: 400 });
@@ -100,6 +111,7 @@ async function handleRegister(db, body) {
     email,
     phone:         phone         || '',
     cpfCnpj:       (cpfCnpj || cnpj || '').replace(/\D/g, ''),
+    birthDate:     birthDate     || '',
     companyType:   companyType   || '',
     address:       address       || '',
     addressNumber: addressNumber || '',
@@ -206,23 +218,27 @@ async function handleRegister(db, body) {
 }
 
 async function handleSetupAsaas(db, body) {
-  const { ownerId } = body;
+  const { ownerId, birthDate } = body;
   if (!ownerId) throw Object.assign(new Error('ownerId obrigatorio'), { status: 400 });
 
   const ownerSnap = await db.collection('owners').doc(ownerId).get();
   if (!ownerSnap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
 
-  const ownerData = ownerSnap.data();
+  const ownerData = { ...ownerSnap.data() };
+  if (birthDate) ownerData.birthDate = birthDate;
+
   const masterKey = await getMasterAsaasKey(db);
   if (!masterKey) throw Object.assign(new Error('Chave master Asaas nao configurada'), { status: 500 });
 
   const subaccount = await createAsaasSubaccount(masterKey, ownerData);
 
   const newApiKey = subaccount.apiKey || '';
-  await ownerSnap.ref.update({
+  const updateFields = {
     asaasApiKey:       newApiKey,
     asaasSubaccountId: subaccount.walletId || subaccount.id || '',
-  });
+  };
+  if (birthDate) updateFields.birthDate = birthDate;
+  await ownerSnap.ref.update(updateFields);
 
   // Registra webhook de pagamento na subconta recem-criada
   let webhookResult = null;
