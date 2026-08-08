@@ -913,19 +913,6 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
   </div>
 </div>
 
-<!-- MODAL DATA NASCIMENTO -->
-<div id="modal-date" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;">
-  <div style="background:#1e1e2e;border-radius:12px;padding:28px 32px;min-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.5);">
-    <div style="font-size:15px;color:#ccc;margin-bottom:16px;" id="modal-date-label">Data de nascimento (DD/MM/AAAA):</div>
-    <input id="modal-date-input" type="text" maxlength="10" placeholder="DD/MM/AAAA"
-      style="width:100%;padding:12px 14px;border-radius:8px;border:1.5px solid #444;background:#111;color:#fff;font-size:18px;letter-spacing:2px;box-sizing:border-box;"
-      oninput="maskDateInput(this)">
-    <div style="display:flex;gap:12px;margin-top:20px;justify-content:flex-end;">
-      <button onclick="modalDateResolve(null)" style="padding:10px 22px;border-radius:8px;border:none;background:#333;color:#ccc;cursor:pointer;font-size:14px;">Cancelar</button>
-      <button onclick="modalDateConfirm()" style="padding:10px 22px;border-radius:8px;border:none;background:#6366f1;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">OK</button>
-    </div>
-  </div>
-</div>
 
 <!-- MODAL -->
 <div id="modal" onclick="if(event.target===this||event.target.classList.contains('modal-backdrop'))closeModal()">
