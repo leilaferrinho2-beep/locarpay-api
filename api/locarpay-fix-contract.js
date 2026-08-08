@@ -6,15 +6,20 @@
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 
 function initFirebase() {
-  if (!getApps().length) initializeApp({ credential: cert(JSON.parse(process.env.LOCARPAY_SERVICE_ACCOUNT)) });
+  if (!getApps().length) initializeApp({
+    credential: cert(JSON.parse(process.env.LOCARPAY_SERVICE_ACCOUNT)),
+    storageBucket: BUCKET
+  });
 }
 
 const FB_PROJECT = 'locarpayapp';
 const FB_API_KEY = process.env.LOCARPAY_FIREBASE_API_KEY;
 const FS_BASE    = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`;
 const ASSINAFY   = 'https://api.assinafy.com.br/v1';
+const BUCKET     = `${FB_PROJECT}.appspot.com`;
 
 async function fsGet(path) {
   const r = await fetch(`${FS_BASE}/${path}?key=${FB_API_KEY}`);
@@ -82,6 +87,31 @@ async function handleGetContractPdf(req, res) {
   const contractSnap = await db.collection('contracts').doc(contractId).get();
   if (!contractSnap.exists) return res.status(404).json({ error: 'Contrato não encontrado' });
   const contract = contractSnap.data();
+
+  // ── Caminho 1: PDF arquivado no Firebase Storage — gera presigned URL (15 min) ─
+  if (contract.signedStoragePath) {
+    try {
+      const bucket = getStorage().bucket();
+      const file   = bucket.file(contract.signedStoragePath);
+      const [exists] = await file.exists();
+      if (exists) {
+        const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutos
+        const [presignedUrl] = await file.getSignedUrl({
+          action:  'read',
+          expires: expiresAt,
+          responseDisposition: 'attachment; filename="contrato_assinado.pdf"',
+          responseType: 'application/pdf'
+        });
+        // Redireciona para a presigned URL — o app segue o redirect automaticamente
+        return res.redirect(302, presignedUrl);
+      }
+    } catch (e) {
+      console.warn(`[fix-contract] falha ao gerar presigned URL: ${e.message}`);
+      // Continua para fallback
+    }
+  }
+
+  // ── Caminho 2: fallback — proxia PDF direto do Assinafy ─────────────────────
   const configSnap = await db.collection('config').doc('assinafy').get();
   const apiKey = configSnap.data()?.apiKey;
   if (!apiKey) return res.status(500).json({ error: 'Configuração Assinafy não encontrada' });
