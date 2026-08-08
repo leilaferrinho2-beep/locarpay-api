@@ -189,6 +189,7 @@
         + '<td class="td-date">' + fmtDate(o.createdAt) + '</td>'
         + '<td class="td-actions">'
         + '<button class="act act-view" onclick="viewOwner(\'' + esc(o.ownerId) + '\')">Ver</button>'
+        + '<button class="act act-edit" onclick="editOwner(\'' + esc(o.ownerId) + '\')">Editar</button>'
         + (o.status !== 'active'    ? '<button class="act act-ok"   onclick="activateOwner(\'' + esc(o.ownerId) + '\')">Ativar</button>' : '')
         + (o.status !== 'suspended' ? '<button class="act act-warn" onclick="suspendOwner(\'' + esc(o.ownerId) + '\')">Suspender</button>' : '')
         + (!o.asaasConfigured ? ((o.cpfCnpj||'').replace(/\D/g,'').length===14 ? '<button class="act act-blue" onclick="setupAsaas(\'' + esc(o.ownerId) + '\')">Criar Asaas</button>' : '<span title="Asaas requer CNPJ" style="color:#f90;font-size:12px;padding:4px 8px;">⚠ Sem CNPJ</span>') : '')
@@ -273,6 +274,59 @@
       loadOwners();
     } catch(e) { toast('Erro: ' + e.message, 'error'); }
   }
+
+  window.editOwner = (id) => {
+    const o = owners.find(x => x.ownerId === id);
+    if (!o) return;
+    $('edit-id').value        = id;
+    $('edit-name').value      = o.name        || '';
+    $('edit-phone').value     = o.phone       || '';
+    $('edit-cpfcnpj').value   = o.cpfCnpj     || '';
+    $('edit-address').value   = o.address     || '';
+    $('edit-number').value    = o.addressNumber || '';
+    $('edit-province').value  = o.province    || '';
+    $('edit-cep').value       = o.postalCode  || '';
+    $('modal-edit').style.display = 'flex';
+    setTimeout(() => $('edit-name').focus(), 50);
+  };
+  window.closeEditModal = () => { $('modal-edit').style.display = 'none'; };
+  window.saveEditOwner = async () => {
+    const id = $('edit-id').value;
+    const payload = {
+      step:          'update',
+      ownerId:       id,
+      name:          $('edit-name').value.trim(),
+      phone:         $('edit-phone').value.trim(),
+      cpfCnpj:       $('edit-cpfcnpj').value.replace(/\D/g,''),
+      address:       $('edit-address').value.trim(),
+      addressNumber: $('edit-number').value.trim(),
+      province:      $('edit-province').value.trim(),
+      postalCode:    $('edit-cep').value.replace(/\D/g,''),
+    };
+    try {
+      const r = await fetch('/api/locarpay-owner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      toast('Dados atualizados!', 'ok');
+      closeEditModal();
+      loadOwners();
+    } catch(e) { toast('Erro: ' + e.message, 'error'); }
+  };
+  window.maskCpfCnpj = (el) => {
+    let d = el.value.replace(/\D/g,'').slice(0,14);
+    if (d.length <= 11) {
+      if (d.length > 9) d = d.slice(0,3)+'.'+d.slice(3,6)+'.'+d.slice(6,9)+'-'+d.slice(9);
+      else if (d.length > 6) d = d.slice(0,3)+'.'+d.slice(3,6)+'.'+d.slice(6);
+      else if (d.length > 3) d = d.slice(0,3)+'.'+d.slice(3);
+    } else {
+      d = d.slice(0,2)+'.'+d.slice(2,5)+'.'+d.slice(5,8)+'/'+d.slice(8,12)+'-'+d.slice(12);
+    }
+    el.value = d;
+  };
 
   window.activateOwner = id  => adminAction('activate-owner', id);
   window.suspendOwner  = id  => adminAction('suspend-owner',  id, 'Suspender esta imobiliaria?');
@@ -528,6 +582,7 @@ tbody td { padding: 13px 16px; vertical-align: middle; }
 }
 .act:hover { opacity: .8; }
 .act-view { background: var(--surf2); color: var(--txt2); border: 1px solid var(--bdr2); }
+.act-edit { background: #1e3a5f; color: #60a5fa; }
 .act-ok   { background: var(--green-b); color: var(--green); }
 .act-warn { background: var(--amber-b); color: var(--amber); }
 .act-blue { background: var(--blue-b);  color: var(--blue); }
@@ -673,6 +728,48 @@ tbody td { padding: 13px 16px; vertical-align: middle; }
       </table>
     </div>
   </main>
+</div>
+
+<!-- MODAL EDITAR OWNER -->
+<div id="modal-edit" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.65);align-items:center;justify-content:center;">
+  <div style="background:#1e1e2e;border-radius:14px;padding:28px 32px;width:460px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.6);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <span style="font-size:17px;font-weight:700;color:#fff;">Editar Imobiliária</span>
+      <button onclick="closeEditModal()" style="background:none;border:none;color:#888;font-size:22px;cursor:pointer;">&#215;</button>
+    </div>
+    <input type="hidden" id="edit-id">
+    <div style="display:grid;gap:12px;">
+      <label style="color:#aaa;font-size:13px;">Nome
+        <input id="edit-name" type="text" style="display:block;width:100%;margin-top:4px;padding:10px 12px;border-radius:8px;border:1.5px solid #444;background:#111;color:#fff;font-size:14px;box-sizing:border-box;">
+      </label>
+      <label style="color:#aaa;font-size:13px;">Telefone
+        <input id="edit-phone" type="text" style="display:block;width:100%;margin-top:4px;padding:10px 12px;border-radius:8px;border:1.5px solid #444;background:#111;color:#fff;font-size:14px;box-sizing:border-box;">
+      </label>
+      <label style="color:#aaa;font-size:13px;">CPF / CNPJ
+        <input id="edit-cpfcnpj" type="text" maxlength="18" oninput="maskCpfCnpj(this)" style="display:block;width:100%;margin-top:4px;padding:10px 12px;border-radius:8px;border:1.5px solid #444;background:#111;color:#fff;font-size:14px;box-sizing:border-box;">
+      </label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <label style="color:#aaa;font-size:13px;">Endereço (Rua)
+          <input id="edit-address" type="text" style="display:block;width:100%;margin-top:4px;padding:10px 12px;border-radius:8px;border:1.5px solid #444;background:#111;color:#fff;font-size:14px;box-sizing:border-box;">
+        </label>
+        <label style="color:#aaa;font-size:13px;">Número
+          <input id="edit-number" type="text" style="display:block;width:100%;margin-top:4px;padding:10px 12px;border-radius:8px;border:1.5px solid #444;background:#111;color:#fff;font-size:14px;box-sizing:border-box;">
+        </label>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <label style="color:#aaa;font-size:13px;">Bairro
+          <input id="edit-province" type="text" style="display:block;width:100%;margin-top:4px;padding:10px 12px;border-radius:8px;border:1.5px solid #444;background:#111;color:#fff;font-size:14px;box-sizing:border-box;">
+        </label>
+        <label style="color:#aaa;font-size:13px;">CEP
+          <input id="edit-cep" type="text" maxlength="9" style="display:block;width:100%;margin-top:4px;padding:10px 12px;border-radius:8px;border:1.5px solid #444;background:#111;color:#fff;font-size:14px;box-sizing:border-box;">
+        </label>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:22px;justify-content:flex-end;">
+      <button onclick="closeEditModal()" style="padding:10px 22px;border-radius:8px;border:none;background:#333;color:#ccc;cursor:pointer;font-size:14px;">Cancelar</button>
+      <button onclick="saveEditOwner()" style="padding:10px 24px;border-radius:8px;border:none;background:#6366f1;color:#fff;cursor:pointer;font-size:14px;font-weight:700;">Salvar</button>
+    </div>
+  </div>
 </div>
 
 <!-- MODAL DATA NASCIMENTO -->

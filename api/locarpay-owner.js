@@ -221,6 +221,23 @@ async function handleRegister(db, body) {
   };
 }
 
+async function handleUpdate(db, body) {
+  const { ownerId, name, phone, cpfCnpj, address, addressNumber, province, postalCode } = body;
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatorio'), { status: 400 });
+  const snap = await db.collection('owners').doc(ownerId).get();
+  if (!snap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
+  const fields = {};
+  if (name          !== undefined) fields.name          = name;
+  if (phone         !== undefined) fields.phone         = phone;
+  if (cpfCnpj       !== undefined) fields.cpfCnpj       = cpfCnpj.replace(/\D/g, '');
+  if (address       !== undefined) fields.address       = address;
+  if (addressNumber !== undefined) fields.addressNumber = addressNumber;
+  if (province      !== undefined) fields.province      = province;
+  if (postalCode    !== undefined) fields.postalCode    = postalCode.replace(/\D/g, '');
+  await snap.ref.update(fields);
+  return { ok: true, ownerId, updated: Object.keys(fields) };
+}
+
 async function handleSetupAsaas(db, body) {
   const { ownerId, birthDate } = body;
   if (!ownerId) throw Object.assign(new Error('ownerId obrigatorio'), { status: 400 });
@@ -698,6 +715,7 @@ export default async function handler(req, res) {
     if (!step && body.event) return res.status(200).json(await handleAsaasWebhook(db, body));
 
     if (step === 'register')       return res.status(201).json(await handleRegister(db, body));
+    if (step === 'update')         return res.status(200).json(await handleUpdate(db, body));
     if (step === 'setup-asaas')    return res.status(200).json(await handleSetupAsaas(db, body));
     if (step === 'migrate')        return res.status(200).json(await handleMigrate(db, body));
     if (step === 'get')            return res.status(200).json(await handleGet(db, body));
