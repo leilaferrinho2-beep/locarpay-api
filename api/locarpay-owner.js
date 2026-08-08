@@ -49,9 +49,13 @@ function toAsaasDate(raw) {
   return undefined;
 }
 
-// Cria subconta Asaas Connect
+// Cria subconta Asaas Connect (requer CNPJ)
 async function createAsaasSubaccount(masterKey, ownerData) {
   const cpfCnpj = (ownerData.cpfCnpj || ownerData.cnpj || '').replace(/\D/g, '');
+  if (cpfCnpj.length !== 14) throw Object.assign(
+    new Error('Asaas exige CNPJ para criar subconta. Cadastre o CNPJ da imobiliária primeiro.'),
+    { status: 400 }
+  );
   const phone   = (ownerData.phone || '').replace(/\D/g, '');
 
   // companyType: MEI | LIMITED | INDIVIDUAL | ASSOCIATION
