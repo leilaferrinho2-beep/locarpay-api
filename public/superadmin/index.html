@@ -230,6 +230,35 @@
   };
   window.closeModal = () => $('modal').classList.remove('open');
 
+  // Modal de data com máscara
+  let _modalDateResolve = null;
+  window.modalDateResolve = (val) => {
+    $('modal-date').style.display = 'none';
+    if (_modalDateResolve) { _modalDateResolve(val); _modalDateResolve = null; }
+  };
+  window.modalDateConfirm = () => {
+    const v = $('modal-date-input').value;
+    if (v.length < 10) { $('modal-date-input').style.borderColor = '#f44'; return; }
+    modalDateResolve(v);
+  };
+  window.maskDateInput = (el) => {
+    let d = el.value.replace(/\D/g,'').slice(0,8);
+    if (d.length > 4) d = d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4);
+    else if (d.length > 2) d = d.slice(0,2)+'/'+d.slice(2);
+    el.value = d;
+    el.style.borderColor = '#444';
+  };
+  function promptDate(label) {
+    return new Promise(resolve => {
+      _modalDateResolve = resolve;
+      $('modal-date-label').textContent = label;
+      $('modal-date-input').value = '';
+      $('modal-date-input').style.borderColor = '#444';
+      $('modal-date').style.display = 'flex';
+      setTimeout(() => $('modal-date-input').focus(), 50);
+    });
+  }
+
   async function adminAction(step, ownerId, confirmMsg) {
     if (confirmMsg && !confirm(confirmMsg)) return;
     try {
@@ -252,7 +281,7 @@
     const cpf = (o?.cpfCnpj || '').replace(/\D/g,'');
     let birthDate = o?.birthDate || '';
     if (cpf.length === 11 && !birthDate) {
-      birthDate = prompt('CPF informado — data de nascimento do responsável (DD/MM/AAAA):') || '';
+      birthDate = await promptDate('Data de nascimento do responsável:');
       if (!birthDate) { toast('Data de nascimento obrigatória para CPF.', 'error'); return; }
     }
     try {
@@ -644,6 +673,20 @@ tbody td { padding: 13px 16px; vertical-align: middle; }
       </table>
     </div>
   </main>
+</div>
+
+<!-- MODAL DATA NASCIMENTO -->
+<div id="modal-date" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;">
+  <div style="background:#1e1e2e;border-radius:12px;padding:28px 32px;min-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.5);">
+    <div style="font-size:15px;color:#ccc;margin-bottom:16px;" id="modal-date-label">Data de nascimento (DD/MM/AAAA):</div>
+    <input id="modal-date-input" type="text" maxlength="10" placeholder="DD/MM/AAAA"
+      style="width:100%;padding:12px 14px;border-radius:8px;border:1.5px solid #444;background:#111;color:#fff;font-size:18px;letter-spacing:2px;box-sizing:border-box;"
+      oninput="maskDateInput(this)">
+    <div style="display:flex;gap:12px;margin-top:20px;justify-content:flex-end;">
+      <button onclick="modalDateResolve(null)" style="padding:10px 22px;border-radius:8px;border:none;background:#333;color:#ccc;cursor:pointer;font-size:14px;">Cancelar</button>
+      <button onclick="modalDateConfirm()" style="padding:10px 22px;border-radius:8px;border:none;background:#6366f1;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">OK</button>
+    </div>
+  </div>
 </div>
 
 <!-- MODAL -->
