@@ -1102,18 +1102,90 @@
     if (!currentOwnerId) return;
     const wrap = $('brokers-list');
     if (!wrap) return;
+    wrap.innerHTML = '<p style="color:#555;font-size:13px">Carregando...</p>';
     const snap = await getDocs(query(collection(db, 'brokers'), where('ownerId', '==', currentOwnerId)));
     const brokers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (!brokers.length) { wrap.innerHTML = '<p style="color:#555;font-size:13px">Nenhum corretor cadastrado.</p>'; return; }
-    wrap.innerHTML = brokers.map(b => `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2d3e">
-        <div>
-          <div style="font-weight:600;font-size:14px">${b.name||'—'}</div>
-          <div style="font-size:12px;color:#888">${b.email} ${b.phone ? '· '+b.phone : ''}</div>
-        </div>
-        <span style="font-size:12px;color:${b.active?'#4CAF50':'#ef5350'}">${b.active?'Ativo':'Inativo'}</span>
-      </div>`).join('');
+    wrap.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;margin-top:4px">
+        <thead>
+          <tr style="border-bottom:1px solid #2a2d3e">
+            <th style="text-align:left;font-size:11px;color:#778;font-weight:600;padding:6px 0;letter-spacing:.4px">NOME</th>
+            <th style="text-align:left;font-size:11px;color:#778;font-weight:600;padding:6px 0;letter-spacing:.4px">E-MAIL / WHATSAPP</th>
+            <th style="text-align:center;font-size:11px;color:#778;font-weight:600;padding:6px 0;letter-spacing:.4px">STATUS</th>
+            <th style="text-align:right;font-size:11px;color:#778;font-weight:600;padding:6px 0;letter-spacing:.4px">AÇÕES</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${brokers.map(b => `
+          <tr style="border-bottom:1px solid #1e2130" id="broker-row-${b.id}">
+            <td style="padding:11px 0;font-weight:600;font-size:14px">${b.name||'—'}</td>
+            <td style="padding:11px 0;font-size:12px;color:#aaa">${b.email}${b.phone ? '<br><span style="color:#666">'+b.phone+'</span>' : ''}</td>
+            <td style="padding:11px 0;text-align:center">
+              <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:${b.active?'#1b3a1b':'#3a1b1b'};color:${b.active?'#4CAF50':'#ef5350'}">${b.active?'Ativo':'Inativo'}</span>
+            </td>
+            <td style="padding:11px 0;text-align:right;white-space:nowrap">
+              <button onclick="openEditBroker('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}','${b.phone||''}',${b.active!==false})"
+                style="background:#1a2a3a;border:1px solid #2a4a6a;color:#64B5F6;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;margin-right:6px">
+                ✏️ Editar
+              </button>
+              <button onclick="deleteBroker('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}')"
+                style="background:#2a1a1a;border:1px solid #5a2a2a;color:#ef5350;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
+                🗑 Excluir
+              </button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
   }
+
+  window.openEditBroker = (id, name, phone, active) => {
+    $('edit-broker-id').value     = id;
+    $('edit-broker-name').value   = name;
+    $('edit-broker-phone').value  = phone;
+    $('edit-broker-active').value = active ? 'true' : 'false';
+    $('modal-edit-broker').style.display = 'flex';
+  };
+
+  window.closeEditBroker = () => {
+    $('modal-edit-broker').style.display = 'none';
+  };
+
+  window.saveEditBroker = async () => {
+    const brokerId = $('edit-broker-id').value;
+    const name     = $('edit-broker-name').value.trim();
+    const phone    = $('edit-broker-phone').value.trim();
+    const active   = $('edit-broker-active').value === 'true';
+    if (!name) { showToast('Nome obrigatório', 'error'); return; }
+    const btn = $('edit-broker-save-btn');
+    btn.disabled = true; btn.textContent = 'Salvando...';
+    try {
+      const res = await fetch('/api/locarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'update-broker', brokerId, name, phone, active })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showToast('Corretor atualizado!', 'success');
+      closeEditBroker();
+      loadBrokers();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Salvar'; }
+  };
+
+  window.deleteBroker = async (brokerId, name) => {
+    if (!confirm(`Excluir o corretor "${name}"?\n\nEsta ação não pode ser desfeita.`)) return;
+    try {
+      const res = await fetch('/api/locarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'delete-broker', brokerId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showToast('Corretor excluído.', 'success');
+      loadBrokers();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+  };
 
   // ── Validação CPF ──────────────────────────────────────────
   function validarCpf(cpf) {
@@ -3604,5 +3676,35 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Modal editar corretor -->
+<div id="modal-edit-broker" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:16px;padding:28px;width:100%;max-width:420px;margin:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h3 style="color:#e0e0e0;font-size:16px;margin:0">✏️ Editar Corretor</h3>
+      <button onclick="closeEditBroker()" style="background:none;border:none;color:#666;font-size:20px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <input type="hidden" id="edit-broker-id">
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">NOME COMPLETO</label>
+      <input id="edit-broker-name" type="text" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">TELEFONE / WHATSAPP</label>
+      <input id="edit-broker-phone" type="tel" oninput="maskPhone(this)" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">STATUS</label>
+      <select id="edit-broker-active" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none">
+        <option value="true">✅ Ativo</option>
+        <option value="false">❌ Inativo</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closeEditBroker()" style="flex:1;background:#0f1117;border:1px solid #2a2d3e;color:#aaa;padding:11px;border-radius:9px;font-size:14px;cursor:pointer">Cancelar</button>
+      <button id="edit-broker-save-btn" onclick="saveEditBroker()" style="flex:2;background:#1565C0;border:none;color:#fff;padding:11px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer">Salvar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

@@ -167,6 +167,32 @@ async function handleRegisterBroker(db, body) {
   return { ok: true, brokerId: id };
 }
 
+// ── UPDATE BROKER ─────────────────────────────────────────────────────────────
+
+async function handleUpdateBroker(db, body) {
+  const { brokerId, name, phone, active } = body;
+  if (!brokerId) throw Object.assign(new Error('brokerId obrigatório'), { status: 400 });
+  const updates = {};
+  if (name  !== undefined) updates.name  = name;
+  if (phone !== undefined) updates.phone = phone;
+  if (active !== undefined) updates.active = active;
+  if (!Object.keys(updates).length) throw Object.assign(new Error('Nenhum campo para atualizar'), { status: 400 });
+  await db.collection('brokers').doc(brokerId).update(updates);
+  // Espelha no users também
+  await db.collection('users').doc(brokerId).update(updates).catch(() => {});
+  return { ok: true, brokerId };
+}
+
+// ── DELETE BROKER ─────────────────────────────────────────────────────────────
+
+async function handleDeleteBroker(db, body) {
+  const { brokerId } = body;
+  if (!brokerId) throw Object.assign(new Error('brokerId obrigatório'), { status: 400 });
+  await db.collection('brokers').doc(brokerId).delete();
+  await db.collection('users').doc(brokerId).delete().catch(() => {});
+  return { ok: true, brokerId };
+}
+
 // ── SUBMIT LEAD ───────────────────────────────────────────────────────────────
 
 async function handleSubmitLead(db, body) {
@@ -558,6 +584,8 @@ export default async function handler(req, res) {
     const { step } = req.body || {};
     let result;
     if      (step === 'register-broker')   result = await handleRegisterBroker(db, req.body);
+    else if (step === 'update-broker')     result = await handleUpdateBroker(db, req.body);
+    else if (step === 'delete-broker')     result = await handleDeleteBroker(db, req.body);
     else if (step === 'submit-lead')       result = await handleSubmitLead(db, req.body);
     else if (step === 'approve-lead')      result = await handleApproveLead(db, req.body);
     else if (step === 'generate-contract') result = await handleGenerateContract(db, req.body);
