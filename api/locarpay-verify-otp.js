@@ -132,19 +132,22 @@ async function handleGoogleLogin(req, res, idToken) {
     const email = (decoded.email || '').toLowerCase();
     if (!email) return res.status(400).json({ error: 'Email não disponível no token' });
 
-    const [licenseDoc, ownerSnap, tenantSnap] = await Promise.all([
+    const [licenseDoc, ownerSnap, tenantSnap, brokerSnap] = await Promise.all([
       db.collection('licenses').doc(email).get(),
       db.collection('owners').where('email', '==', email).limit(1).get(),
-      db.collection('users').where('email', '==', email).limit(1).get()
+      db.collection('users').where('email', '==', email).limit(1).get(),
+      db.collection('brokers').where('email', '==', email).limit(1).get()
     ]);
 
     const hasLicense = licenseDoc.exists && licenseDoc.data().active === true;
     const ownerDoc   = ownerSnap.empty ? null : ownerSnap.docs[0];
     const isAdmin    = hasLicense || !!ownerDoc;
+    const brokerData = brokerSnap.empty ? null : brokerSnap.docs[0].data();
+    const isBroker   = brokerData !== null && brokerData.active !== false;
 
     const tenantData = tenantSnap.empty ? null : tenantSnap.docs[0].data();
 
-    if (!isAdmin) {
+    if (!isAdmin && !isBroker) {
       if (!tenantData || tenantData.suspended === true) {
         await auth.revokeRefreshTokens(uid);
         return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com a imobiliária.' });
@@ -154,13 +157,13 @@ async function handleGoogleLogin(req, res, idToken) {
     let role = 'tenant';
     if (isAdmin) {
       role = 'admin';
-    } else if (tenantData?.role === 'broker' || tenantData?.role === 'corretor') {
+    } else if (isBroker || tenantData?.role === 'broker' || tenantData?.role === 'corretor') {
       role = 'corretor';
     }
 
     const ownerId = ownerDoc
       ? ownerDoc.id
-      : (tenantData?.ownerId || null);
+      : (brokerData?.ownerId || tenantData?.ownerId || null);
 
     await auth.setCustomUserClaims(uid, { role, ownerId: ownerId || '' });
 
