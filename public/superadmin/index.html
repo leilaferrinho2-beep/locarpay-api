@@ -316,6 +316,21 @@
       loadOwners();
     } catch(e) { toast('Erro: ' + e.message, 'error'); }
   };
+  window.maskCepInput = async (el) => {
+    let d = el.value.replace(/\D/g,'').slice(0,8);
+    el.value = d.length > 5 ? d.slice(0,5)+'-'+d.slice(5) : d;
+    if (d.length === 8) {
+      try {
+        const r = await fetch(`https://viacep.com.br/ws/${d}/json/`);
+        const j = await r.json();
+        if (!j.erro) {
+          $('edit-address').value  = j.logradouro || '';
+          $('edit-province').value = j.bairro     || '';
+        }
+      } catch(_) {}
+    }
+  };
+
   window.maskCpfCnpj = (el) => {
     let d = el.value.replace(/\D/g,'').slice(0,14);
     if (d.length <= 11) {
@@ -761,7 +776,7 @@ tbody td { padding: 13px 16px; vertical-align: middle; }
           <input id="edit-province" type="text" style="display:block;width:100%;margin-top:4px;padding:10px 12px;border-radius:8px;border:1.5px solid #444;background:#111;color:#fff;font-size:14px;box-sizing:border-box;">
         </label>
         <label style="color:#aaa;font-size:13px;">CEP
-          <input id="edit-cep" type="text" maxlength="9" style="display:block;width:100%;margin-top:4px;padding:10px 12px;border-radius:8px;border:1.5px solid #444;background:#111;color:#fff;font-size:14px;box-sizing:border-box;">
+          <input id="edit-cep" type="text" maxlength="9" oninput="maskCepInput(this)" style="display:block;width:100%;margin-top:4px;padding:10px 12px;border-radius:8px;border:1.5px solid #444;background:#111;color:#fff;font-size:14px;box-sizing:border-box;">
         </label>
       </div>
     </div>
