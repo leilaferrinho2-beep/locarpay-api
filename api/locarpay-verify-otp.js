@@ -94,7 +94,8 @@ export default async function handler(req, res) {
     }
 
     const isAdmin = hasLicense || !!ownerDoc;
-    const role = isAdmin ? 'admin' : userRole;
+    const mappedRole = (userRole === 'broker' || userRole === 'corretor') ? 'corretor' : userRole;
+    const role = isAdmin ? 'admin' : mappedRole;
 
     // ownerId: para owners é o próprio doc ID; para tenants busca no users
     let ownerId = null;
