@@ -74,11 +74,18 @@ export default async function handler(req, res) {
     const temOwner   = !ownerSnap.empty;
 
     // Corretor cadastrado diretamente na coleção brokers
-    const temBroker  = !brokerSnap.empty && brokerSnap.docs[0].data().active !== false;
+    const brokerData = brokerSnap.empty ? null : brokerSnap.docs[0].data();
+    const temBroker  = brokerData !== null && brokerData.active !== false;
 
     // Inquilino: deve existir e nao estar suspenso/excluido
     const tenantDoc   = tenantSnap.empty ? null : tenantSnap.docs[0].data();
     const temCadastro = tenantDoc !== null && tenantDoc.suspended !== true;
+
+    console.log('[send-otp] email:', emailNorm,
+      '| licenca:', temLicenca,
+      '| owner:', temOwner,
+      '| broker:', temBroker, brokerData ? `(active=${brokerData.active})` : '(not found)',
+      '| cadastro:', temCadastro, tenantDoc ? `(role=${tenantDoc.role} suspended=${tenantDoc.suspended})` : '(not found)');
 
     if (!temLicenca && !temOwner && !temBroker && !temCadastro) {
       return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com a imobiliária.' });
