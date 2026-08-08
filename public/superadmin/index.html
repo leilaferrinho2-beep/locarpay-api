@@ -346,18 +346,11 @@
   window.activateOwner = id  => adminAction('activate-owner', id);
   window.suspendOwner  = id  => adminAction('suspend-owner',  id, 'Suspender esta imobiliaria?');
   window.setupAsaas = async (id) => {
-    const o = owners.find(x => x.ownerId === id);
-    const cpf = (o?.cpfCnpj || '').replace(/\D/g,'');
-    let birthDate = o?.birthDate || '';
-    if (cpf.length === 11 && !birthDate) {
-      birthDate = await promptDate('Data de nascimento do responsável:');
-      if (!birthDate) { toast('Data de nascimento obrigatória para CPF.', 'error'); return; }
-    }
     try {
       const r = await fetch('/api/locarpay-owner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'setup-asaas', ownerId: id, birthDate })
+        body: JSON.stringify({ step: 'setup-asaas', ownerId: id })
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
