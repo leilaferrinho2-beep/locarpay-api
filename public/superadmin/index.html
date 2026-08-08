@@ -247,7 +247,26 @@
 
   window.activateOwner = id  => adminAction('activate-owner', id);
   window.suspendOwner  = id  => adminAction('suspend-owner',  id, 'Suspender esta imobiliaria?');
-  window.setupAsaas    = id  => adminAction('setup-asaas',    id);
+  window.setupAsaas = async (id) => {
+    const o = owners.find(x => x.ownerId === id);
+    const cpf = (o?.cpfCnpj || '').replace(/\D/g,'');
+    let birthDate = o?.birthDate || '';
+    if (cpf.length === 11 && !birthDate) {
+      birthDate = prompt('CPF informado — data de nascimento do responsável (DD/MM/AAAA):') || '';
+      if (!birthDate) { toast('Data de nascimento obrigatória para CPF.', 'error'); return; }
+    }
+    try {
+      const r = await fetch('/api/locarpay-owner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'setup-asaas', ownerId: id, birthDate })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      toast('Subconta Asaas criada!', 'ok');
+      loadOwners();
+    } catch(e) { toast('Erro: ' + e.message, 'error'); }
+  };
   window.deleteOwner   = (id, name) => adminAction('delete-owner', id,
     'Excluir permanentemente "' + name + '"?\nEsta acao nao pode ser desfeita.');
 
@@ -272,14 +291,18 @@
     'Cancelar assinatura e suspender imobiliaria?');
 
   window.addOwner = async () => {
-    const name  = prompt('Nome da imobiliária:'); if (!name) return;
-    const email = prompt('E-mail:');                   if (!email) return;
-    const phone = prompt('Telefone (opcional):') || '';
+    const name      = prompt('Nome da imobiliária:');        if (!name) return;
+    const email     = prompt('E-mail:');                     if (!email) return;
+    const phone     = prompt('Telefone (opcional):') || '';
+    const cpfCnpj   = prompt('CPF ou CNPJ (opcional):') || '';
+    const birthDate = cpfCnpj.replace(/\D/g,'').length === 11
+      ? prompt('Data de nascimento do responsável (DD/MM/AAAA):') || ''
+      : '';
     try {
       const r = await fetch('/api/locarpay-owner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'register', name, email, phone, plan: 'trial' })
+        body: JSON.stringify({ step: 'register', name, email, phone, cpfCnpj, birthDate, plan: 'trial' })
       });
       const d = await r.json();
       if (!r.ok && r.status !== 409) throw new Error(d.error);
