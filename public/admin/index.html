@@ -1103,8 +1103,14 @@
     const wrap = $('brokers-list');
     if (!wrap) return;
     wrap.innerHTML = '<p style="color:#555;font-size:13px">Carregando...</p>';
-    const snap = await getDocs(query(collection(db, 'brokers'), where('ownerId', '==', currentOwnerId)));
-    const brokers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    let brokers = [];
+    try {
+      const snap = await getDocs(query(collection(db, 'brokers'), where('ownerId', '==', currentOwnerId)));
+      brokers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      wrap.innerHTML = `<p style="color:#ef5350;font-size:13px">Erro ao carregar corretores: ${e.message}</p>`;
+      return;
+    }
     if (!brokers.length) { wrap.innerHTML = '<p style="color:#555;font-size:13px">Nenhum corretor cadastrado.</p>'; return; }
     wrap.innerHTML = `
       <table style="width:100%;border-collapse:collapse;margin-top:4px">
