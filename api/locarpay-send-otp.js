@@ -62,21 +62,25 @@ export default async function handler(req, res) {
 
     const emailNorm = email.trim().toLowerCase();
 
-    // Verifica se é admin (licença, owner) ou inquilino cadastrado — Admin SDK bypassa as regras do Firestore
-    const [licenseDoc, ownerSnap, tenantSnap] = await Promise.all([
+    // Verifica se é admin (licença, owner), corretor ou inquilino cadastrado — Admin SDK bypassa as regras do Firestore
+    const [licenseDoc, ownerSnap, tenantSnap, brokerSnap] = await Promise.all([
       db.collection('licenses').doc(emailNorm).get(),
       db.collection('owners').where('email', '==', emailNorm).limit(1).get(),
-      db.collection('users').where('email', '==', emailNorm).limit(1).get()
+      db.collection('users').where('email', '==', emailNorm).limit(1).get(),
+      db.collection('brokers').where('email', '==', emailNorm).limit(1).get()
     ]);
 
     const temLicenca = licenseDoc.exists && licenseDoc.data().active === true;
     const temOwner   = !ownerSnap.empty;
 
+    // Corretor cadastrado diretamente na coleção brokers
+    const temBroker  = !brokerSnap.empty && brokerSnap.docs[0].data().active !== false;
+
     // Inquilino: deve existir e nao estar suspenso/excluido
-    const tenantDoc  = tenantSnap.empty ? null : tenantSnap.docs[0].data();
+    const tenantDoc   = tenantSnap.empty ? null : tenantSnap.docs[0].data();
     const temCadastro = tenantDoc !== null && tenantDoc.suspended !== true;
 
-    if (!temLicenca && !temOwner && !temCadastro) {
+    if (!temLicenca && !temOwner && !temBroker && !temCadastro) {
       return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com a imobiliária.' });
     }
 
