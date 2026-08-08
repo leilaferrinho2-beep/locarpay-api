@@ -191,7 +191,7 @@
         + '<button class="act act-view" onclick="viewOwner(\'' + esc(o.ownerId) + '\')">Ver</button>'
         + (o.status !== 'active'    ? '<button class="act act-ok"   onclick="activateOwner(\'' + esc(o.ownerId) + '\')">Ativar</button>' : '')
         + (o.status !== 'suspended' ? '<button class="act act-warn" onclick="suspendOwner(\'' + esc(o.ownerId) + '\')">Suspender</button>' : '')
-        + (!o.asaasConfigured       ? '<button class="act act-blue" onclick="setupAsaas(\'' + esc(o.ownerId) + '\')">Criar Asaas</button>' : '')
+        + (!o.asaasConfigured ? ((o.cpfCnpj||'').replace(/\D/g,'').length===14 ? '<button class="act act-blue" onclick="setupAsaas(\'' + esc(o.ownerId) + '\')">Criar Asaas</button>' : '<span title="Asaas requer CNPJ" style="color:#f90;font-size:12px;padding:4px 8px;">⚠ Sem CNPJ</span>') : '')
         + '<button class="act act-del" onclick="deleteOwner(\'' + esc(o.ownerId) + '\',\'' + esc(o.name) + '\')">Excluir</button>'
         + '</td></tr>';
     }).join('');
