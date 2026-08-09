@@ -803,9 +803,15 @@
     if (!currentOwnerId) return;
     const tbody = $('leads-tbody');
     if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="empty">Carregando...</td></tr>';
-    const snap = await getDocs(query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId), orderBy('createdAt', 'desc')));
-    leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderLeads();
+    try {
+      const snap = await getDocs(query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId)));
+      leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      leads.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      renderLeads();
+    } catch (e) {
+      console.error('loadLeads:', e);
+      if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="empty" style="color:#ef5350">Erro ao carregar leads: ${e.message}</td></tr>`;
+    }
   }
 
   function renderLeads() {
