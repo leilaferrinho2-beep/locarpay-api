@@ -52,6 +52,23 @@ async function sendEmail(to, subject, html) {
   await transporter.sendMail({ from: 'iLocarPay <denis@dlftech.com.br>', to, subject, html });
 }
 
+async function sendWhatsApp(phone, message) {
+  const baseUrl  = process.env.EVOLUTION_API_URL;
+  const apiKey   = process.env.EVOLUTION_API_KEY;
+  const instance = process.env.EVOLUTION_INSTANCE;
+  if (!baseUrl || !apiKey || !instance || !phone) return;
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 10) return;
+  const number = digits.startsWith('55') ? digits : `55${digits}`;
+  try {
+    await fetch(`${baseUrl}/message/sendText/${instance}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
+      body: JSON.stringify({ number, text: message })
+    });
+  } catch (e) { console.warn('[whatsapp]', e.message); }
+}
+
 async function sendPush(db, tenantId, title, body) {
   try {
     const snap = await db.collection('users').doc(tenantId).get();
@@ -196,7 +213,7 @@ async function handleDeleteBroker(db, body) {
 // ── SUBMIT LEAD ───────────────────────────────────────────────────────────────
 
 async function handleSubmitLead(db, body) {
-  const { ownerId, brokerEmail, brokerName, tenant, spouse, property, guarantee, docs, propertyCode, propertyDescription } = body;
+  const { ownerId, brokerEmail, brokerName, tenant, spouse, landlord, property, guarantee, docs, propertyCode, propertyDescription } = body;
   if (!ownerId || !tenant?.email) throw Object.assign(new Error('Dados obrigatórios ausentes'), { status: 400 });
 
   const leadRef = db.collection('leads').doc();
@@ -220,6 +237,12 @@ async function handleSubmitLead(db, body) {
       income:         tenant.income         || '',
       employmentType: tenant.employmentType || ''
     },
+    landlord: landlord ? {
+      name:  landlord.name  || '',
+      cpf:   landlord.cpf   || '',
+      email: (landlord.email || '').toLowerCase().trim(),
+      phone: landlord.phone  || ''
+    } : null,
     spouse:   spouse   || null,
     property: property || null,
     guarantee: guarantee || null,
@@ -319,14 +342,21 @@ async function handleApproveLead(db, body) {
     updatedAt:           FieldValue.serverTimestamp()
   });
 
+  // Usa dados do proprietário do imóvel (landlord) ou fallback para o owner (imobiliária)
+  const landlord = lead.landlord || {};
+  const landlordName  = landlord.name  || owner.name  || '';
+  const landlordEmail = landlord.email || owner.email || '';
+  const landlordCpf   = landlord.cpf   || owner.cpf   || owner.cnpj || '';
+  const landlordPhone = landlord.phone || owner.phone || '';
+
   // Gera contrato no Assinafy
   let assinafyResult = null;
   try {
     assinafyResult = await createAssinafyContract(db, contractId, {
       contractId,
-      ownerName:    owner.name,
-      ownerEmail:   owner.email,
-      ownerCpf:     owner.cpf || owner.cnpj || '',
+      ownerName:    landlordName,
+      ownerEmail:   landlordEmail,
+      ownerCpf:     landlordCpf,
       tenantName:   lead.tenant.name,
       tenantEmail,
       tenantCpf:    lead.tenant.cpf,
@@ -383,6 +413,24 @@ async function handleApproveLead(db, body) {
       </div>
     `);
   } catch (e) { console.warn('[approve-lead] email error:', e.message); }
+
+  // WhatsApp para o proprietário do imóvel
+  if (landlordPhone) {
+    const prop = lead.property || {};
+    const addr = [prop.street, prop.number, prop.city].filter(Boolean).join(', ') || lead.propertyDescription || 'imóvel';
+    await sendWhatsApp(landlordPhone,
+      `Olá, ${landlordName}! 🏠\n\nA locação do imóvel *${addr}* foi aprovada pela imobiliária.\n\nVocê receberá um e-mail da Assinafy para assinar o contrato digitalmente. Por favor, verifique sua caixa de entrada (${landlordEmail}).\n\n— iLocarPay`
+    );
+  }
+
+  // WhatsApp para o inquilino
+  if (lead.tenant.phone) {
+    const prop = lead.property || {};
+    const addr = [prop.street, prop.number, prop.city].filter(Boolean).join(', ') || lead.propertyDescription || 'imóvel';
+    await sendWhatsApp(lead.tenant.phone,
+      `Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉\n\nSua locação do imóvel *${addr}* foi aprovada!\n\nVocê receberá um e-mail para assinar o contrato digitalmente. Verifique sua caixa de entrada (${tenantEmail}).\n\nBaixe o app iLocarPay para acompanhar tudo:\nhttps://www.ilocarpay.com.br/download/locarpay-v82.apk\n\n— iLocarPay`
+    );
+  }
 
   // Notifica corretor
   if (lead.brokerEmail) {
