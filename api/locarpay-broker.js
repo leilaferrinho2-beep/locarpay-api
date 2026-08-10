@@ -275,7 +275,7 @@ async function handleSubmitLead(db, body) {
 // ── APPROVE LEAD ──────────────────────────────────────────────────────────────
 
 async function handleApproveLead(db, body) {
-  const { leadId, contractData } = body;
+  const { leadId, contractData, landlordOverride } = body;
   if (!leadId) throw Object.assign(new Error('leadId obrigatório'), { status: 400 });
 
   const leadRef  = db.collection('leads').doc(leadId);
@@ -342,12 +342,17 @@ async function handleApproveLead(db, body) {
     updatedAt:           FieldValue.serverTimestamp()
   });
 
-  // Usa dados do proprietário do imóvel (landlord) ou fallback para o owner (imobiliária)
-  const landlord = lead.landlord || {};
-  const landlordName  = landlord.name  || owner.name  || '';
-  const landlordEmail = landlord.email || owner.email || '';
-  const landlordCpf   = landlord.cpf   || owner.cpf   || owner.cnpj || '';
-  const landlordPhone = landlord.phone || owner.phone || '';
+  // Usa dados do proprietário: override do modal > lead.landlord > fallback owner
+  const landlordSrc = landlordOverride?.name ? landlordOverride : (lead.landlord || {});
+  const landlordName  = landlordSrc.name  || owner.name  || '';
+  const landlordEmail = landlordSrc.email || owner.email || '';
+  const landlordCpf   = landlordSrc.cpf   || owner.cpf   || owner.cnpj || '';
+  const landlordPhone = landlordSrc.phone || owner.phone || '';
+
+  // Se override fornecido, salva no lead para uso futuro
+  if (landlordOverride?.name) {
+    await leadRef.update({ landlord: landlordOverride });
+  }
 
   // Gera contrato no Assinafy
   let assinafyResult = null;
