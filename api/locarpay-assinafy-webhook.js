@@ -197,9 +197,12 @@ async function handleAsaasPayment(db, payment) {
   const landlordPhone = contract.landlordPhone || charge.landlordPhone || null;
   const brokerPhone   = contract.brokerPhone  || charge.brokerPhone   || contract.corretorPhone || null;
 
-  const msgTenant  = `✅ *iLocarPay* — Pagamento confirmado!\n\nRecebemos seu pagamento de *${valor}* referente ao aluguel de *${periodo}* do imóvel ${endereco}.\n\nObrigado! 🏠`;
-  const msgOwner   = `💰 *iLocarPay* — Aluguel recebido!\n\nO inquilino *${tenantName}* realizou o pagamento de *${valor}* ref. ${periodo} — imóvel: ${endereco}.\n\nO repasse será processado em até 2 dias úteis.`;
-  const msgBroker  = `📋 *iLocarPay* — Pagamento confirmado\n\n*Inquilino:* ${tenantName}\n*Valor:* ${valor}\n*Período:* ${periodo}\n*Imóvel:* ${endereco}\n\nCobrança ID: ${chargeId}`;
+  const billingTypeMap = { PIX: 'PIX', CREDIT_CARD: 'Cartão de crédito', DEBIT_CARD: 'Cartão de débito', BOLETO: 'Boleto' };
+  const meio = billingTypeMap[payment.billingType] || payment.billingType || 'não informado';
+
+  const msgTenant  = `✅ *iLocarPay* — Pagamento confirmado!\n\nRecebemos seu pagamento de *${valor}* via *${meio}* referente ao aluguel de *${periodo}* do imóvel ${endereco}.\n\nObrigado! 🏠`;
+  const msgOwner   = `💰 *iLocarPay* — Aluguel recebido!\n\nO inquilino *${tenantName}* realizou o pagamento de *${valor}* via *${meio}* ref. ${periodo} — imóvel: ${endereco}.\n\nO repasse será processado em até 2 dias úteis.`;
+  const msgBroker  = `📋 *iLocarPay* — Pagamento confirmado\n\n*Inquilino:* ${tenantName}\n*Valor:* ${valor}\n*Meio:* ${meio}\n*Período:* ${periodo}\n*Imóvel:* ${endereco}\n\nCobrança ID: ${chargeId}`;
 
   await Promise.all([
     sendWhatsApp(tenantPhone,   msgTenant),
