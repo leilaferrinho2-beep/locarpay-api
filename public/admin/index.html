@@ -7,7 +7,7 @@
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, signInWithPopup, signInWithRedirect, signInWithCustomToken, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-  import { getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, serverTimestamp, query, where, orderBy, limit, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, query, where, orderBy, limit, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
   const MASTER_EMAIL = 'denisfelicio20@gmail.com';
 
@@ -1035,8 +1035,7 @@
   window.removeLead = async (leadId) => {
     if (!confirm('Tem certeza que deseja remover este lead? Esta ação não pode ser desfeita.')) return;
     try {
-      const db = firebase.firestore();
-      await db.collection('leads').doc(leadId).delete();
+      await deleteDoc(doc(db, 'leads', leadId));
       showToast('Lead removido.', 'info');
       await loadLeads();
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
