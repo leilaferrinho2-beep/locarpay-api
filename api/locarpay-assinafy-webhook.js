@@ -9,6 +9,24 @@ const ASSINAFY   = 'https://api.assinafy.com.br/v1';
 const FB_PROJECT = 'locarpayapp';
 const BUCKET     = `${FB_PROJECT}.appspot.com`;
 
+async function sendWhatsApp(phone, text) {
+  const url  = process.env.EVOLUTION_API_URL;
+  const key  = process.env.EVOLUTION_API_KEY;
+  const inst = process.env.EVOLUTION_INSTANCE;
+  if (!url || !key || !inst || !phone) return;
+  const number = phone.replace(/\D/g, '');
+  if (number.length < 10) return;
+  try {
+    await fetch(`${url}/message/sendText/${inst}`, {
+      method: 'POST',
+      headers: { 'apikey': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number, text })
+    });
+  } catch (e) {
+    console.warn('[whatsapp] falha ao enviar:', e.message);
+  }
+}
+
 function initAdmin() {
   if (getApps().length > 0) return;
   initializeApp({
@@ -194,6 +212,15 @@ export default async function handler(req, res) {
         const { storagePath, documentHash } = await archiveSignedPdf(apiKey, documentId, contractId);
         if (storagePath) updates.signedStoragePath = storagePath;
         if (documentHash) updates.documentHash = documentHash;
+        // Notifica todas as partes que o contrato está concluído
+        const endereco   = contractData.address    || contractData.endereco || 'o imóvel';
+        const tenantName = contractData.tenantName || contractData.inquilinoNome || 'Inquilino';
+        const msgConcluido = `🎉 *iLocarPay*: Contrato de locação do imóvel ${endereco} assinado por todas as partes! Acesse o app para visualizar o documento.`;
+        await Promise.all([
+          sendWhatsApp(contractData.landlordPhone, msgConcluido),
+          sendWhatsApp(contractData.brokerPhone || contractData.corretorPhone, msgConcluido),
+          sendWhatsApp(contractData.tenantPhone || contractData.inquilinoPhone, msgConcluido)
+        ]);
       } else {
         console.warn('[assinafy-webhook] API key Assinafy não encontrada — audit trail e PDF não arquivados');
       }
@@ -222,6 +249,15 @@ export default async function handler(req, res) {
       };
       updates.auditTrail = FieldValue.arrayUnion(auditEvent);
       console.log(`[assinafy-webhook] signatário assinou contrato ${contractId} (step=${step})`);
+
+      // Notifica proprietário e corretor que o inquilino assinou
+      const tenantName = contractData.tenantName || contractData.inquilinoNome || 'O inquilino';
+      const endereco   = contractData.address    || contractData.endereco      || 'o imóvel';
+      const msg = `✅ *iLocarPay*: ${tenantName} assinou o contrato de locação do imóvel ${endereco}. Acesse o app para verificar.`;
+      await Promise.all([
+        sendWhatsApp(contractData.landlordPhone, msg),
+        sendWhatsApp(contractData.brokerPhone   || contractData.corretorPhone, msg)
+      ]);
 
     } else {
       console.log(`[assinafy-webhook] evento '${event}' não mapeado`);
