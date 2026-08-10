@@ -392,7 +392,7 @@
   // ── Inadimplentes ──────────────────────────────────────────
   let overdueCharges = [];
 
-  async function loadOverdue() {
+  window.loadOverdue = async function loadOverdue() {
     $('overdue-tbody').innerHTML = '<tr><td colspan="6" class="empty">Carregando...</td></tr>';
     try {
       const q = currentOwnerId
@@ -1302,6 +1302,67 @@
     });
   })();
 
+  // ── Helpers de máscara para campos do modal ───────────────
+  window.maskDateInput = (el) => {
+    let v = el.value.replace(/\D/g,'').slice(0,8);
+    if (v.length > 4) v = v.slice(0,2) + '/' + v.slice(2,4) + '/' + v.slice(4);
+    else if (v.length > 2) v = v.slice(0,2) + '/' + v.slice(2);
+    el.value = v;
+  };
+
+  window.selectGuarantee = (type) => {
+    $('t-guarantee').value = type;
+    ['caucao','fiador','seguro','sem'].forEach(id => $('g-'+id)?.classList.remove('selected'));
+    const map = {'Caução':'caucao','Fiador':'fiador','Seguro Fiança':'seguro','Sem Garantia':'sem'};
+    $('g-' + map[type])?.classList.add('selected');
+    $('t-guarantor-block').style.display = type === 'Fiador' ? 'block' : 'none';
+  };
+
+  // CEP lookup para endereço atual do inquilino
+  window.lookupCepTenant = async (raw) => {
+    const digits = raw.replace(/\D/g,'');
+    if (digits.length !== 8) return;
+    $('t-curr-cep-status').textContent = '⏳';
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const d = await r.json();
+      if (!d.erro) {
+        $('t-curr-street').value = d.logradouro || '';
+        $('t-curr-bairro').value = d.bairro     || '';
+        $('t-curr-city').value   = d.localidade || '';
+        $('t-curr-uf').value     = d.uf         || '';
+        $('t-curr-cep-status').textContent = '✅';
+      } else { $('t-curr-cep-status').textContent = '❌'; }
+    } catch { $('t-curr-cep-status').textContent = '❌'; }
+  };
+
+  window.toggleAssinafyFields = (on) => {
+    $('assinafy-fields') && ($('assinafy-fields').style.display = on ? 'block' : 'none');
+  };
+  window.toggleModalExpand = (boxId) => {
+    const box = $(boxId);
+    if (!box) return;
+    const isExpanded = box.dataset.expanded === '1';
+    if (isExpanded) {
+      box.style.width = ''; box.style.maxWidth = ''; box.style.height = ''; box.style.maxHeight = '';
+      box.dataset.expanded = '0';
+    } else {
+      box.style.width = '95vw'; box.style.maxWidth = '95vw'; box.style.height = '92vh'; box.style.maxHeight = '92vh';
+      box.dataset.expanded = '1';
+    }
+  };
+  window.maskCpfInput = (el) => {
+    let v = el.value.replace(/\D/g,'').slice(0,11);
+    v = v.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2');
+    el.value = v;
+  };
+  window.maskPhoneInput = (el) => {
+    let v = el.value.replace(/\D/g,'').slice(0,11);
+    if (v.length > 2) v = '(' + v.slice(0,2) + ') ' + v.slice(2);
+    if (v.replace(/\D/g,'').length > 7) v = v.slice(0,v.length-4) + '-' + v.slice(-4);
+    el.value = v;
+  };
+
   // ── Cadastrar inquilino ────────────────────────────────────
 
   async function saveTenant() {
@@ -1322,35 +1383,69 @@
     const uf      = $('t-uf').value.trim();
     const compl   = $('t-complemento').value.trim();
 
-    if (!name || !email || isNaN(rent) || isNaN(dueDay)) {
-      showToast('Preencha todos os campos obrigatórios', 'error');
-      return;
-    }
-    if (!propCode) {
-      showToast('Código do imóvel obrigatório', 'error');
-      $('t-prop-code').focus();
-      return;
-    }
+    // Campos pessoais extras
+    const birthDate    = $('t-birth')?.value.trim()  || '';
+    const maritalStatus = $('t-marital')?.value      || 'Solteiro(a)';
+    const rg           = $('t-rg')?.value.trim()     || '';
+    const rgIssuer     = $('t-rg-issuer')?.value.trim() || '';
+    const profession   = $('t-profession')?.value.trim() || '';
+    const income       = parseBRL($('t-income')?.value || '');
+    // Endereço atual do inquilino
+    const currCep      = ($('t-curr-cep')?.value || '').replace(/\D/g,'');
+    const currNum      = $('t-curr-num')?.value.trim()    || '';
+    const currStreet   = $('t-curr-street')?.value.trim() || '';
+    const currBairro   = $('t-curr-bairro')?.value.trim() || '';
+    const currCity     = $('t-curr-city')?.value.trim()   || '';
+    const currUf       = $('t-curr-uf')?.value.trim()     || '';
+    const currCompl    = $('t-curr-compl')?.value.trim()  || '';
+    // Imóvel extras
+    const purpose      = $('t-purpose')?.value  || 'Residencial';
+    const condoVal     = parseBRL($('t-condo')?.value || '');
+    const iptuVal      = parseBRL($('t-iptu')?.value  || '');
+    // Garantia
+    const guaranteeType = $('t-guarantee')?.value || 'Caução';
+    const guarantorName = $('t-gu-name')?.value.trim()  || '';
+    const guarantorCpf  = ($('t-gu-cpf')?.value || '').replace(/\D/g,'');
+    const guarantorPhone = ($('t-gu-phone')?.value || '').replace(/\D/g,'');
+    const guarantorProf  = $('t-gu-profession')?.value.trim() || '';
+    // Proprietário e contrato digital
+    const llName  = $('t-ll-name')?.value.trim()  || '';
+    const llEmail = $('t-ll-email')?.value.trim().toLowerCase() || '';
+    const llCpf   = ($('t-ll-cpf')?.value || '').replace(/\D/g,'');
+    const llPhone = ($('t-ll-phone')?.value || '').replace(/\D/g,'');
+    const startDateRaw = $('t-start')?.value || '';  // YYYY-MM-DD
+    const duration     = parseInt($('t-duration')?.value || '12');
+    const deposit      = parseBRL($('t-deposit')?.value || '');
+
+    if (!name || !email) { showToast('Nome e e-mail são obrigatórios', 'error'); return; }
+    if (phone.length < 10) { showToast('WhatsApp do inquilino obrigatório', 'error'); return; }
+    if (cpf.length < 11) { showToast('CPF do inquilino obrigatório', 'error'); return; }
+    if (cpf && !validarCpf(cpf)) { showToast('CPF do inquilino inválido', 'error'); $('t-cpf').focus(); return; }
+    if (!birthDate || birthDate.replace(/\D/g,'').length < 8) { showToast('Data de nascimento obrigatória', 'error'); return; }
+    if (!currNum) { showToast('Número do endereço atual obrigatório', 'error'); return; }
+    if (!propCode) { showToast('Código do imóvel obrigatório', 'error'); $('t-prop-code').focus(); return; }
     const codeInUse = contracts.some(c => c.ownerId === currentOwnerId && (c.propertyCode || '').toUpperCase() === propCode);
-    if (codeInUse) {
-      showToast(`Código "${propCode}" já está em uso nesta imobiliária`, 'error');
-      $('t-prop-code').focus();
-      return;
+    if (codeInUse) { showToast(`Código "${propCode}" já está em uso`, 'error'); $('t-prop-code').focus(); return; }
+    if (isNaN(rent) || rent <= 0) { showToast('Aluguel inválido', 'error'); return; }
+    if (isNaN(dueDay)) { showToast('Dia de vencimento obrigatório', 'error'); return; }
+    if (cep.length !== 8 || !cepValido) { showToast('CEP do imóvel inválido', 'error'); $('t-cep').focus(); return; }
+    if (!num) { showToast('Número do imóvel obrigatório', 'error'); return; }
+    if (!startDateRaw) { showToast('Data de início do contrato obrigatória', 'error'); $('t-start').focus(); return; }
+    if (!llName || !llEmail || llCpf.length < 11 || llPhone.length < 10) {
+      showToast('Preencha todos os dados do proprietário do imóvel', 'error'); return;
     }
-    if (cep.length !== 8 || !cepValido) {
-      showToast('CEP inválido — aguarde a busca ou verifique o CEP digitado', 'error');
-      $('t-cep').focus();
-      return;
-    }
-    if (!num) {
-      showToast('Número do imóvel obrigatório', 'error');
-      $('t-num').focus();
-      return;
-    }
-    if (cpf && !validarCpf(cpf)) {
-      showToast('CPF inválido — verifique os dígitos', 'error');
-      $('t-cpf').focus();
-      return;
+
+    // Calcula endDate a partir de startDate + duration
+    let startDateFmt = '';
+    let endDateFmt   = '';
+    if (startDateRaw) {
+      const [y, m, d] = startDateRaw.split('-').map(Number);
+      startDateFmt = `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`;
+      let em = m + duration - 1, ey = y + Math.floor(em / 12);
+      em = em % 12 || 12; if (em === 12 && m + duration - 1 > 0 && (m + duration - 1) % 12 === 0) ey--;
+      // simpler: add months
+      const ed = new Date(y, m - 1 + duration - 1, d);
+      endDateFmt = `${String(ed.getDate()).padStart(2,'0')}/${String(ed.getMonth()+1).padStart(2,'0')}/${ed.getFullYear()}`;
     }
     if (!currentOwnerId) {
       showToast('Owner não identificado. Faça login novamente.', 'error');
@@ -1376,8 +1471,14 @@
       await setDoc(userRef, {
         id: userRef.id,
         name, email,
-        phone:      phone || '',
-        cpf:        cpf   || '',
+        phone:          phone || '',
+        cpf:            cpf   || '',
+        birthDate:      birthDate || '',
+        maritalStatus:  maritalStatus || '',
+        rg:             rg || '',
+        rgIssuer:       rgIssuer || '',
+        profession:     profession || '',
+        income:         isNaN(income) ? 0 : income,
         role:       'tenant',
         fcmToken:   '',
         ownerId:    currentOwnerId,
@@ -1385,7 +1486,8 @@
         address:    street + (num ? ', ' + num : '') + (compl ? ' ' + compl : ''),
         bairro:     bairro || '',
         city:       city   || '',
-        uf:         uf     || ''
+        uf:         uf     || '',
+        currentAddress: [currStreet, currNum, currCompl, currBairro, currCity, currUf].filter(Boolean).join(', ')
       });
 
       // 2. Cria contrato com ownerId
@@ -1393,15 +1495,40 @@
       const dueDate = new Date(now.getFullYear(), now.getMonth(), dueDay);
       if (dueDate < now) dueDate.setMonth(dueDate.getMonth() + 1);
 
+      const propAddress = [street, num, compl, bairro, city, uf].filter(Boolean).join(', ');
       const contractRef = doc(collection(db, 'contracts'));
       await setDoc(contractRef, {
         id:                  contractRef.id,
         tenantId:            userRef.id,
         tenantEmail:         email,
+        tenantName:          name,
+        tenantCpf:           cpf   || '',
+        tenantPhone:         phone || '',
+        tenantBirthDate:     birthDate || '',
+        tenantMaritalStatus: maritalStatus || '',
+        tenantProfession:    profession || '',
+        tenantIncome:        isNaN(income) ? 0 : income,
         propertyCode:        propCode,
         propertyDescription: prop,
+        propertyAddress:     propAddress,
+        address:             propAddress,
+        propertyPurpose:     purpose || 'Residencial',
         baseRent:            rent,
+        condoValue:          isNaN(condoVal) ? 0 : condoVal,
+        iptuValue:           isNaN(iptuVal)  ? 0 : iptuVal,
         dueDay,
+        startDate:           startDateFmt,
+        endDate:             endDateFmt,
+        deposit:             isNaN(deposit) ? 0 : deposit,
+        guaranteeType:       guaranteeType,
+        guarantorName:       guarantorName,
+        guarantorCpf:        guarantorCpf,
+        guarantorPhone:      guarantorPhone,
+        guarantorProfession: guarantorProf,
+        landlordName:        llName,
+        landlordEmail:       llEmail,
+        landlordCpf:         llCpf,
+        landlordPhone:       llPhone.replace(/\D/g,''),
         active:              true,
         requiresDigitalContract: digital,
         assinafyStatus:      digital ? 'pending' : 'manual',
@@ -1441,7 +1568,25 @@
 
       $('modal-tenant').style.display = 'none';
       resetTenantForm();
-      showToast(digital ? 'Inquilino cadastrado! Envie o contrato pelo app.' : 'Inquilino cadastrado com sucesso!', digital ? 'info' : 'success');
+
+      if (digital) {
+        showToast('Cadastrado! Gerando contrato Assinafy...', 'info');
+        await loadTenants();
+        // Chama geração automática do contrato Assinafy
+        try {
+          const res = await fetch('/api/locarpay-broker', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ step: 'generate-contract', contractId: contractRef.id })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          showToast('Contrato enviado para assinatura! O proprietário receberá o e-mail e WhatsApp.', 'success');
+        } catch (e2) {
+          showToast('Cadastrado, mas erro ao gerar contrato: ' + e2.message, 'error');
+        }
+      } else {
+        showToast('Inquilino cadastrado com sucesso!', 'success');
+      }
       await loadTenants();
     } catch (e) {
       showToast('Erro: ' + e.message, 'error');
@@ -1501,11 +1646,26 @@
   };
 
   function resetTenantForm() {
-    ['t-name','t-email','t-phone','t-cpf','t-cep','t-num','t-street','t-bairro','t-city','t-uf','t-complemento','t-property','t-prop-code','t-rent','t-due'].forEach(id => { const el = $(id); if(el) el.value = ''; });
+    ['t-name','t-email','t-phone','t-cpf','t-birth','t-rg','t-rg-issuer','t-profession','t-income',
+     't-curr-cep','t-curr-num','t-curr-street','t-curr-bairro','t-curr-city','t-curr-uf','t-curr-compl',
+     't-cep','t-num','t-street','t-bairro','t-city','t-uf','t-complemento',
+     't-property','t-prop-code','t-rent','t-due','t-condo','t-iptu',
+     't-gu-name','t-gu-cpf','t-gu-phone','t-gu-profession',
+     't-ll-name','t-ll-email','t-ll-cpf','t-ll-phone',
+     't-start','t-deposit'
+    ].forEach(id => { const el = $(id); if(el) el.value = ''; });
     $('t-due').value = '10';
+    $('t-marital') && ($('t-marital').value = 'Solteiro(a)');
+    $('t-purpose') && ($('t-purpose').value = 'Residencial');
+    $('t-duration') && ($('t-duration').value = '12');
     $('t-digital').checked = false;
     $('t-addr-block').style.display = 'none';
+    $('assinafy-fields').style.display = 'none';
+    document.querySelectorAll('.guarantee-chip').forEach(c => c.classList.remove('selected'));
+    const firstChip = document.querySelector('.guarantee-chip'); if(firstChip) firstChip.classList.add('selected');
+    const guFields = $('guarantor-fields'); if(guFields) guFields.style.display = 'none';
     const s = $('t-cep-status'); if(s) s.textContent = '';
+    const cs = $('t-curr-cep-status'); if(cs) cs.textContent = '';
   }
 
   // ── Banner de plano ────────────────────────────────────────
@@ -1601,7 +1761,7 @@
 
   // ── Editar inquilino ──────────────────────────────────────────
   let editingTenantId = null;
-  function openEditTenant(tenantId) {
+  window.openEditTenant = function openEditTenant(tenantId) {
     editingTenantId = tenantId;
     const t = tenants.find(x => x.id === tenantId);
     const c = contracts.find(x => x.tenantId === tenantId);
@@ -1880,7 +2040,7 @@
   };
 
   // ── Histórico de cobranças ────────────────────────────────────
-  async function openHistory(tenantId) {
+  window.openHistory = async function openHistory(tenantId) {
     const t = tenants.find(x => x.id === tenantId);
     $('history-tenant-name').textContent = t?.name || tenantId;
     $('history-list').innerHTML = '<p style="color:#888;font-size:13px">Carregando...</p>';
@@ -2087,7 +2247,7 @@
 
   // ── Cobranças extras ──────────────────────────────────────────
   let extrasForTenant = null;
-  async function openExtras(tenantId) {
+  window.openExtras = async function openExtras(tenantId) {
     extrasForTenant = tenantId;
     const t = tenants.find(x => x.id === tenantId);
     $('extras-tenant-name').textContent = t?.name || tenantId;
@@ -2912,6 +3072,8 @@
   .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+  .guarantee-chip { background:#0f1117; border:1px solid #2a2d3e; color:#aaa; padding:7px 16px; border-radius:20px; font-size:13px; cursor:pointer; transition:all .15s; }
+  .guarantee-chip.selected { background:#0d2b18; border-color:#4CAF50; color:#4CAF50; font-weight:600; }
   .toggle-row { display: flex; align-items: center; justify-content: space-between; background: #0f1117; border: 1px solid #3a3d52; border-radius: 8px; padding: 12px 14px; margin-top: 6px; }
   .toggle-row span { font-size: 14px; color: #e0e0e0; }
   .toggle-row small { display: block; font-size: 12px; color: #666; margin-top: 2px; }
@@ -3039,7 +3201,7 @@
       <button class="btn btn-secondary" id="btn-generate-charges" title="Gera cobranças do mês atual para todos os contratos ativos">Gerar cobranças</button>
       <button class="btn btn-secondary" id="btn-notify-upcoming" title="Avisa inquilinos com cobrança vencendo em 3 dias">Avisar vencimentos</button>
       <button class="btn btn-secondary" id="btn-notify-overdue" title="Marca cobranças vencidas e envia push para inquilinos em atraso">Notificar vencidos</button>
-      <button class="btn btn-secondary" id="btn-clean-orphans" style="border-color:#c0392b;color:#e57373" title="Exclui cobranças de inquilinos que não existem mais">🗑 Limpar órfãs</button>
+      <button class="btn btn-secondary" id="btn-clean-orphans" style="" title="Exclui cobranças de inquilinos que não existem mais">🗑 Limpar órfãs</button>
       <button class="btn btn-secondary" id="btn-monthly-report" title="Envia relatório mensal por email">Relatório</button>
       <button class="btn btn-secondary" id="btn-annual-receipt" title="Envia comprovante anual de pagamentos para todos os inquilinos">Comp. Anual</button>
       <button class="btn btn-secondary" id="btn-notify-expiry" title="Avisa o owner sobre contratos vencendo em 30 dias">Contratos</button>
@@ -3524,19 +3686,90 @@
 
 <!-- Modal: Novo Inquilino -->
 <div id="modal-tenant" class="modal-overlay">
-  <div class="modal-box">
-    <h3>Novo Inquilino</h3>
+  <div class="modal-box" id="modal-tenant-box" style="width:700px;max-width:95%;overflow-y:auto;max-height:92vh">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;position:sticky;top:0;background:#161b27;z-index:10;padding-bottom:12px;border-bottom:1px solid #2a2d3e">
+      <h3 style="margin:0">Novo Inquilino</h3>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button onclick="toggleModalExpand('modal-tenant-box')" title="Expandir" style="background:none;border:1px solid #2a2d3e;color:#aaa;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">⛶</button>
+        <button onclick="document.getElementById('modal-tenant').style.display='none';resetTenantForm()" style="background:none;border:none;color:#aaa;font-size:22px;cursor:pointer;line-height:1;padding:0 4px">×</button>
+      </div>
+    </div>
+
+    <!-- SEÇÃO 1: Dados do Inquilino -->
+    <p style="color:#4CAF50;font-size:11px;font-weight:700;letter-spacing:1px;margin:0 0 12px">👤 DADOS DO INQUILINO</p>
     <div class="row2">
       <div><label>Nome completo <span>*</span></label><input id="t-name" type="text" placeholder="Maria Silva"></div>
-      <div><label>E-mail <span>*</span></label><input id="t-email" type="email" placeholder="inquilino@email.com"></div>
+      <div><label>E-mail <span>*</span></label><input id="t-email" type="email" placeholder="inquilino@email.com" oninput="this.value=this.value.toLowerCase()"></div>
     </div>
     <div class="row2">
-      <div><label>Telefone</label><input id="t-phone" type="text" placeholder="(11) 99999-9999"></div>
-      <div><label>CPF</label><input id="t-cpf" type="text" placeholder="000.000.000-00"></div>
+      <div><label>WhatsApp <span>*</span></label><input id="t-phone" type="text" placeholder="(11) 99999-9999" oninput="maskPhoneInput(this)"></div>
+      <div><label>CPF <span>*</span></label><input id="t-cpf" type="text" placeholder="000.000.000-00" maxlength="14" oninput="maskCpfInput(this)"></div>
     </div>
+    <div class="row2">
+      <div><label>Data de nascimento <span>*</span></label><input id="t-birth" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="maskDateInput(this)"></div>
+      <div>
+        <label>Estado civil <span>*</span></label>
+        <select id="t-marital" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:10px;border-radius:8px;font-size:14px">
+          <option value="Solteiro(a)">Solteiro(a)</option>
+          <option value="Casado(a)">Casado(a)</option>
+          <option value="União estável">União estável</option>
+          <option value="Divorciado(a)">Divorciado(a)</option>
+          <option value="Viúvo(a)">Viúvo(a)</option>
+        </select>
+      </div>
+    </div>
+    <div class="row2">
+      <div><label>RG / CNH</label><input id="t-rg" type="text" placeholder="Número (opcional)"></div>
+      <div><label>Órgão emissor</label><input id="t-rg-issuer" type="text" placeholder="SSP/SP (opcional)"></div>
+    </div>
+    <div class="row2">
+      <div><label>Profissão</label><input id="t-profession" type="text" placeholder="Ex: Analista, Professora..."></div>
+      <div><label>Renda bruta mensal (R$)</label><input id="t-income" type="text" inputmode="numeric" placeholder="R$ 0,00" oninput="maskBRL(this)"></div>
+    </div>
+
+    <!-- SEÇÃO 2: Endereço Atual do Inquilino -->
+    <p style="color:#4CAF50;font-size:11px;font-weight:700;letter-spacing:1px;margin:20px 0 12px">🏠 ENDEREÇO ATUAL DO INQUILINO</p>
     <div class="row2">
       <div>
         <label>CEP <span>*</span></label>
+        <div style="position:relative">
+          <input id="t-curr-cep" type="text" placeholder="00000-000" maxlength="9" oninput="lookupCepTenant(this.value)">
+          <span id="t-curr-cep-status" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:12px"></span>
+        </div>
+      </div>
+      <div><label>Número <span>*</span></label><input id="t-curr-num" type="text" placeholder="123"></div>
+    </div>
+    <div id="t-curr-addr-block">
+      <input id="t-curr-street" type="text" placeholder="Logradouro" style="margin-bottom:8px">
+      <div class="row2" style="margin-bottom:8px">
+        <div><input id="t-curr-bairro" type="text" placeholder="Bairro"></div>
+        <div><input id="t-curr-compl" type="text" placeholder="Complemento (opcional)"></div>
+      </div>
+      <div class="row2">
+        <div><input id="t-curr-city" type="text" placeholder="Cidade"></div>
+        <div style="max-width:100px"><input id="t-curr-uf" type="text" placeholder="UF" maxlength="2" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z]/g,'')"></div>
+      </div>
+    </div>
+
+    <!-- SEÇÃO 3: Dados do Imóvel -->
+    <p style="color:#4CAF50;font-size:11px;font-weight:700;letter-spacing:1px;margin:20px 0 12px">🏢 DADOS DO IMÓVEL</p>
+    <div class="row2">
+      <div>
+        <label>Código do Imóvel <span>*</span></label>
+        <input id="t-prop-code" type="text" placeholder="ex: AP-101, CASA-3" autocomplete="off" style="text-transform:uppercase">
+        <small style="color:#666;font-size:11px">Identificador único nesta imobiliária</small>
+      </div>
+      <div>
+        <label>Finalidade</label>
+        <select id="t-purpose" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:10px;border-radius:8px;font-size:14px">
+          <option value="Residencial">Residencial</option>
+          <option value="Comercial">Comercial</option>
+        </select>
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label>CEP do Imóvel <span>*</span></label>
         <div style="position:relative">
           <input id="t-cep" type="text" placeholder="00000-000" maxlength="9" autocomplete="postal-code">
           <span id="t-cep-status" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:12px"></span>
@@ -3555,27 +3788,80 @@
         <div style="max-width:100px"><input id="t-uf" type="text" placeholder="UF" maxlength="2" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z]/g,'')"></div>
       </div>
     </div>
+    <div class="row2" style="margin-top:8px">
+      <div><label>Aluguel (R$) <span>*</span></label><input id="t-rent" type="text" inputmode="numeric" placeholder="R$ 0,00" oninput="maskBRL(this)"></div>
+      <div><label>Dia do vencimento <span>*</span></label><input id="t-due" type="number" value="10" min="1" max="28"></div>
+    </div>
+    <div class="row2">
+      <div><label>Condomínio (R$)</label><input id="t-condo" type="text" inputmode="numeric" placeholder="R$ 0,00" oninput="maskBRL(this)"></div>
+      <div><label>IPTU (R$)</label><input id="t-iptu" type="text" inputmode="numeric" placeholder="R$ 0,00" oninput="maskBRL(this)"></div>
+    </div>
+
+    <!-- SEÇÃO 4: Período do Contrato -->
+    <p style="color:#4CAF50;font-size:11px;font-weight:700;letter-spacing:1px;margin:20px 0 12px">📅 PERÍODO DO CONTRATO</p>
     <div class="row2">
       <div>
-        <label>Código do Imóvel <span>*</span></label>
-        <input id="t-prop-code" type="text" placeholder="ex: AP-101, CASA-3, KITNET-02" autocomplete="off" style="text-transform:uppercase">
-        <small style="color:#666;font-size:11px">Identificador único deste imóvel nesta imobiliária</small>
+        <label>Data de início <span>*</span></label>
+        <input id="t-start" type="date" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:10px;border-radius:8px;font-size:14px">
       </div>
-      <div><label>Aluguel (R$) <span>*</span></label><input id="t-rent" type="text" inputmode="numeric" placeholder="R$ 0,00" oninput="maskBRL(this)"></div>
+      <div>
+        <label>Duração <span>*</span></label>
+        <select id="t-duration" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:10px;border-radius:8px;font-size:14px">
+          <option value="12">12 meses</option>
+          <option value="24">24 meses</option>
+          <option value="30">30 meses</option>
+          <option value="36">36 meses</option>
+        </select>
+      </div>
     </div>
+
+    <!-- SEÇÃO 5: Garantia -->
+    <p style="color:#4CAF50;font-size:11px;font-weight:700;letter-spacing:1px;margin:20px 0 12px">🔒 GARANTIA</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button type="button" class="guarantee-chip selected" onclick="selectGuarantee('Caução')" id="g-caucao">Caução</button>
+      <button type="button" class="guarantee-chip" onclick="selectGuarantee('Fiador')" id="g-fiador">Fiador</button>
+      <button type="button" class="guarantee-chip" onclick="selectGuarantee('Seguro Fiança')" id="g-seguro">Seguro Fiança</button>
+      <button type="button" class="guarantee-chip" onclick="selectGuarantee('Sem Garantia')" id="g-sem">Sem Garantia</button>
+    </div>
+    <input type="hidden" id="t-guarantee" value="Caução">
     <div class="row2">
-      <div><label>Dia do vencimento <span>*</span></label><input id="t-due" type="number" value="10" min="1" max="28"></div>
+      <div><label>Depósito / Caução (R$)</label><input id="t-deposit" type="text" inputmode="numeric" placeholder="R$ 0,00" oninput="maskBRL(this)"></div>
       <div></div>
     </div>
-    <label style="margin-top:20px">Tipo de contrato</label>
+    <div id="t-guarantor-block" style="display:none;margin-top:8px">
+      <p style="color:#FFD54F;font-size:12px;margin:0 0 10px">Dados do fiador</p>
+      <div class="row2">
+        <div><label>Nome completo</label><input id="t-gu-name" type="text" placeholder="Nome do fiador"></div>
+        <div><label>CPF</label><input id="t-gu-cpf" type="text" placeholder="000.000.000-00" maxlength="14" oninput="maskCpfInput(this)"></div>
+      </div>
+      <div class="row2">
+        <div><label>Telefone</label><input id="t-gu-phone" type="text" placeholder="(11) 99999-9999" oninput="maskPhoneInput(this)"></div>
+        <div><label>Profissão</label><input id="t-gu-profession" type="text" placeholder="Opcional"></div>
+      </div>
+    </div>
+
+    <!-- SEÇÃO 6: Proprietário do Imóvel -->
+    <p style="color:#4CAF50;font-size:11px;font-weight:700;letter-spacing:1px;margin:20px 0 12px">🏠 PROPRIETÁRIO DO IMÓVEL</p>
+    <div class="row2">
+      <div><label>Nome completo <span>*</span></label><input id="t-ll-name" type="text" placeholder="João da Silva"></div>
+      <div><label>E-mail <span>*</span></label><input id="t-ll-email" type="email" placeholder="proprietario@email.com" oninput="this.value=this.value.toLowerCase()"></div>
+    </div>
+    <div class="row2">
+      <div><label>CPF <span>*</span></label><input id="t-ll-cpf" type="text" placeholder="000.000.000-00" maxlength="14" oninput="maskCpfInput(this)"></div>
+      <div><label>WhatsApp <span>*</span></label><input id="t-ll-phone" type="text" placeholder="(11) 99999-9999" oninput="maskPhoneInput(this)"></div>
+    </div>
+
+    <!-- SEÇÃO 7: Contrato Digital -->
+    <p style="color:#4CAF50;font-size:11px;font-weight:700;letter-spacing:1px;margin:20px 0 12px">📋 CONTRATO DIGITAL</p>
     <div class="toggle-row">
       <div>
         <span>Contrato digital (Assinafy)</span>
-        <small>Requer envio do PDF pelo app iLocarPay após cadastro</small>
+        <small>Gera e envia automaticamente para assinatura digital</small>
       </div>
       <label class="switch"><input type="checkbox" id="t-digital"><span class="slider"></span></label>
     </div>
-    <div class="modal-actions">
+
+    <div class="modal-actions" style="position:sticky;bottom:0;background:#161b27;padding-top:12px;border-top:1px solid #2a2d3e;margin-top:20px">
       <button class="btn-outline" id="tenant-cancel">Cancelar</button>
       <button class="btn" id="tenant-save">Cadastrar</button>
     </div>

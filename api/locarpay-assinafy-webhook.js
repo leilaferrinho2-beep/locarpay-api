@@ -331,14 +331,23 @@ export default async function handler(req, res) {
       updates.auditTrail = FieldValue.arrayUnion(auditEvent);
       console.log(`[assinafy-webhook] signatário assinou contrato ${contractId} (step=${step})`);
 
-      // Notifica proprietário e corretor que o inquilino assinou
-      const tenantName = contractData.tenantName || contractData.inquilinoNome || 'O inquilino';
-      const endereco   = contractData.address    || contractData.endereco      || 'o imóvel';
-      const msg = `✅ *iLocarPay*: ${tenantName} assinou o contrato de locação do imóvel ${endereco}. Acesse o app para verificar.`;
-      await Promise.all([
-        sendWhatsApp(contractData.landlordPhone, msg),
-        sendWhatsApp(contractData.brokerPhone   || contractData.corretorPhone, msg)
-      ]);
+      const endereco = contractData.address || contractData.endereco || contractData.propertyAddress || 'o imóvel';
+
+      if (step === 1) {
+        // Proprietário assinou (step 1) → avisa inquilino que está na vez dele
+        const tenantName  = contractData.tenantName || contractData.inquilinoNome || 'Inquilino';
+        const tenantEmail = contractData.tenantEmail || '';
+        const msgInquilino = `Olá, ${tenantName}! 📝\n\nO proprietário assinou o contrato de locação do imóvel *${endereco}*. O contrato agora está no seu e-mail (${tenantEmail}) aguardando a sua assinatura digital.\n\nPor favor, verifique sua caixa de entrada e assine para concluir a locação.\n\n— iLocarPay`;
+        await sendWhatsApp(contractData.tenantPhone || contractData.inquilinoPhone, msgInquilino);
+      } else {
+        // Inquilino assinou (step 2) → avisa proprietário e corretor
+        const tenantName = contractData.tenantName || contractData.inquilinoNome || 'O inquilino';
+        const msg = `✅ *iLocarPay*: ${tenantName} assinou o contrato de locação do imóvel *${endereco}*. Acesse o app para verificar.`;
+        await Promise.all([
+          sendWhatsApp(contractData.landlordPhone, msg),
+          sendWhatsApp(contractData.brokerPhone   || contractData.corretorPhone, msg)
+        ]);
+      }
 
     } else {
       console.log(`[assinafy-webhook] evento '${event}' não mapeado`);
