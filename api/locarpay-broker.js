@@ -561,6 +561,13 @@ async function handleDeliverKeys(db, body) {
 
 // ── REJECT LEAD ───────────────────────────────────────────────────────────────
 
+async function handleRemoveLead(db, body) {
+  const { leadId } = body;
+  if (!leadId) throw Object.assign(new Error('leadId obrigatório'), { status: 400 });
+  await db.collection('leads').doc(leadId).delete();
+  return { ok: true };
+}
+
 async function handleRejectLead(db, body) {
   const { leadId, reason } = body;
   if (!leadId) throw Object.assign(new Error('leadId obrigatório'), { status: 400 });
@@ -657,6 +664,7 @@ export default async function handler(req, res) {
     else if (step === 'generate-contract') result = await handleGenerateContract(db, req.body);
     else if (step === 'deliver-keys')      result = await handleDeliverKeys(db, req.body);
     else if (step === 'reject-lead')       result = await handleRejectLead(db, req.body);
+    else if (step === 'remove-lead')       result = await handleRemoveLead(db, req.body);
     else throw Object.assign(new Error('step inválido'), { status: 400 });
     res.status(200).json(result);
   } catch (e) {
