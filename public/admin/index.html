@@ -1035,7 +1035,12 @@
   window.removeLead = async (leadId) => {
     if (!confirm('Tem certeza que deseja remover este lead? Esta ação não pode ser desfeita.')) return;
     try {
-      await deleteDoc(doc(db, 'leads', leadId));
+      const res = await fetch('/api/locarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'remove-lead', leadId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
       showToast('Lead removido.', 'info');
       await loadLeads();
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
