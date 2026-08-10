@@ -336,6 +336,14 @@ async function handleApproveLead(db, body) {
   const propAddr = cd.propertyAddress
     || [lp.street, lp.number, lp.complement, lp.neighborhood, lp.city, lp.state].filter(Boolean).join(', ')
     || lead.propertyDescription || '';
+
+  // Usa dados do proprietário: override do modal > lead.landlord > fallback owner
+  const landlordSrc   = landlordOverride?.name ? landlordOverride : (lead.landlord || {});
+  const landlordName  = landlordSrc.name  || owner.name  || '';
+  const landlordEmail = landlordSrc.email || owner.email || '';
+  const landlordCpf   = landlordSrc.cpf   || owner.cpf   || owner.cnpj || '';
+  const landlordPhone = landlordSrc.phone || owner.phone || '';
+
   const contractRef = db.collection('contracts').doc();
   const contractId  = contractRef.id;
   await contractRef.set({
@@ -345,7 +353,7 @@ async function handleApproveLead(db, body) {
     tenantName:          lead.tenant.name,
     tenantCpf:           lead.tenant.cpf,
     tenantPhone:         (lead.tenant.phone || '').replace(/\D/g, ''),
-    landlordPhone:       (landlordSrc.phone || owner.phone || '').replace(/\D/g, ''),
+    landlordPhone:       landlordPhone.replace(/\D/g, ''),
     brokerEmail:         lead.brokerEmail || '',
     brokerName:          lead.brokerName  || '',
     brokerPhone,
@@ -364,13 +372,6 @@ async function handleApproveLead(db, body) {
     createdAt:           FieldValue.serverTimestamp(),
     updatedAt:           FieldValue.serverTimestamp()
   });
-
-  // Usa dados do proprietário: override do modal > lead.landlord > fallback owner
-  const landlordSrc = landlordOverride?.name ? landlordOverride : (lead.landlord || {});
-  const landlordName  = landlordSrc.name  || owner.name  || '';
-  const landlordEmail = landlordSrc.email || owner.email || '';
-  const landlordCpf   = landlordSrc.cpf   || owner.cpf   || owner.cnpj || '';
-  const landlordPhone = landlordSrc.phone || owner.phone || '';
 
   // Se override fornecido, salva no lead para uso futuro
   if (landlordOverride?.name) {
