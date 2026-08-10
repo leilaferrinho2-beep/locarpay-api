@@ -12,6 +12,7 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue }      from 'firebase-admin/firestore';
 import { getMessaging }                  from 'firebase-admin/messaging';
+import { getStorage }                    from 'firebase-admin/storage';
 import nodemailer                         from 'nodemailer';
 
 function initFirebase() {
@@ -691,6 +692,23 @@ async function handleRejectLead(db, body) {
 
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
 
+async function handleGetUploadUrl(body, bucket) {
+  const { ownerId, fileName, contentType } = body;
+  if (!ownerId || !fileName) throw Object.assign(new Error('ownerId e fileName obrigatórios'), { status: 400 });
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `leads/${ownerId}/${Date.now()}_${safeName}`;
+  const storage = getStorage();
+  const bucketName = bucket || `${ownerId}.firebasestorage.app`;
+  const file = storage.bucket(bucketName).file(path);
+  const [signedUrl] = await file.getSignedUrl({
+    action: 'write',
+    expires: Date.now() + 15 * 60 * 1000, // 15 min
+    contentType: contentType || 'image/jpeg',
+  });
+  const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(path)}?alt=media`;
+  return { ok: true, uploadUrl: signedUrl, publicUrl, path };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -726,6 +744,8 @@ export default async function handler(req, res) {
   try {
     initFirebase();
     const db   = getFirestore();
+    const sa   = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT || '{}');
+    req._storageBucket = sa.project_id ? `${sa.project_id}.firebasestorage.app` : null;
     const { step } = req.body || {};
     let result;
     if      (step === 'register-broker')   result = await handleRegisterBroker(db, req.body);
@@ -737,6 +757,7 @@ export default async function handler(req, res) {
     else if (step === 'deliver-keys')      result = await handleDeliverKeys(db, req.body);
     else if (step === 'reject-lead')       result = await handleRejectLead(db, req.body);
     else if (step === 'remove-lead')       result = await handleRemoveLead(db, req.body);
+    else if (step === 'get-upload-url')    result = await handleGetUploadUrl(req.body, req._storageBucket);
     else throw Object.assign(new Error('step inválido'), { status: 400 });
     res.status(200).json(result);
   } catch (e) {
