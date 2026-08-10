@@ -589,6 +589,24 @@ async function handleRejectLead(db, body) {
     } catch (_) {}
   }
 
+  const prop    = lead.property || {};
+  const addr    = [prop.street, prop.number, prop.city].filter(Boolean).join(', ') || lead.propertyDescription || 'o imóvel';
+  const tenant  = lead.tenant   || {};
+
+  // WhatsApp ao inquilino — neutro, sem expor motivo
+  if (tenant.phone) {
+    await sendWhatsApp(tenant.phone,
+      `Olá, ${tenant.name || 'inquilino'}.\n\nInformamos que sua proposta de locação para o imóvel *${addr}* não foi aprovada neste momento.\n\nPara mais informações, entre em contato com a imobiliária responsável.\n\n— iLocarPay`
+    );
+  }
+
+  // WhatsApp ao proprietário
+  if (lead.landlordPhone) {
+    await sendWhatsApp(lead.landlordPhone,
+      `Olá! Informamos que a proposta de locação do imóvel *${addr}* não foi aprovada pela imobiliária neste momento.\n\n— iLocarPay`
+    );
+  }
+
   return { ok: true };
 }
 
