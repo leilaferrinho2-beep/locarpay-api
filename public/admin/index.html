@@ -838,7 +838,10 @@
         <button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="viewLeadDetail('${l.id}')">🔍 Detalhes</button>
         <button class="btn-sm" style="color:#64B5F6;border-color:#64B5F6;margin-left:4px" onclick="deliverKeys('${l.contractId}','${l.tenantId||''}')">🏠 Entregar chaves</button>
         <button class="btn-sm" style="margin-left:4px" onclick="regenContract('${l.contractId}')">📄 Reenviar contrato</button>
-      ` : `<button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="viewLeadDetail('${l.id}')">🔍 Detalhes</button>`;
+        <button class="btn-sm" style="color:#ef5350;border-color:#ef5350;margin-left:4px" onclick="removeLead('${l.id}')">🗑 Remover</button>
+      ` : `
+        <button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="viewLeadDetail('${l.id}')">🔍 Detalhes</button>
+        <button class="btn-sm" style="color:#ef5350;border-color:#ef5350;margin-left:4px" onclick="removeLead('${l.id}')">🗑 Remover</button>`;
       return `<tr>
         <td><strong>${l.tenant?.name||'—'}</strong><br><span style="font-size:11px;color:#888">${l.tenant?.email||''}</span><br><span style="font-size:11px;color:#666">${l.tenant?.cpf||''}</span></td>
         <td><span style="font-size:12px">${prop}</span>${rent ? `<br><span style="color:#4CAF50;font-size:12px;font-weight:600">${rent}/mês</span>` : ''}</td>
@@ -1025,6 +1028,16 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       showToast('Lead rejeitado.', 'info');
+      await loadLeads();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+  };
+
+  window.removeLead = async (leadId) => {
+    if (!confirm('Tem certeza que deseja remover este lead? Esta ação não pode ser desfeita.')) return;
+    try {
+      const db = firebase.firestore();
+      await db.collection('leads').doc(leadId).delete();
+      showToast('Lead removido.', 'info');
       await loadLeads();
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
   };
