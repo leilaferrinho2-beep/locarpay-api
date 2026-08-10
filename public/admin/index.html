@@ -41,7 +41,7 @@
     $(id).style.display = SECTION_DISPLAY[id] || 'block';
   }
 
-  function setTab(tab) {
+  window.setTab = function setTab(tab) {
     ['tab-tenants','tab-owners','tab-overdue','tab-licenses','tab-config','tab-leads','tab-plano'].forEach(t => {
       $(t)?.classList.remove('active');
       const panel = $(t.replace('tab-', 'panel-'));
