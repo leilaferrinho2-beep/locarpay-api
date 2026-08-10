@@ -987,6 +987,16 @@
     endDate.setMonth(endDate.getMonth() + (l.property?.durationMonths || 12));
     $('approve-end').value = endDate.toISOString().slice(0,10);
     $('approve-address').value = propAddr || l.propertyDescription || '';
+
+    // Mostra seção do proprietário se dados ausentes
+    const hasLandlord = l.landlord?.name && l.landlord?.email;
+    $('approve-landlord-section').style.display = hasLandlord ? 'none' : 'block';
+    $('approve-landlord-name').value  = l.landlord?.name  || '';
+    $('approve-landlord-email').value = l.landlord?.email || '';
+    $('approve-landlord-cpf').value   = l.landlord?.cpf   || '';
+    $('approve-landlord-phone').value = l.landlord?.phone || '';
+
+    $('modal-approve-lead').style.display = 'flex';
   };
 
   window.confirmApproveLead = async () => {
@@ -1004,7 +1014,13 @@
             startDate:       $('approve-start').value,
             endDate:         $('approve-end').value,
             propertyAddress: $('approve-address').value
-          }
+          },
+          landlordOverride: $('approve-landlord-section').style.display !== 'none' ? {
+            name:  $('approve-landlord-name').value.trim(),
+            email: $('approve-landlord-email').value.trim().toLowerCase(),
+            cpf:   $('approve-landlord-cpf').value.trim(),
+            phone: $('approve-landlord-phone').value.trim()
+          } : null
         })
       });
       const data = await res.json();
@@ -3302,6 +3318,18 @@
         <label>Fim do contrato</label>
         <input id="approve-end" type="date">
       </div>
+    </div>
+
+    <div id="approve-landlord-section" style="margin-top:14px;padding:12px;background:#0f1117;border:1px solid #f59e0b44;border-radius:8px;display:none">
+      <p style="font-size:12px;color:#f59e0b;margin:0 0 10px">⚠️ Dados do proprietário não encontrados neste lead. Preencha para gerar o contrato:</p>
+      <label>Nome do proprietário</label>
+      <input id="approve-landlord-name" type="text" placeholder="Nome completo">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px">
+        <div><label>E-mail</label><input id="approve-landlord-email" type="email" placeholder="email@exemplo.com"></div>
+        <div><label>CPF</label><input id="approve-landlord-cpf" type="text" placeholder="000.000.000-00"></div>
+      </div>
+      <label style="margin-top:8px;display:block">WhatsApp</label>
+      <input id="approve-landlord-phone" type="text" placeholder="(11) 99999-9999">
     </div>
 
     <p style="font-size:12px;color:#555;margin-top:14px">Após a aprovação: o inquilino recebe e-mail de boas-vindas, o contrato é gerado e enviado para assinatura via Assinafy (imobiliária + inquilino). Após ambos assinarem, clique em <strong>Entregar Chaves</strong> para ativar o inquilino no app.</p>
