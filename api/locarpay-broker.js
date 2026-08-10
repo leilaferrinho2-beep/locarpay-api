@@ -317,8 +317,25 @@ async function handleApproveLead(db, body) {
     });
   }
 
-  // Cria contrato
-  const cd = contractData || {};
+  // Busca telefone do corretor na coleção brokers pelo email
+  let brokerPhone = '';
+  if (lead.brokerEmail) {
+    try {
+      const brokerSnap = await db.collection('brokers')
+        .where('email', '==', lead.brokerEmail.toLowerCase().trim())
+        .limit(1).get();
+      if (!brokerSnap.empty) {
+        brokerPhone = (brokerSnap.docs[0].data().phone || '').replace(/\D/g, '');
+      }
+    } catch (_) {}
+  }
+
+  // Cria contrato — usa contractData do modal quando fornecido; fallback para lead.property
+  const cd  = contractData || {};
+  const lp  = lead.property || {};
+  const propAddr = cd.propertyAddress
+    || [lp.street, lp.number, lp.complement, lp.neighborhood, lp.city, lp.state].filter(Boolean).join(', ')
+    || lead.propertyDescription || '';
   const contractRef = db.collection('contracts').doc();
   const contractId  = contractRef.id;
   await contractRef.set({
@@ -327,14 +344,20 @@ async function handleApproveLead(db, body) {
     tenantEmail,
     tenantName:          lead.tenant.name,
     tenantCpf:           lead.tenant.cpf,
+    tenantPhone:         (lead.tenant.phone || '').replace(/\D/g, ''),
+    landlordPhone:       (landlordSrc.phone || owner.phone || '').replace(/\D/g, ''),
+    brokerEmail:         lead.brokerEmail || '',
+    brokerName:          lead.brokerName  || '',
+    brokerPhone,
     propertyCode:        lead.propertyCode || '',
     propertyDescription: lead.propertyDescription || '',
-    propertyAddress:     cd.propertyAddress || lead.propertyDescription || '',
-    baseRent:            cd.baseRent  || 0,
-    dueDay:              cd.dueDay    || 10,
-    startDate:           cd.startDate || '',
-    endDate:             cd.endDate   || '',
-    deposit:             cd.deposit   || 0,
+    propertyAddress:     propAddr,
+    address:             propAddr,
+    baseRent:            cd.baseRent  || parseFloat(lp.rentValue)  || 0,
+    dueDay:              cd.dueDay    || lp.dueDay    || 10,
+    startDate:           cd.startDate || lp.startDate || '',
+    endDate:             cd.endDate   || lp.endDate   || '',
+    deposit:             cd.deposit   || parseFloat(lp.deposit)    || 0,
     active:              false, // ativa só após entregar as chaves
     assinafyStatus:      'pending',
     leadId,
@@ -367,12 +390,12 @@ async function handleApproveLead(db, body) {
       tenantCpf:    lead.tenant.cpf,
       tenantPhone:  lead.tenant.phone,
       propertyCode:    lead.propertyCode,
-      propertyAddress: cd.propertyAddress || lead.propertyDescription || '',
-      baseRent:  cd.baseRent  || 0,
-      dueDay:    cd.dueDay    || 10,
-      startDate: cd.startDate || '',
-      endDate:   cd.endDate   || '',
-      deposit:   cd.deposit   || 0
+      propertyAddress: propAddr,
+      baseRent:  cd.baseRent  || parseFloat(lp.rentValue)  || 0,
+      dueDay:    cd.dueDay    || lp.dueDay    || 10,
+      startDate: cd.startDate || lp.startDate || '',
+      endDate:   cd.endDate   || lp.endDate   || '',
+      deposit:   cd.deposit   || parseFloat(lp.deposit)    || 0
     });
   } catch (e) {
     console.error('[approve-lead] Assinafy error:', e.message);
@@ -433,7 +456,7 @@ async function handleApproveLead(db, body) {
     const prop = lead.property || {};
     const addr = [prop.street, prop.number, prop.city].filter(Boolean).join(', ') || lead.propertyDescription || 'imóvel';
     await sendWhatsApp(lead.tenant.phone,
-      `Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉\n\nSua locação do imóvel *${addr}* foi aprovada!\n\nVocê receberá um e-mail para assinar o contrato digitalmente. Verifique sua caixa de entrada (${tenantEmail}).\n\nBaixe o app iLocarPay para acompanhar tudo:\nhttps://www.ilocarpay.com.br/download/locarpay-v82.apk\n\n— iLocarPay`
+      `Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉\n\nSua locação do imóvel *${addr}* foi aprovada!\n\nO contrato será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o contrato no seu e-mail (${tenantEmail}) para assinar digitalmente.\n\nBaixe o app iLocarPay para acompanhar tudo:\nhttps://www.ilocarpay.com.br\n\n— iLocarPay`
     );
   }
 
@@ -509,23 +532,66 @@ async function handleGenerateContract(db, body) {
   const ownerSnap = await db.collection('owners').doc(c.ownerId).get();
   const owner = ownerSnap.data() || {};
 
+  // Usa dados do proprietário do imóvel (landlord) quando disponíveis; fallback para dados da imobiliária
+  const landlordName  = c.landlordName  || owner.name  || '';
+  const landlordEmail = c.landlordEmail || owner.email || '';
+  const landlordCpf   = c.landlordCpf   || owner.cpf   || owner.cnpj || '';
+  const landlordPhone = (c.landlordPhone || owner.phone || '').replace(/\D/g, '');
+
+  // Busca nome do inquilino se não estiver no contrato
+  let tenantName = c.tenantName || '';
+  let tenantCpf  = c.tenantCpf  || '';
+  let tenantPhone = (c.tenantPhone || '').replace(/\D/g, '');
+  if (!tenantName && c.tenantId) {
+    try {
+      const tSnap = await db.collection('users').doc(c.tenantId).get();
+      if (tSnap.exists) {
+        const t = tSnap.data();
+        tenantName  = t.name  || '';
+        tenantCpf   = t.cpf   || tenantCpf;
+        tenantPhone = (t.phone || tenantPhone).replace(/\D/g, '');
+      }
+    } catch (_) {}
+  }
+
   const result = await createAssinafyContract(db, contractId, {
     contractId,
-    ownerName:    owner.name,
-    ownerEmail:   owner.email,
-    ownerCpf:     owner.cpf || owner.cnpj || '',
-    tenantName:   c.tenantName,
-    tenantEmail:  c.tenantEmail,
-    tenantCpf:    c.tenantCpf,
-    tenantPhone:  c.tenantPhone,
+    ownerName:       landlordName,
+    ownerEmail:      landlordEmail,
+    ownerCpf:        landlordCpf,
+    tenantName,
+    tenantEmail:     c.tenantEmail,
+    tenantCpf,
+    tenantPhone,
     propertyCode:    c.propertyCode,
-    propertyAddress: c.propertyAddress,
+    propertyAddress: c.propertyAddress || c.address || '',
     baseRent:  c.baseRent,
     dueDay:    c.dueDay,
     startDate: c.startDate,
     endDate:   c.endDate,
     deposit:   c.deposit || 0
   });
+
+  // Salva phones no contrato para o webhook usar depois
+  await db.collection('contracts').doc(contractId).update({
+    landlordPhone, tenantPhone,
+    updatedAt: FieldValue.serverTimestamp()
+  });
+
+  // WhatsApp ao proprietário do imóvel
+  const addr = c.propertyAddress || c.address || c.propertyCode || 'o imóvel';
+  if (landlordPhone) {
+    await sendWhatsApp(landlordPhone,
+      `Olá, ${landlordName}! 🏠\n\nUm contrato de locação do imóvel *${addr}* foi gerado e enviado para o seu e-mail (${landlordEmail}) para assinatura digital.\n\nPor favor, verifique sua caixa de entrada e assine o contrato para concluir a locação.\n\n— iLocarPay`
+    );
+  }
+
+  // WhatsApp ao inquilino informando que o contrato vai ao proprietário primeiro
+  if (tenantPhone) {
+    await sendWhatsApp(tenantPhone,
+      `Olá, ${tenantName}! 🎉\n\nO contrato de locação do imóvel *${addr}* foi gerado. Ele será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o contrato no seu e-mail (${c.tenantEmail}) para assinar digitalmente.\n\n— iLocarPay`
+    );
+  }
 
   return { ok: true, ...result };
 }
