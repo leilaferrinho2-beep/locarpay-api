@@ -148,6 +148,69 @@ async function archiveSignedPdf(apiKey, documentId, contractId) {
   }
 }
 
+function formatBRL(value) {
+  return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function formatMonthYear(dateStr) {
+  if (!dateStr) return '';
+  const [y, m] = dateStr.split('-');
+  const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  return `${months[parseInt(m) - 1]}/${y}`;
+}
+
+async function handleAsaasPayment(db, payment) {
+  const asaasChargeId = payment.id;
+  if (!asaasChargeId) return { skipped: 'payment.id ausente' };
+
+  const snap = await db.collection('charges')
+    .where('asaasChargeId', '==', asaasChargeId)
+    .limit(1).get();
+
+  if (snap.empty) return { skipped: 'cobrança não encontrada' };
+
+  const chargeRef = snap.docs[0].ref;
+  const chargeId  = snap.docs[0].id;
+  const charge    = snap.docs[0].data();
+
+  if (charge.status === 'paid') return { skipped: 'já estava pago' };
+
+  await chargeRef.update({
+    status:    'paid',
+    paidAt:    FieldValue.serverTimestamp(),
+    paidValue: payment.value || charge.totalAmount
+  });
+
+  const [tenantSnap, contractSnap] = await Promise.all([
+    charge.tenantId   ? db.collection('users').doc(charge.tenantId).get()       : Promise.resolve(null),
+    charge.contractId ? db.collection('contracts').doc(charge.contractId).get() : Promise.resolve(null)
+  ]);
+
+  const tenant   = tenantSnap?.data()   || {};
+  const contract = contractSnap?.data() || {};
+
+  const tenantName    = tenant.name          || charge.tenantName   || 'Inquilino';
+  const endereco      = contract.address     || charge.address      || charge.description || 'o imóvel';
+  const valor         = formatBRL(payment.value || charge.totalAmount);
+  const periodo       = formatMonthYear(payment.dueDate || charge.dueDate?.toDate?.()?.toISOString()?.slice(0, 10));
+  const tenantPhone   = tenant.phone          || charge.tenantPhone   || null;
+  const landlordPhone = contract.landlordPhone || charge.landlordPhone || null;
+  const brokerPhone   = contract.brokerPhone  || charge.brokerPhone   || contract.corretorPhone || null;
+
+  const msgTenant  = `✅ *iLocarPay* — Pagamento confirmado!\n\nRecebemos seu pagamento de *${valor}* referente ao aluguel de *${periodo}* do imóvel ${endereco}.\n\nObrigado! 🏠`;
+  const msgOwner   = `💰 *iLocarPay* — Aluguel recebido!\n\nO inquilino *${tenantName}* realizou o pagamento de *${valor}* ref. ${periodo} — imóvel: ${endereco}.\n\nO repasse será processado em até 2 dias úteis.`;
+  const msgBroker  = `📋 *iLocarPay* — Pagamento confirmado\n\n*Inquilino:* ${tenantName}\n*Valor:* ${valor}\n*Período:* ${periodo}\n*Imóvel:* ${endereco}\n\nCobrança ID: ${chargeId}`;
+
+  await Promise.all([
+    sendWhatsApp(tenantPhone,   msgTenant),
+    sendWhatsApp(landlordPhone, msgOwner),
+    sendWhatsApp(brokerPhone,   msgBroker)
+  ]);
+
+  console.log(`[asaas-webhook] WhatsApp enviado — chargeId:${chargeId} valor:${valor}`);
+  return { ok: true, chargeId, paidValue: payment.value };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
 
@@ -159,6 +222,21 @@ export default async function handler(req, res) {
   }
 
   const payload = req.body || {};
+
+  // Rota Asaas: payload tem payment.id e event começa com PAYMENT_
+  const asaasEvent = (payload.event || '').toUpperCase();
+  if (payload.payment?.id && ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'].includes(asaasEvent)) {
+    try {
+      initAdmin();
+      const db = getFirestore();
+      const result = await handleAsaasPayment(db, payload.payment);
+      return res.status(200).json(result);
+    } catch (e) {
+      console.error('[asaas-webhook] erro:', e.message);
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   console.log('[assinafy-webhook] payload:', JSON.stringify(payload));
 
   const event = extractEvent(payload);
