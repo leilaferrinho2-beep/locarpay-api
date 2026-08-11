@@ -17,10 +17,16 @@ async function sendWhatsApp(phone, text) {
   const number = phone.replace(/\D/g, '');
   if (number.length < 10) return;
   try {
-    await fetch(`${url}/message/sendText/${inst}`, {
+    await fetch(`${url}/message/sendMedia/${inst}`, {
       method: 'POST',
       headers: { 'apikey': key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ number, text })
+      body: JSON.stringify({
+        number,
+        mediatype: 'image',
+        mimetype: 'image/png',
+        media: 'https://www.ilocarpay.com.br/logo.png',
+        caption: text
+      })
     });
   } catch (e) {
     console.warn('[whatsapp] falha ao enviar:', e.message);
