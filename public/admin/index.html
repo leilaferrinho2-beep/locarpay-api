@@ -1083,9 +1083,21 @@
     finally { btn.disabled = false; btn.textContent = 'Aprovar e Gerar Contrato'; }
   };
 
-  window.rejectLead = async (leadId) => {
-    const reason = prompt('Motivo da rejeição (opcional):') ?? null;
-    if (reason === null) return;
+  window.rejectLead = (leadId) => {
+    $('reject-lead-id').value    = leadId;
+    $('reject-reason-text').value = '';
+    $('modal-reject-lead').style.display = 'flex';
+  };
+
+  window.closeRejectModal = () => {
+    $('modal-reject-lead').style.display = 'none';
+  };
+
+  window.confirmRejectLead = async () => {
+    const leadId = $('reject-lead-id').value;
+    const reason = $('reject-reason-text').value.trim();
+    const btn = $('reject-confirm-btn');
+    btn.disabled = true; btn.textContent = 'Rejeitando...';
     try {
       const res = await fetch('/api/locarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1094,8 +1106,10 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       showToast('Lead rejeitado.', 'info');
+      closeRejectModal();
       await loadLeads();
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Confirmar rejeição'; }
   };
 
   window.removeLead = async (leadId) => {
@@ -1220,7 +1234,7 @@
               <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:${b.active?'#1b3a1b':'#3a1b1b'};color:${b.active?'#4CAF50':'#ef5350'}">${b.active?'Ativo':'Inativo'}</span>
             </td>
             <td style="padding:11px 0;text-align:right;white-space:nowrap">
-              <button onclick="openEditBroker('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}','${b.phone||''}',${b.active!==false})"
+              <button onclick="openEditBroker('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}','${b.phone||''}',${b.active!==false},'${b.creci||''}',${parseFloat(b.commissionPct||b.commission||0)})"
                 style="background:#1a2a3a;border:1px solid #2a4a6a;color:#64B5F6;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;margin-right:6px">
                 ✏️ Editar
               </button>
@@ -1234,11 +1248,13 @@
       </table>`;
   }
 
-  window.openEditBroker = (id, name, phone, active) => {
-    $('edit-broker-id').value     = id;
-    $('edit-broker-name').value   = name;
-    $('edit-broker-phone').value  = phone;
-    $('edit-broker-active').value = active ? 'true' : 'false';
+  window.openEditBroker = (id, name, phone, active, creci='', commissionPct=0) => {
+    $('edit-broker-id').value         = id;
+    $('edit-broker-name').value       = name;
+    $('edit-broker-phone').value      = phone;
+    $('edit-broker-active').value     = active ? 'true' : 'false';
+    $('edit-broker-creci').value      = creci;
+    $('edit-broker-commission').value = commissionPct || '';
     $('modal-edit-broker').style.display = 'flex';
   };
 
@@ -1247,17 +1263,19 @@
   };
 
   window.saveEditBroker = async () => {
-    const brokerId = $('edit-broker-id').value;
-    const name     = $('edit-broker-name').value.trim();
-    const phone    = $('edit-broker-phone').value.trim();
-    const active   = $('edit-broker-active').value === 'true';
+    const brokerId     = $('edit-broker-id').value;
+    const name         = $('edit-broker-name').value.trim();
+    const phone        = $('edit-broker-phone').value.trim();
+    const active       = $('edit-broker-active').value === 'true';
+    const creci        = $('edit-broker-creci').value.trim();
+    const commissionPct = parseFloat($('edit-broker-commission').value) || 0;
     if (!name) { showToast('Nome obrigatório', 'error'); return; }
     const btn = $('edit-broker-save-btn');
     btn.disabled = true; btn.textContent = 'Salvando...';
     try {
       const res = await fetch('/api/locarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'update-broker', brokerId, name, phone, active })
+        body: JSON.stringify({ step: 'update-broker', brokerId, name, phone, active, creci, commissionPct })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -4256,6 +4274,15 @@
       <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">TELEFONE / WHATSAPP</label>
       <input id="edit-broker-phone" type="tel" oninput="maskPhone(this)" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
     </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">CRECI</label>
+      <input id="edit-broker-creci" type="text" placeholder="Ex: 123456-F" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">COMISSÃO (%)</label>
+      <input id="edit-broker-commission" type="number" min="0" max="100" step="0.5" placeholder="Ex: 5" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+      <div style="font-size:11px;color:#666;margin-top:4px">% sobre o valor do aluguel mensal</div>
+    </div>
     <div style="margin-bottom:20px">
       <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">STATUS</label>
       <select id="edit-broker-active" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none">
@@ -4266,6 +4293,26 @@
     <div style="display:flex;gap:10px">
       <button onclick="closeEditBroker()" style="flex:1;background:#0f1117;border:1px solid #2a2d3e;color:#aaa;padding:11px;border-radius:9px;font-size:14px;cursor:pointer">Cancelar</button>
       <button id="edit-broker-save-btn" onclick="saveEditBroker()" style="flex:2;background:#1565C0;border:none;color:#fff;padding:11px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal rejeição de lead -->
+<div id="modal-reject-lead" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#1a1d2e;border-radius:16px;padding:28px;width:90%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 style="margin:0;font-size:16px;color:#ef5350">❌ Rejeitar lead</h3>
+      <button onclick="closeRejectModal()" style="background:none;border:none;color:#666;font-size:20px;cursor:pointer">×</button>
+    </div>
+    <input type="hidden" id="reject-lead-id">
+    <div style="margin-bottom:20px">
+      <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:8px">MOTIVO DA REJEIÇÃO</label>
+      <textarea id="reject-reason-text" rows="4" placeholder="Ex: Renda insuficiente, documentação incompleta, histórico de inadimplência..." style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none;resize:vertical;box-sizing:border-box;font-family:inherit" onfocus="this.style.borderColor='#ef5350'" onblur="this.style.borderColor='#2a2d3e'"></textarea>
+      <div style="font-size:11px;color:#666;margin-top:4px">O motivo será enviado por WhatsApp ao corretor e ao inquilino.</div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closeRejectModal()" style="flex:1;background:#0f1117;border:1px solid #2a2d3e;color:#aaa;padding:11px;border-radius:9px;font-size:14px;cursor:pointer">Cancelar</button>
+      <button id="reject-confirm-btn" onclick="confirmRejectLead()" style="flex:2;background:#c62828;border:none;color:#fff;padding:11px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer">Confirmar rejeição</button>
     </div>
   </div>
 </div>
