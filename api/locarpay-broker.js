@@ -14,6 +14,7 @@ import { getFirestore, FieldValue }      from 'firebase-admin/firestore';
 import { getMessaging }                  from 'firebase-admin/messaging';
 import { getStorage }                    from 'firebase-admin/storage';
 import nodemailer                         from 'nodemailer';
+import PDFDocument                        from 'pdfkit';
 
 function initFirebase() {
   if (getApps().length) return;
@@ -26,16 +27,102 @@ const APP_BASE_URL  = process.env.APP_BASE_URL || 'https://ilocarpay.com.br';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function assinafyReq(method, path, body, apiKey) {
+  const isFormData = body instanceof FormData;
   const r = await fetch(`${ASSINAFY_BASE}/${path}`, {
     method,
-    headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    ...(body ? { body: JSON.stringify(body) } : {})
+    headers: {
+      'X-Api-Key': apiKey,
+      'Accept': 'application/json',
+      ...(!isFormData ? { 'Content-Type': 'application/json' } : {})
+    },
+    ...(body ? { body: isFormData ? body : JSON.stringify(body) } : {})
   });
   const text = await r.text();
   let data;
   try { data = JSON.parse(text); } catch { data = text; }
   if (!r.ok) throw new Error(`Assinafy ${method} ${path} ${r.status}: ${text}`);
   return data;
+}
+
+function generateContractPdf(data) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks = [];
+    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    const fmt = v => (parseFloat(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const fmtDate = d => d ? String(d) : '—';
+
+    doc.fontSize(16).font('Helvetica-Bold')
+       .text('CONTRATO DE LOCAÇÃO RESIDENCIAL', { align: 'center' });
+    doc.fontSize(10).font('Helvetica')
+       .text(`Emitido por iLocarPay — ${new Date().toLocaleDateString('pt-BR')}`, { align: 'center' });
+    doc.moveDown(1.5);
+
+    const section = (title) => {
+      doc.moveDown(0.5);
+      doc.fontSize(11).font('Helvetica-Bold').text(title);
+      doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+      doc.moveDown(0.3);
+    };
+
+    const field = (label, value) => {
+      doc.fontSize(10).font('Helvetica-Bold').text(`${label}: `, { continued: true })
+         .font('Helvetica').text(value || '—');
+    };
+
+    section('1. DAS PARTES');
+    field('Locador / Proprietário', data.ownerName);
+    field('CPF/CNPJ do Locador', data.ownerCpf);
+    field('E-mail do Locador', data.ownerEmail);
+    doc.moveDown(0.3);
+    field('Locatário (Inquilino)', data.tenantName);
+    field('CPF do Locatário', data.tenantCpf);
+    field('E-mail do Locatário', data.tenantEmail);
+    field('Telefone do Locatário', data.tenantPhone);
+
+    section('2. DO IMÓVEL');
+    field('Endereço', data.propertyAddress);
+    field('Código do Imóvel', data.propertyCode);
+
+    section('3. DO PRAZO E VALOR');
+    field('Início da Locação', fmtDate(data.startDate));
+    field('Término da Locação', fmtDate(data.endDate));
+    field('Aluguel Mensal', fmt(data.baseRent));
+    field('Vencimento', `Todo dia ${data.dueDay || 10} de cada mês`);
+    if (data.deposit) field('Caução', fmt(data.deposit));
+
+    section('4. DAS OBRIGAÇÕES DO LOCATÁRIO');
+    doc.fontSize(10).font('Helvetica')
+       .text('O locatário se obriga a pagar pontualmente o aluguel na data convencionada, conservar o imóvel em bom estado, não efetuar obras ou modificações sem anuência prévia do locador, e restituir o imóvel no estado em que o recebeu ao término do contrato.', { align: 'justify' });
+
+    section('5. DAS OBRIGAÇÕES DO LOCADOR');
+    doc.fontSize(10).font('Helvetica')
+       .text('O locador se obriga a entregar o imóvel em condições de uso, manter a posse mansa e pacífica do imóvel durante a locação, e responder pelos vícios ou defeitos anteriores à locação.', { align: 'justify' });
+
+    section('6. DA RESCISÃO');
+    doc.fontSize(10).font('Helvetica')
+       .text('O contrato pode ser rescindido por qualquer das partes mediante notificação prévia de 30 dias. A rescisão sem justa causa pelo locatário antes do prazo implica multa proporcional ao período restante.', { align: 'justify' });
+
+    section('7. DO FORO');
+    doc.fontSize(10).font('Helvetica')
+       .text('As partes elegem o foro da comarca do imóvel locado para dirimir quaisquer controvérsias oriundas deste contrato.', { align: 'justify' });
+
+    doc.moveDown(3);
+    const y = doc.y;
+    doc.fontSize(10).font('Helvetica')
+       .text('_________________________________', 50, y)
+       .text(data.ownerName || 'Locador / Proprietário', 50, doc.y, { width: 220 })
+       .text(data.ownerEmail || '', 50, doc.y, { width: 220 });
+    doc.fontSize(10).font('Helvetica')
+       .text('_________________________________', 315, y)
+       .text(data.tenantName || 'Locatário (Inquilino)', 315, doc.y, { width: 220 })
+       .text(data.tenantEmail || '', 315, doc.y, { width: 220 });
+
+    doc.end();
+  });
 }
 
 async function getAssinafyAccount(apiKey) {
@@ -489,38 +576,53 @@ async function createAssinafyContract(db, contractId, data) {
   if (!apiKey) throw new Error('Chave Assinafy não configurada em config/assinafy');
 
   const accountId = await getAssinafyAccount(apiKey);
-  const contractUrl = `${APP_BASE_URL}/api/locarpay-broker?view=contract&contractId=${contractId}`;
+
+  // Gera PDF do contrato em memória
+  const pdfBuffer = await generateContractPdf(data);
+  const form = new FormData();
+  form.append('name', `Contrato de Locação — ${data.tenantName || contractId}`);
+  form.append('file', new Blob([pdfBuffer], { type: 'application/pdf' }), 'contrato.pdf');
 
   // Cria documento
-  const docRes = await assinafyReq('POST', `accounts/${accountId}/documents`, {
-    name: `Contrato de Locação — ${data.tenantName || contractId}`,
-    file_url: contractUrl
-  }, apiKey);
+  const docRes = await assinafyReq('POST', `accounts/${accountId}/documents`, form, apiKey);
   const documentId = docRes?.data?.id || docRes?.id;
   if (!documentId) throw new Error('Assinafy não retornou documentId: ' + JSON.stringify(docRes));
 
-  // Cria assignment com 2 signatários
-  const assignRes = await assinafyReq('POST', `accounts/${accountId}/documents/${documentId}/assignments`, {
+  // 2. Cria signatários
+  const [s1Res, s2Res] = await Promise.all([
+    assinafyReq('POST', `accounts/${accountId}/signers`,
+      { full_name: data.ownerName  || 'Proprietário', email: data.ownerEmail  }, apiKey),
+    assinafyReq('POST', `accounts/${accountId}/signers`,
+      { full_name: data.tenantName || 'Inquilino',    email: data.tenantEmail }, apiKey),
+  ]);
+  const s1Id = s1Res?.data?.id;
+  const s2Id = s2Res?.data?.id;
+  if (!s1Id || !s2Id) throw new Error('Assinafy não retornou IDs dos signatários');
+
+  // 3. Cria assignment (sequencial: proprietário step 1, inquilino step 2)
+  const assignRes = await assinafyReq('POST', `documents/${documentId}/assignments`, {
     signers: [
-      { step: 1, name: data.ownerName,  email: data.ownerEmail,  action: 'sign' },
-      { step: 2, name: data.tenantName, email: data.tenantEmail, action: 'sign' }
+      { id: s1Id, step: 1, action: 'sign' },
+      { id: s2Id, step: 2, action: 'sign' }
     ]
   }, apiKey);
-  const assignmentId = assignRes?.data?.id || assignRes?.id;
+  const assignmentId = assignRes?.data?.id;
 
-  // Salva IDs no contrato
+  // 4. Salva IDs no contrato
   await db.collection('contracts').doc(contractId).update({
     assinafyDocumentId:   documentId,
     assinafyAssignmentId: assignmentId || '',
+    assinafySignerId1:    s1Id,
+    assinafySignerId2:    s2Id,
     assinafyStatus:       'sent',
     updatedAt:            FieldValue.serverTimestamp()
   });
 
-  // Pega link de assinatura do proprietário (step 1)
-  const signers = assignRes?.data?.signers || assignRes?.signers || [];
-  const ownerSigner = signers.find(s => s.step === 1) || signers[0];
+  // URL de assinatura do proprietário (step 1)
+  const signingUrls = assignRes?.data?.signing_urls || [];
+  const ownerSignUrl = signingUrls.find(u => u.signer_id === s1Id)?.url || null;
 
-  return { documentId, assignmentId, ownerSignUrl: ownerSigner?.sign_url || null };
+  return { documentId, assignmentId, ownerSignUrl };
 }
 
 async function handleGenerateContract(db, body) {

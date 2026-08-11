@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "nodemailer": "^6.9.14",
-    "firebase-admin": "^12.3.0"
+    "firebase-admin": "^12.3.0",
+    "pdfkit": "^0.15.2"
   }
 }
