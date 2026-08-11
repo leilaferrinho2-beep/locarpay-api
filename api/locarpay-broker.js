@@ -157,7 +157,7 @@ async function sendWhatsApp(phone, message) {
         number,
         mediatype: 'image',
         mimetype: 'image/png',
-        media: 'https://www.ilocarpay.com.br/logo.png',
+        media: 'https://www.ilocarpay.com.br/og-image.png',
         caption: message
       })
     });
