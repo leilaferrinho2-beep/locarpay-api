@@ -802,6 +802,19 @@ async function handleRejectLead(db, body) {
 
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
 
+async function handleGetSignedReadUrl(body, bucket) {
+  const { path } = body;
+  if (!path) throw Object.assign(new Error('path obrigatório'), { status: 400 });
+  const storage = getStorage();
+  const bucketName = bucket || 'locarpayapp.appspot.com';
+  const file = storage.bucket(bucketName).file(path);
+  const [url] = await file.getSignedUrl({
+    action: 'read',
+    expires: Date.now() + 60 * 60 * 1000, // 1h
+  });
+  return { ok: true, url };
+}
+
 async function handleGetUploadUrl(body, bucket) {
   const { ownerId, fileName, contentType } = body;
   if (!ownerId || !fileName) throw Object.assign(new Error('ownerId e fileName obrigatórios'), { status: 400 });
@@ -889,6 +902,7 @@ export default async function handler(req, res) {
     else if (step === 'reject-lead')       result = await handleRejectLead(db, req.body);
     else if (step === 'remove-lead')       result = await handleRemoveLead(db, req.body);
     else if (step === 'get-upload-url')    result = await handleGetUploadUrl(req.body, req._storageBucket);
+    else if (step === 'get-signed-url')    result = await handleGetSignedReadUrl(req.body, req._storageBucket);
     else throw Object.assign(new Error('step inválido'), { status: 400 });
     res.status(200).json(result);
   } catch (e) {
