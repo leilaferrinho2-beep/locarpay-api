@@ -132,12 +132,35 @@ async function getAssinafyAccount(apiKey) {
   return accountId;
 }
 
-async function sendEmail(to, subject, html) {
+async function sendEmail(to, subject, html, attachments) {
   const transporter = nodemailer.createTransport({
     host: 'smtp.titan.email', port: 587, secure: false,
     auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
   });
-  await transporter.sendMail({ from: 'iLocarPay <denis@dlftech.com.br>', to, subject, html });
+  await transporter.sendMail({ from: 'iLocarPay <denis@dlftech.com.br>', to, subject, html, attachments });
+}
+
+async function sendContractEmail({ landlordName, landlordEmail, tenantName, tenantEmail, propAddr, pdfData }) {
+  const addrLine = propAddr ? `<div style="background:#f0f7f0;border-left:4px solid #4CAF50;padding:12px 16px;border-radius:4px;margin:16px 0"><strong>Imóvel:</strong> ${propAddr}</div>` : '';
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
+      <div style="background:#1a1a1a;padding:32px;text-align:center">
+        <h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1>
+        <p style="color:#ccc;margin:8px 0 0">Gestão inteligente de aluguéis</p>
+      </div>
+      <div style="padding:32px">
+        <p style="font-size:18px;font-weight:bold;color:#1a1a1a">Contrato de Locação</p>
+        <p style="color:#444">Olá, <strong>${landlordName || 'Proprietário'}</strong>!</p>
+        <p style="color:#444">Segue em anexo o contrato de locação referente ao inquilino <strong>${tenantName || tenantEmail}</strong>.</p>
+        ${addrLine}
+        <p style="color:#444">Por favor, revise o contrato. Em breve você receberá o link para assinatura digital.</p>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+        <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay • <a href="https://www.ilocarpay.com.br" style="color:#4CAF50">ilocarpay.com.br</a></p>
+      </div>
+    </div>`;
+  await sendEmail(landlordEmail, '📄 Contrato de Locação — iLocarPay', html, [
+    { filename: `contrato_${(tenantName || tenantEmail).replace(/\s+/g, '_')}.pdf`, content: pdfData, contentType: 'application/pdf' }
+  ]);
 }
 
 async function sendWhatsApp(phone, message) {
@@ -499,6 +522,29 @@ async function handleApproveLead(db, body) {
     console.error('[approve-lead] Assinafy error:', e.message);
   }
 
+  // Envia PDF do contrato por e-mail ao proprietário do imóvel (sempre, independente da Assinafy)
+  if (landlordEmail) {
+    try {
+      const pdfData = await generateContractPdf({
+        contractId,
+        ownerName:    landlordName,
+        ownerEmail:   landlordEmail,
+        ownerCpf:     landlordCpf,
+        tenantName:   lead.tenant.name,
+        tenantEmail,
+        tenantCpf:    lead.tenant.cpf,
+        propertyCode:    lead.propertyCode,
+        propertyAddress: propAddr,
+        baseRent:  cd.baseRent  || parseFloat(lp.rentValue)  || 0,
+        dueDay:    cd.dueDay    || lp.dueDay    || 10,
+        startDate: cd.startDate || lp.startDate || '',
+        endDate:   cd.endDate   || lp.endDate   || '',
+        deposit:   cd.deposit   || parseFloat(lp.deposit)    || 0
+      });
+      await sendContractEmail({ landlordName, landlordEmail, tenantName: lead.tenant.name, tenantEmail, propAddr, pdfData });
+    } catch (e) { console.warn('[approve-lead] contract email error:', e.message); }
+  }
+
   // Atualiza lead
   await leadRef.update({
     status:      'approved',
@@ -667,7 +713,7 @@ async function handleGenerateContract(db, body) {
     } catch (_) {}
   }
 
-  const result = await createAssinafyContract(db, contractId, {
+  const contractPdfData = {
     contractId,
     ownerName:       landlordName,
     ownerEmail:      landlordEmail,
@@ -675,7 +721,6 @@ async function handleGenerateContract(db, body) {
     tenantName,
     tenantEmail:     c.tenantEmail,
     tenantCpf,
-    tenantPhone,
     propertyCode:    c.propertyCode,
     propertyAddress: c.propertyAddress || c.address || '',
     baseRent:  c.baseRent,
@@ -683,7 +728,23 @@ async function handleGenerateContract(db, body) {
     startDate: c.startDate,
     endDate:   c.endDate,
     deposit:   c.deposit || 0
-  });
+  };
+
+  let result = {};
+  try {
+    result = await createAssinafyContract(db, contractId, { ...contractPdfData, tenantPhone });
+  } catch (e) {
+    console.error('[generate-contract] Assinafy error:', e.message);
+  }
+
+  // Envia PDF do contrato por e-mail ao proprietário (sempre, independente da Assinafy)
+  if (landlordEmail) {
+    try {
+      const pdfData = await generateContractPdf(contractPdfData);
+      const propAddr = c.propertyAddress || c.address || c.propertyCode || '';
+      await sendContractEmail({ landlordName, landlordEmail, tenantName, tenantEmail: c.tenantEmail, propAddr, pdfData });
+    } catch (e) { console.warn('[generate-contract] contract email error:', e.message); }
+  }
 
   // Salva phones no contrato para o webhook usar depois
   await db.collection('contracts').doc(contractId).update({
@@ -807,7 +868,7 @@ async function handleGetSignedReadUrl(body, bucket) {
   const { path } = body;
   if (!path) throw Object.assign(new Error('path obrigatório'), { status: 400 });
   const storage = getStorage();
-  const bucketName = bucket || 'locarpayapp.appspot.com';
+  const bucketName = bucket || 'locarpayapp.firebasestorage.app';
   const file = storage.bucket(bucketName).file(path);
   const [url] = await file.getSignedUrl({
     action: 'read',
@@ -822,7 +883,7 @@ async function handleGetUploadUrl(body, bucket) {
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path = `leads/${ownerId}/${Date.now()}_${safeName}`;
   const storage = getStorage();
-  const bucketName = bucket || 'locarpayapp.appspot.com';
+  const bucketName = bucket || 'locarpayapp.firebasestorage.app';
   const file = storage.bucket(bucketName).file(path);
   const [signedUrl] = await file.getSignedUrl({
     action: 'write',
@@ -890,7 +951,7 @@ export default async function handler(req, res) {
     initFirebase();
     const db   = getFirestore();
     const sa   = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT || '{}');
-    req._storageBucket = sa.project_id ? `${sa.project_id}.appspot.com` : null;
+    req._storageBucket = sa.project_id ? `${sa.project_id}.firebasestorage.app` : null;
     const { step } = req.body || {};
     let result;
     if      (step === 'register-broker')   result = await handleRegisterBroker(db, req.body);
