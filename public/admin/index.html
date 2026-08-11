@@ -8,6 +8,7 @@
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, signInWithPopup, signInWithRedirect, signInWithCustomToken, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
   import { getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, query, where, orderBy, limit, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { getStorage, ref as storageRef, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
   const MASTER_EMAIL = 'denisfelicio20@gmail.com';
 
@@ -17,9 +18,27 @@
     projectId: "locarpayapp"
   });
 
-  const auth = getAuth(app);
-  const db   = getFirestore(app);
+  const auth    = getAuth(app);
+  const db      = getFirestore(app);
+  const storage = getStorage(app);
   const provider = new GoogleAuthProvider();
+
+  // Abre documento do Firebase Storage autenticado
+  async function openStorageDoc(urlOrPath) {
+    try {
+      // Extrai o path do Storage a partir da URL pública ou usa direto se for path
+      let path = urlOrPath;
+      const match = urlOrPath.match(/\/o\/([^?]+)/);
+      if (match) path = decodeURIComponent(match[1]);
+      const url = await getDownloadURL(storageRef(storage, path));
+      window.open(url, '_blank');
+    } catch(e) {
+      console.warn('[openStorageDoc] falha:', e.message);
+      // fallback: abre direto
+      window.open(urlOrPath, '_blank');
+    }
+  }
+  window.openStorageDoc = openStorageDoc;
 
   // Estado global
   let currentOwnerId   = null;
@@ -854,13 +873,22 @@
   }
 
   // ── Modal detalhes do lead ────────────────────────────────────
-  window.viewLeadDetail = (leadId) => {
+  window.viewLeadDetail = async (leadId) => {
     const l = leads.find(x => x.id === leadId);
     if (!l) return;
     const t = l.tenant || {};
     const p = l.property || {};
     const g = l.guarantee || {};
     const s = l.spouse;
+
+    // Carrega contrato para verificar se está assinado
+    let contractData = null;
+    if (l.contractId) {
+      try {
+        const cSnap = await getDoc(doc(db, 'contracts', l.contractId));
+        if (cSnap.exists()) contractData = cSnap.data();
+      } catch(e) { console.warn('Erro ao carregar contrato:', e.message); }
+    }
 
     const fmtRow = (label, val) => val ? `
       <tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;white-space:nowrap">${label}</td>
@@ -873,11 +901,15 @@
       </div>` : '';
 
     const propAddr = [p.street, p.number, p.complement, p.neighborhood, p.city, p.state].filter(Boolean).join(', ');
-    const docsHtml = (l.docs || []).map(d =>
-      `<a href="${d.url}" target="_blank" style="display:inline-block;margin:4px;padding:6px 10px;background:#1a2a1a;border:1px solid #4CAF50;border-radius:6px;color:#4CAF50;font-size:12px;text-decoration:none">
-        📎 ${d.type || 'Documento'}
-       </a>`
-    ).join('');
+    const docsHtml = (l.docs || []).map(d => {
+      const urlOrPath = d.path || d.url || '';
+      const isPdf = urlOrPath.includes('.pdf') || (d.url || '').includes('application%2Fpdf');
+      const icon = isPdf ? '📄' : '🖼️';
+      return `<button onclick="openStorageDoc('${urlOrPath.replace(/'/g,"\\'")}');event.stopPropagation()"
+        style="display:inline-flex;align-items:center;gap:6px;margin:4px;padding:8px 12px;background:#1a2a1a;border:1px solid #4CAF50;border-radius:8px;color:#4CAF50;font-size:12px;cursor:pointer;font-weight:600">
+        ${icon} ${d.type || 'Documento'} ⬇
+       </button>`;
+    }).join('');
 
     const statusCfg = { pending:'#FFD54F', approved:'#4CAF50', rejected:'#ef5350', delivered:'#42A5F5' };
     const statusLabel = { pending:'⏳ Pendente', approved:'✅ Aprovado', rejected:'❌ Reprovado', delivered:'🏠 Chaves entregues' };
@@ -949,8 +981,20 @@
 
       <div style="margin-bottom:16px">
         <div style="color:#4CAF50;font-weight:700;font-size:13px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #2a2a2a">📎 Documentos (${(l.docs||[]).length})</div>
-        ${docsHtml || '<span style="color:#888;font-size:13px">Nenhum documento</span>'}
+        ${docsHtml || '<span style="color:#888;font-size:13px">Nenhum documento anexado</span>'}
       </div>
+
+      ${contractData ? `<div style="margin-bottom:16px">
+        <div style="color:#42A5F5;font-weight:700;font-size:13px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #2a2a2a">📋 Contrato</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:12px;color:#888">Status Assinafy: <strong style="color:${contractData.assinafyStatus==='completed'?'#4CAF50':'#FFD54F'}">${contractData.assinafyStatus==='completed'?'✅ Assinado por ambas as partes':contractData.assinafyStatus==='sent'?'⏳ Aguardando assinaturas':'📝 '+contractData.assinafyStatus}</strong></span>
+          ${contractData.signedStoragePath ? `<button onclick="openStorageDoc('${contractData.signedStoragePath}')"
+            style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#0d1e2e;border:1px solid #42A5F5;border-radius:8px;color:#42A5F5;font-size:12px;cursor:pointer;font-weight:700">
+            📄 Baixar Contrato Assinado ⬇
+          </button>` : ''}
+        </div>
+      </div>` : ''}
+
 
       <div style="margin-bottom:16px">
         <div style="color:#4CAF50;font-weight:700;font-size:13px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #2a2a2a">🤝 Corretor</div>
