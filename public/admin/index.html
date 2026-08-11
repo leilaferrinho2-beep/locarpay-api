@@ -42,16 +42,17 @@
   }
 
   window.setTab = function setTab(tab) {
-    ['tab-tenants','tab-owners','tab-overdue','tab-licenses','tab-config','tab-leads','tab-plano'].forEach(t => {
+    ['tab-tenants','tab-owners','tab-overdue','tab-licenses','tab-config','tab-leads','tab-plano','tab-brokers'].forEach(t => {
       $(t)?.classList.remove('active');
       const panel = $(t.replace('tab-', 'panel-'));
       if (panel) panel.style.display = 'none';
     });
     $('tab-' + tab)?.classList.add('active');
     const p = $('panel-' + tab); if (p) p.style.display = 'block';
-    if (tab === 'config') loadConfigTab();
-    if (tab === 'leads')  loadLeads();
-    if (tab === 'plano')  renderPlanoTab();
+    if (tab === 'config')   loadConfigTab();
+    if (tab === 'leads')    loadLeads();
+    if (tab === 'plano')    renderPlanoTab();
+    if (tab === 'brokers')  loadBrokersTab();
   }
 
   function loadConfigTab() {
@@ -1216,6 +1217,159 @@
       loadBrokers();
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     finally { btn.disabled = false; btn.textContent = 'Salvar'; }
+  };
+
+  async function loadBrokersTab() {
+    if (!currentOwnerId) return;
+    const wrap = $('brokers-tab-content');
+    if (!wrap) return;
+    wrap.innerHTML = '<p style="color:#555;font-size:13px">Carregando...</p>';
+    try {
+      const [brokerSnap, leadsSnap, contractsSnap] = await Promise.all([
+        getDocs(query(collection(db, 'brokers'), where('ownerId', '==', currentOwnerId))),
+        getDocs(query(collection(db, 'leads'),   where('ownerId', '==', currentOwnerId))),
+        getDocs(query(collection(db, 'contracts'), where('ownerId', '==', currentOwnerId)))
+      ]);
+      const brokers   = brokerSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const leads     = leadsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const contracts = contractsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      if (!brokers.length) {
+        wrap.innerHTML = '<p style="color:#555;font-size:13px">Nenhum corretor cadastrado. Vá em Configurações para cadastrar corretores.</p>';
+        return;
+      }
+
+      // Agrega por corretor
+      const fmt = v => (parseFloat(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      const rows = brokers.map(b => {
+        const email = (b.email || '').toLowerCase().trim();
+        const myLeads     = leads.filter(l => (l.brokerEmail || '').toLowerCase() === email);
+        const approved    = myLeads.filter(l => l.status === 'approved' || l.status === 'delivered');
+        const myContracts = contracts.filter(c => (c.brokerEmail || '').toLowerCase() === email && c.active);
+        // Comissão = commission% do broker × soma dos aluguéis ativos
+        const commPct = parseFloat(b.commission || 5);
+        const totalRent = myContracts.reduce((s, c) => s + (parseFloat(c.baseRent) || 0), 0);
+        const commission = totalRent * (commPct / 100);
+
+        // Histórico de locações: contratos onde brokerEmail bate
+        const allContracts = contracts.filter(c => (c.brokerEmail || '').toLowerCase() === email);
+        const histHtml = allContracts.length
+          ? allContracts.map(c => `
+              <tr style="border-bottom:1px solid #1a1d2e">
+                <td style="padding:7px 10px;font-size:12px">${c.propertyCode || c.propertyAddress || '—'}</td>
+                <td style="padding:7px 10px;font-size:12px">${c.tenantName || '—'}</td>
+                <td style="padding:7px 10px;font-size:12px;color:#4CAF50">${fmt(c.baseRent)}/mês</td>
+                <td style="padding:7px 10px;font-size:12px">${c.startDate || '—'}</td>
+                <td style="padding:7px 10px;font-size:12px">
+                  <span style="padding:2px 8px;border-radius:10px;font-size:11px;background:${c.active ? '#1a3a1a' : '#2a1a1a'};color:${c.active ? '#4CAF50' : '#ef5350'}">
+                    ${c.active ? 'Ativo' : 'Inativo'}
+                  </span>
+                </td>
+                <td style="padding:7px 10px;font-size:12px;color:#FFD54F">${fmt(parseFloat(c.baseRent) * commPct / 100)}/mês</td>
+              </tr>`).join('')
+          : `<tr><td colspan="6" style="padding:10px;color:#555;font-size:12px;text-align:center">Nenhuma locação fechada ainda</td></tr>`;
+
+        return `
+          <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:14px;padding:22px;margin-bottom:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+              <div style="display:flex;align-items:center;gap:12px">
+                <div style="width:42px;height:42px;border-radius:50%;background:#1a2a1a;border:2px solid #4CAF50;display:flex;align-items:center;justify-content:center;font-size:18px">🤝</div>
+                <div>
+                  <div style="font-weight:700;font-size:15px;color:#e0e0e0">${b.name || '—'}</div>
+                  <div style="font-size:12px;color:#888">${b.email}${b.phone ? ' · ' + b.phone : ''}</div>
+                </div>
+                <span style="padding:3px 10px;border-radius:10px;font-size:11px;font-weight:600;background:${b.active !== false ? '#1a3a1a' : '#2a1a1a'};color:${b.active !== false ? '#4CAF50' : '#ef5350'}">
+                  ${b.active !== false ? 'Ativo' : 'Inativo'}
+                </span>
+              </div>
+              <div style="display:flex;gap:16px;flex-wrap:wrap">
+                <div style="text-align:center">
+                  <div style="font-size:22px;font-weight:700;color:#64B5F6">${myLeads.length}</div>
+                  <div style="font-size:11px;color:#666">LEADS</div>
+                </div>
+                <div style="text-align:center">
+                  <div style="font-size:22px;font-weight:700;color:#4CAF50">${approved.length}</div>
+                  <div style="font-size:11px;color:#666">APROVADOS</div>
+                </div>
+                <div style="text-align:center">
+                  <div style="font-size:22px;font-weight:700;color:#81C784">${myContracts.length}</div>
+                  <div style="font-size:11px;color:#666">ATIVOS</div>
+                </div>
+                <div style="text-align:center">
+                  <div style="font-size:18px;font-weight:700;color:#FFD54F">${fmt(totalRent)}</div>
+                  <div style="font-size:11px;color:#666">ALUGUEL TOTAL</div>
+                </div>
+                <div style="text-align:center;background:#1a1500;border:1px solid #FFD54F44;border-radius:10px;padding:6px 14px">
+                  <div style="font-size:18px;font-weight:700;color:#FFD54F">${fmt(commission)}</div>
+                  <div style="font-size:11px;color:#888">COMISSÃO/MÊS (${commPct}%)</div>
+                </div>
+              </div>
+            </div>
+            <div style="overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse">
+                <thead>
+                  <tr style="background:#0f1117">
+                    <th style="padding:8px 10px;text-align:left;font-size:11px;color:#666;font-weight:600">IMÓVEL</th>
+                    <th style="padding:8px 10px;text-align:left;font-size:11px;color:#666;font-weight:600">INQUILINO</th>
+                    <th style="padding:8px 10px;text-align:left;font-size:11px;color:#666;font-weight:600">ALUGUEL</th>
+                    <th style="padding:8px 10px;text-align:left;font-size:11px;color:#666;font-weight:600">INÍCIO</th>
+                    <th style="padding:8px 10px;text-align:left;font-size:11px;color:#666;font-weight:600">STATUS</th>
+                    <th style="padding:8px 10px;text-align:left;font-size:11px;color:#666;font-weight:600">COMISSÃO</th>
+                  </tr>
+                </thead>
+                <tbody>${histHtml}</tbody>
+              </table>
+            </div>
+            <div style="margin-top:12px;display:flex;align-items:center;gap:8px">
+              <span style="font-size:12px;color:#888">% comissão deste corretor:</span>
+              <input type="number" min="0" max="100" step="0.5" value="${commPct}"
+                style="width:70px;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:5px 8px;border-radius:7px;font-size:13px;outline:none"
+                onchange="saveBrokerCommission('${b.id}', this.value)"
+                onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+              <span style="font-size:12px;color:#888">%</span>
+            </div>
+          </div>`;
+      });
+
+      // Totais gerais
+      const totalComm = brokers.reduce((s, b) => {
+        const email = (b.email || '').toLowerCase();
+        const mc = contracts.filter(c => (c.brokerEmail||'').toLowerCase() === email && c.active);
+        const rent = mc.reduce((a, c) => a + (parseFloat(c.baseRent)||0), 0);
+        return s + rent * ((parseFloat(b.commission||5))/100);
+      }, 0);
+
+      wrap.innerHTML = `
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px">
+          <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:12px;padding:16px 24px;flex:1;min-width:140px;text-align:center">
+            <div style="font-size:26px;font-weight:700;color:#64B5F6">${brokers.length}</div>
+            <div style="font-size:12px;color:#666;margin-top:2px">CORRETORES</div>
+          </div>
+          <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:12px;padding:16px 24px;flex:1;min-width:140px;text-align:center">
+            <div style="font-size:26px;font-weight:700;color:#4CAF50">${leads.length}</div>
+            <div style="font-size:12px;color:#666;margin-top:2px">TOTAL LEADS</div>
+          </div>
+          <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:12px;padding:16px 24px;flex:1;min-width:140px;text-align:center">
+            <div style="font-size:26px;font-weight:700;color:#FFD54F">${fmt(totalComm)}</div>
+            <div style="font-size:12px;color:#666;margin-top:2px">COMISSÕES/MÊS</div>
+          </div>
+        </div>
+        ${rows.join('')}`;
+    } catch (e) {
+      wrap.innerHTML = `<p style="color:#ef5350;font-size:13px">Erro: ${e.message}</p>`;
+    }
+  }
+
+  window.saveBrokerCommission = async (brokerId, value) => {
+    const pct = parseFloat(value);
+    if (isNaN(pct) || pct < 0 || pct > 100) { showToast('Percentual inválido', 'error'); return; }
+    try {
+      await fetch('/api/locarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'update-broker', brokerId, commission: pct })
+      });
+      showToast('Comissão atualizada!', 'success');
+    } catch (e) { showToast('Erro ao salvar', 'error'); }
   };
 
   window.deleteBroker = async (brokerId, name) => {
@@ -2807,6 +2961,7 @@
   $('tab-licenses').addEventListener('click',() => { setTab('licenses'); loadLicenses(); });
   $('tab-config').addEventListener('click',  () => { setTab('config'); loadBrokers(); loadConfigTab(); });
   $('tab-leads').addEventListener('click',   () => { setTab('leads'); loadLeads(); });
+  $('tab-brokers').addEventListener('click', () => { setTab('brokers'); loadBrokersTab(); });
   $('tab-plano').addEventListener('click',   () => { setTab('plano'); renderPlanoTab?.(); });
 
   // ── Gestão de Licenças (acesso admin no app) ──────────────────────────────
@@ -2965,9 +3120,10 @@
     // Abas exclusivas do master
     if (!isMaster) {
       $('tab-owners').style.display = 'none';
-      $('tab-config').style.display = 'block';
-      $('tab-leads').style.display  = 'block';
-      $('tab-plano').style.display  = 'block';
+      $('tab-config').style.display   = 'block';
+      $('tab-leads').style.display    = 'block';
+      $('tab-brokers').style.display  = 'block';
+      $('tab-plano').style.display    = 'block';
     } else {
       $('tab-licenses').style.display = 'block';
       $('tab-leads').style.display    = 'block';
@@ -3184,6 +3340,7 @@
   <div class="tabs">
     <div class="tab active" id="tab-tenants">Inquilinos</div>
     <div class="tab" id="tab-leads" style="display:none">📋 Leads</div>
+    <div class="tab" id="tab-brokers" style="display:none">🤝 Corretores</div>
     <div class="tab" id="tab-overdue" style="color:#ef9a9a">⚠ Inadimplentes</div>
     <div class="tab" id="tab-owners" style="display:none">Imobiliárias</div>
     <div class="tab" id="tab-licenses" style="display:none">🔑 Licenças</div>
@@ -3370,6 +3527,16 @@
       </div>
 
     </div>
+  </div>
+
+  <!-- Painel: Corretores e Comissões -->
+  <div class="panel" id="panel-brokers" style="display:none">
+    <div class="section-header">
+      <h2>🤝 Corretores e Comissões</h2>
+      <button class="btn-outline" onclick="loadBrokersTab()">↻ Atualizar</button>
+    </div>
+    <p style="font-size:13px;color:#888;margin-bottom:20px">Desempenho dos corretores: leads enviados, locações fechadas e comissões geradas.</p>
+    <div id="brokers-tab-content"><p style="color:#555;font-size:13px">Carregando...</p></div>
   </div>
 
   <!-- Painel: Leads de Corretores -->
