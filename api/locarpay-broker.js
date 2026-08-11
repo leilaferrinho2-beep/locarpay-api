@@ -275,12 +275,13 @@ async function handleRegisterBroker(db, body) {
 // ── UPDATE BROKER ─────────────────────────────────────────────────────────────
 
 async function handleUpdateBroker(db, body) {
-  const { brokerId, name, phone, active } = body;
+  const { brokerId, name, phone, active, commission } = body;
   if (!brokerId) throw Object.assign(new Error('brokerId obrigatório'), { status: 400 });
   const updates = {};
-  if (name  !== undefined) updates.name  = name;
-  if (phone !== undefined) updates.phone = phone;
-  if (active !== undefined) updates.active = active;
+  if (name       !== undefined) updates.name       = name;
+  if (phone      !== undefined) updates.phone      = phone;
+  if (active     !== undefined) updates.active     = active;
+  if (commission !== undefined) updates.commission = parseFloat(commission) || 5;
   if (!Object.keys(updates).length) throw Object.assign(new Error('Nenhum campo para atualizar'), { status: 400 });
   await db.collection('brokers').doc(brokerId).update(updates);
   // Espelha no users também
