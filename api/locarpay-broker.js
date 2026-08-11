@@ -698,7 +698,7 @@ async function handleGetUploadUrl(body, bucket) {
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path = `leads/${ownerId}/${Date.now()}_${safeName}`;
   const storage = getStorage();
-  const bucketName = bucket || `${ownerId}.firebasestorage.app`;
+  const bucketName = bucket || 'locarpayapp.appspot.com';
   const file = storage.bucket(bucketName).file(path);
   const [signedUrl] = await file.getSignedUrl({
     action: 'write',
@@ -715,6 +715,27 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   // GET: serve HTML do contrato para Assinafy
+  // Evolution API webhook — connection.update events
+  if (req.method === 'POST' && req.query?.webhook === 'evolution') {
+    const event = req.body?.event || '';
+    const state = req.body?.data?.state || '';
+    if (event === 'connection.update' && (state === 'close' || state === 'refused')) {
+      const baseUrl  = process.env.EVOLUTION_API_URL;
+      const apiKey   = process.env.EVOLUTION_API_KEY;
+      const instance = process.env.EVOLUTION_INSTANCE;
+      const adminPhone = process.env.ADMIN_WHATSAPP || '5514996270111';
+      if (baseUrl && apiKey && instance) {
+        const msg = `⚠️ *iLocarPay* - WhatsApp desconectado!\n\nInstância "${instance}" status: *${state}*.\n\nAcesse o painel para reconectar via QR code.`;
+        fetch(`${baseUrl}/message/sendText/${instance}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: apiKey },
+          body: JSON.stringify({ number: adminPhone, text: msg }),
+        }).catch(() => {});
+      }
+    }
+    return res.status(200).json({ ok: true });
+  }
+
   if (req.method === 'GET') {
     const { view, contractId } = req.query || {};
     if (view === 'contract' && contractId) {
@@ -745,7 +766,7 @@ export default async function handler(req, res) {
     initFirebase();
     const db   = getFirestore();
     const sa   = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT || '{}');
-    req._storageBucket = sa.project_id ? `${sa.project_id}.firebasestorage.app` : null;
+    req._storageBucket = sa.project_id ? `${sa.project_id}.appspot.com` : null;
     const { step } = req.body || {};
     let result;
     if      (step === 'register-broker')   result = await handleRegisterBroker(db, req.body);
