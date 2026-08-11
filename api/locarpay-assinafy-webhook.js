@@ -23,8 +23,8 @@ async function sendWhatsApp(phone, text) {
       body: JSON.stringify({
         number,
         mediatype: 'image',
-        mimetype: 'image/png',
-        media: 'https://www.ilocarpay.com.br/og-image.png',
+        mimetype: 'image/webp',
+        media: 'https://www.ilocarpay.com.br/logo.webp',
         caption: text
       })
     });
