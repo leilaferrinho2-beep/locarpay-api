@@ -45,6 +45,74 @@
   }
   window.openStorageDoc = openStorageDoc;
 
+  // ── Sanitização XSS ───────────────────────────────────────────
+  function esc(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // ── Dialog customizado (substitui confirm/alert/prompt) ───────
+  function showConfirm(msg, onConfirm, opts = {}) {
+    let overlay = document.getElementById('_confirm-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = '_confirm-overlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+      overlay.innerHTML = `
+        <div style="background:#1a1d2e;border:1px solid #3a3d52;border-radius:14px;padding:32px;max-width:420px;width:90%;box-shadow:0 24px 60px rgba(0,0,0,.6)">
+          <p id="_confirm-msg" style="font-size:15px;color:#e0e0e0;line-height:1.6;margin-bottom:24px;white-space:pre-line"></p>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button id="_confirm-cancel" style="background:#2a2d3e;color:#aaa;border:1px solid #3a3d52;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">Cancelar</button>
+            <button id="_confirm-ok" style="border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer">Confirmar</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+    }
+    const okBtn = document.getElementById('_confirm-ok');
+    okBtn.style.background = opts.danger ? '#c0392b' : '#4CAF50';
+    okBtn.style.color = '#fff';
+    okBtn.textContent = opts.okText || 'Confirmar';
+    document.getElementById('_confirm-msg').textContent = msg;
+    overlay.style.display = 'flex';
+    const close = () => { overlay.style.display = 'none'; };
+    okBtn.onclick = () => { close(); onConfirm(); };
+    document.getElementById('_confirm-cancel').onclick = close;
+    overlay.onclick = e => { if (e.target === overlay) close(); };
+  }
+
+  function showPrompt(msg, defaultVal, onConfirm) {
+    let overlay = document.getElementById('_prompt-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = '_prompt-overlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+      overlay.innerHTML = `
+        <div style="background:#1a1d2e;border:1px solid #3a3d52;border-radius:14px;padding:32px;max-width:420px;width:90%;box-shadow:0 24px 60px rgba(0,0,0,.6)">
+          <p id="_prompt-msg" style="font-size:15px;color:#e0e0e0;margin-bottom:16px"></p>
+          <input id="_prompt-input" style="width:100%;background:#0f1117;border:1px solid #3a3d52;color:#e0e0e0;border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:20px">
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button id="_prompt-cancel" style="background:#2a2d3e;color:#aaa;border:1px solid #3a3d52;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">Cancelar</button>
+            <button id="_prompt-ok" style="background:#4CAF50;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer">OK</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+    }
+    document.getElementById('_prompt-msg').textContent = msg;
+    const input = document.getElementById('_prompt-input');
+    input.value = defaultVal || '';
+    overlay.style.display = 'flex';
+    setTimeout(() => input.focus(), 50);
+    const close = () => { overlay.style.display = 'none'; };
+    document.getElementById('_prompt-ok').onclick = () => { const v = input.value; close(); onConfirm(v); };
+    document.getElementById('_prompt-cancel').onclick = close;
+    overlay.onclick = e => { if (e.target === overlay) close(); };
+    input.onkeydown = e => { if (e.key === 'Enter') document.getElementById('_prompt-ok').click(); };
+  }
+
   // Estado global
   let currentOwnerId   = null;
   let currentOwnerData = null;
@@ -332,11 +400,11 @@
       const asaasBadge = o.asaasApiKey ? '✅' : '⬜';
       const row = document.createElement('tr');
       row.innerHTML = `
-        <td>${o.name || '—'}</td>
-        <td style="font-size:12px;color:#888">${o.email || '—'}</td>
+        <td>${esc(o.name) || '—'}</td>
+        <td style="font-size:12px;color:#888">${esc(o.email) || '—'}</td>
         <td>${billingBadge(o)}</td>
         <td>${asaasBadge} Asaas</td>
-        <td style="font-size:12px;color:#888">${o.nextPaymentDueDate || '—'}</td>
+        <td style="font-size:12px;color:#888">${esc(o.nextPaymentDueDate) || '—'}</td>
         <td class="actions" style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn-sm" onclick="switchOwner('${o.id}')">Inquilinos</button>
           <button class="btn-sm" style="color:#4CAF50;border-color:#2a4a2a" onclick="openBillingModal('${o.id}')">Plano</button>
@@ -403,15 +471,16 @@
 
   window.suspendOwner = async () => {
     const ownerId = $('billing-owner-id').textContent;
-    if (!confirm('Suspender esta imobiliária? O plano será cancelado.')) return;
-    try {
-      await updateDoc(doc(db, 'owners', ownerId), { status: 'suspended', billingStatus: 'cancelled' });
-      showToast('Imobiliária suspensa', 'info');
-      $('modal-billing').style.display = 'none';
-      await loadOwners();
-    } catch (e) {
-      showToast('Erro: ' + e.message, 'error');
-    }
+    showConfirm('Suspender esta imobiliária? O plano será cancelado.', async () => {
+      try {
+        await updateDoc(doc(db, 'owners', ownerId), { status: 'suspended', billingStatus: 'cancelled' });
+        showToast('Imobiliária suspensa', 'info');
+        $('modal-billing').style.display = 'none';
+        await loadOwners();
+      } catch (e) {
+        showToast('Erro: ' + e.message, 'error');
+      }
+    }, { danger: true, okText: 'Suspender' });
   };
 
   // ── Inadimplentes ──────────────────────────────────────────
@@ -466,7 +535,7 @@
       const tenant = nameMap[c.tenantId] || { name: c.tenantId, email: '' };
       const multa = c.multaAplicada ? fmt.format(c.multaAplicada) : '—';
       return `<tr>
-        <td><strong>${tenant.name}</strong><br><span style="font-size:11px;color:#888">${tenant.email}</span></td>
+        <td><strong>${esc(tenant.name)}</strong><br><span style="font-size:11px;color:#888">${esc(tenant.email)}</span></td>
         <td style="font-weight:600;color:#ef9a9a">${fmt.format(c.totalAmount || c.baseRent || 0)}</td>
         <td style="color:#ffb74d">${dueD ? dueD.toLocaleDateString('pt-BR') : '—'}</td>
         <td><span style="color:#ef5350;font-weight:600">${daysLate} dias</span></td>
@@ -481,25 +550,26 @@
 
   window.notifyAllOverdue = async () => {
     if (overdueCharges.length === 0) { showToast('Nenhum inadimplente para notificar.', 'info'); return; }
-    if (!confirm(`Enviar push de cobrança para ${overdueCharges.length} inquilino(s) inadimplente(s)?`)) return;
-    const btn = $('btn-notify-all-overdue');
-    btn.disabled = true; btn.textContent = 'Enviando...';
-    try {
-      const r = await fetch('/api/locarpay-card', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          step: 'send-push',
-          ownerId: currentOwnerId,
-          title: 'Aluguel em atraso ⚠️',
-          message: 'Você possui uma cobrança vencida. Regularize agora pelo app iLocarPay.'
-        })
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || 'Erro');
-      showToast(`Push enviado para ${data.sent || 0} inquilino(s).`, 'success');
-    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-    finally { btn.disabled = false; btn.textContent = '📢 Notificar Todos'; }
+    showConfirm(`Enviar push de cobrança para ${overdueCharges.length} inquilino(s) inadimplente(s)?`, async () => {
+      const btn = $('btn-notify-all-overdue');
+      btn.disabled = true; btn.textContent = 'Enviando...';
+      try {
+        const r = await fetch('/api/locarpay-card', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            step: 'send-push',
+            ownerId: currentOwnerId,
+            title: 'Aluguel em atraso ⚠️',
+            message: 'Você possui uma cobrança vencida. Regularize agora pelo app iLocarPay.'
+          })
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Erro');
+        showToast(`Push enviado para ${data.sent || 0} inquilino(s).`, 'success');
+      } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+      finally { btn.disabled = false; btn.textContent = '📢 Notificar Todos'; }
+    });
   };
 
   window.exportOverdueCSV = () => {
@@ -530,12 +600,13 @@
   };
 
   window.markChargePaid = async (chargeId) => {
-    if (!confirm('Marcar esta cobrança como paga manualmente?')) return;
-    try {
-      await updateDoc(doc(db, 'charges', chargeId), { status: 'paid', paidAt: serverTimestamp(), paidManually: true });
-      showToast('Cobrança marcada como paga', 'success');
-      await loadOverdue();
-    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    showConfirm('Marcar esta cobrança como paga manualmente?', async () => {
+      try {
+        await updateDoc(doc(db, 'charges', chargeId), { status: 'paid', paidAt: serverTimestamp(), paidManually: true });
+        showToast('Cobrança marcada como paga', 'success');
+        await loadOverdue();
+      } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    });
   };
 
   window.sendOverduePush = async (tenantId) => {
@@ -798,8 +869,8 @@
         <div style="font-size:28px;line-height:1">📋</div>
         <div style="flex:1">
           <div style="color:#4CAF50;font-weight:700;font-size:15px">Novo lead recebido!</div>
-          <div style="color:#e0e0e0;font-size:13px;margin-top:4px"><strong>${name}</strong></div>
-          ${prop ? `<div style="color:#aaa;font-size:12px">${prop}</div>` : ''}
+          <div style="color:#e0e0e0;font-size:13px;margin-top:4px"><strong>${esc(name)}</strong></div>
+          ${prop ? `<div style="color:#aaa;font-size:12px">${esc(prop)}</div>` : ''}
           <div style="color:#aaa;font-size:12px;margin-top:6px">${count} lead${count>1?'s':''} aguardando análise</div>
           <div style="display:flex;gap:8px;margin-top:10px">
             <button onclick="setTab('leads');loadLeads();removeLeadAlert()"
@@ -829,7 +900,7 @@
     const tbody = $('leads-tbody');
     if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="empty">Carregando...</td></tr>';
     try {
-      const snap = await getDocs(query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId)));
+      const snap = await getDocs(query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId), limit(100)));
       leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       leads.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       renderLeads();
@@ -868,9 +939,9 @@
         <button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="viewLeadDetail('${l.id}')">🔍 Detalhes</button>
         <button class="btn-sm" style="color:#ef5350;border-color:#ef5350;margin-left:4px" onclick="removeLead('${l.id}')">🗑 Remover</button>`;
       return `<tr>
-        <td><strong>${l.tenant?.name||'—'}</strong><br><span style="font-size:11px;color:#888">${l.tenant?.email||''}</span><br><span style="font-size:11px;color:#666">${l.tenant?.cpf||''}</span></td>
-        <td><span style="font-size:12px">${prop}</span>${rent ? `<br><span style="color:#4CAF50;font-size:12px;font-weight:600">${rent}/mês</span>` : ''}</td>
-        <td>${l.brokerName||l.brokerEmail||'—'}</td>
+        <td><strong>${esc(l.tenant?.name)||'—'}</strong><br><span style="font-size:11px;color:#888">${esc(l.tenant?.email)||''}</span><br><span style="font-size:11px;color:#666">${esc(l.tenant?.cpf)||''}</span></td>
+        <td><span style="font-size:12px">${esc(prop)}</span>${rent ? `<br><span style="color:#4CAF50;font-size:12px;font-weight:600">${esc(rent)}/mês</span>` : ''}</td>
+        <td>${esc(l.brokerName||l.brokerEmail||'—')}</td>
         <td><span style="color:${col};font-weight:600">${lbl}</span><br><span style="font-size:11px;color:#666">${(l.docs||[]).length} doc(s)</span></td>
         <td style="white-space:nowrap">${btns}</td>
       </tr>`;
@@ -897,7 +968,7 @@
 
     const fmtRow = (label, val) => val ? `
       <tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;white-space:nowrap">${label}</td>
-          <td style="color:#e0e0e0;font-size:13px;padding:4px 0">${val}</td></tr>` : '';
+          <td style="color:#e0e0e0;font-size:13px;padding:4px 0">${esc(val)}</td></tr>` : '';
 
     const section = (title, rows) => rows ? `
       <div style="margin-bottom:16px">
@@ -1113,37 +1184,38 @@
   };
 
   window.removeLead = async (leadId) => {
-    if (!confirm('Tem certeza que deseja remover este lead? Esta ação não pode ser desfeita.')) return;
-    try {
-      const res = await fetch('/api/locarpay-broker', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'remove-lead', leadId })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      showToast('Lead removido.', 'info');
-      await loadLeads();
-    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    showConfirm('Tem certeza que deseja remover este lead? Esta ação não pode ser desfeita.', async () => {
+      try {
+        const res = await fetch('/api/locarpay-broker', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ step: 'remove-lead', leadId })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        showToast('Lead removido.', 'info');
+        await loadLeads();
+      } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    }, { danger: true, okText: 'Remover' });
   };
 
   window.deliverKeys = async (contractId, tenantId) => {
     if (!contractId || !tenantId) { showToast('Contrato ou inquilino não encontrado', 'error'); return; }
-    if (!confirm('Confirmar entrega das chaves? Isso ativa o inquilino no app.')) return;
-    try {
-      const res = await fetch('/api/locarpay-broker', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'deliver-keys', contractId, tenantId })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      showToast('🏠 Chaves entregues! Inquilino ativado no app.', 'success');
-      await loadLeads();
-      await loadTenants();
-    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    showConfirm('Confirmar entrega das chaves? Isso ativa o inquilino no app.', async () => {
+      try {
+        const res = await fetch('/api/locarpay-broker', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ step: 'deliver-keys', contractId, tenantId })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        showToast('🏠 Chaves entregues! Inquilino ativado no app.', 'success');
+        await loadLeads();
+        await loadTenants();
+      } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    }, { okText: 'Confirmar entrega' });
   };
 
-  window.regenContract = async (contractId) => {
-    const btn = event?.target;
+  window.regenContract = async (contractId, btn) => {
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando...'; }
     try {
       const res = await fetch('/api/locarpay-broker', {
@@ -1157,8 +1229,7 @@
     finally { if (btn) { btn.disabled = false; btn.textContent = '📄 Reenviar contrato'; } }
   };
 
-  window.generateContractForTenant = async (contractId) => {
-    const btn = event?.target;
+  window.generateContractForTenant = async (contractId, btn) => {
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando...'; }
     try {
       const res = await fetch('/api/locarpay-broker', {
@@ -1228,8 +1299,8 @@
         <tbody>
           ${brokers.map(b => `
           <tr style="border-bottom:1px solid #1e2130" id="broker-row-${b.id}">
-            <td style="padding:11px 0;font-weight:600;font-size:14px">${b.name||'—'}</td>
-            <td style="padding:11px 0;font-size:12px;color:#aaa">${b.email}${b.phone ? '<br><span style="color:#666">'+b.phone+'</span>' : ''}</td>
+            <td style="padding:11px 0;font-weight:600;font-size:14px">${esc(b.name)||'—'}</td>
+            <td style="padding:11px 0;font-size:12px;color:#aaa">${esc(b.email)}${b.phone ? '<br><span style="color:#666">'+esc(b.phone)+'</span>' : ''}</td>
             <td style="padding:11px 0;text-align:center">
               <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:${b.active?'#1b3a1b':'#3a1b1b'};color:${b.active?'#4CAF50':'#ef5350'}">${b.active?'Ativo':'Inativo'}</span>
             </td>
@@ -1323,8 +1394,8 @@
         const histHtml = allContracts.length
           ? allContracts.map(c => `
               <tr style="border-bottom:1px solid #1a1d2e">
-                <td style="padding:7px 10px;font-size:12px">${c.propertyCode || c.propertyAddress || '—'}</td>
-                <td style="padding:7px 10px;font-size:12px">${c.tenantName || '—'}</td>
+                <td style="padding:7px 10px;font-size:12px">${esc(c.propertyCode || c.propertyAddress || '—')}</td>
+                <td style="padding:7px 10px;font-size:12px">${esc(c.tenantName || '—')}</td>
                 <td style="padding:7px 10px;font-size:12px;color:#4CAF50">${fmt(c.baseRent)}/mês</td>
                 <td style="padding:7px 10px;font-size:12px">${c.startDate || '—'}</td>
                 <td style="padding:7px 10px;font-size:12px">
@@ -1342,8 +1413,8 @@
               <div style="display:flex;align-items:center;gap:12px">
                 <div style="width:42px;height:42px;border-radius:50%;background:#1a2a1a;border:2px solid #4CAF50;display:flex;align-items:center;justify-content:center;font-size:18px">🤝</div>
                 <div>
-                  <div style="font-weight:700;font-size:15px;color:#e0e0e0">${b.name || '—'}</div>
-                  <div style="font-size:12px;color:#888">${b.email}${b.phone ? ' · ' + b.phone : ''}</div>
+                  <div style="font-weight:700;font-size:15px;color:#e0e0e0">${esc(b.name) || '—'}</div>
+                  <div style="font-size:12px;color:#888">${esc(b.email)}${b.phone ? ' · ' + esc(b.phone) : ''}</div>
                 </div>
                 <span style="padding:3px 10px;border-radius:10px;font-size:11px;font-weight:600;background:${b.active !== false ? '#1a3a1a' : '#2a1a1a'};color:${b.active !== false ? '#4CAF50' : '#ef5350'}">
                   ${b.active !== false ? 'Ativo' : 'Inativo'}
@@ -1854,13 +1925,7 @@
     el.value = v.replace('.', ',');
   };
 
-  window.maskPhone = (el) => {
-    let v = el.value.replace(/\D/g,'').slice(0,11);
-    if (v.length > 10) v = v.replace(/^(\d{2})(\d{5})(\d{4})$/,'($1) $2-$3');
-    else if (v.length > 6) v = v.replace(/^(\d{2})(\d{4})(\d*)$/,'($1) $2-$3');
-    else if (v.length > 2) v = v.replace(/^(\d{2})(\d*)$/,'($1) $2');
-    el.value = v;
-  };
+  window.maskPhone = (el) => { el.value = maskPhone(el.value); };
   window.maskPct = (el) => {
     let v = el.value.replace(/[^\d,.-]/g, '');
     el.value = v;
@@ -2130,8 +2195,8 @@
     filtered.forEach(t => {
       const contract  = contracts.find(c => c.tenantId === t.id);
       const rent      = contract ? fmt.format(contract.baseRent || 0) : '—';
-      const propCode  = contract?.propertyCode ? `<span style="font-size:10px;font-weight:700;background:#1a2e1a;color:#4CAF50;border:1px solid #2e4a2e;border-radius:4px;padding:1px 6px;margin-right:4px;letter-spacing:.05em">${contract.propertyCode}</span>` : '';
-      const property  = propCode + (contract?.propertyDescription || (contract ? '—' : '—'));
+      const propCode  = contract?.propertyCode ? `<span style="font-size:10px;font-weight:700;background:#1a2e1a;color:#4CAF50;border:1px solid #2e4a2e;border-radius:4px;padding:1px 6px;margin-right:4px;letter-spacing:.05em">${esc(contract.propertyCode)}</span>` : '';
+      const property  = propCode + esc(contract?.propertyDescription || (contract ? '—' : '—'));
       const digital   = contract?.requiresDigitalContract;
       const status    = !contract
         ? '<span class="badge inactive">Sem contrato</span>'
@@ -2142,8 +2207,8 @@
       const docsCount = Object.keys(docs).length;
       const row = document.createElement('tr');
       row.innerHTML = `
-        <td>${t.name || '—'}</td>
-        <td style="font-size:12px;color:#888">${t.email || '—'}</td>
+        <td>${esc(t.name) || '—'}</td>
+        <td style="font-size:12px;color:#888">${esc(t.email) || '—'}</td>
         <td style="font-size:12px">${property}</td>
         <td>${rent}</td>
         <td>${status}</td>
@@ -2166,8 +2231,8 @@
             const active = c.active;
             if (active) return `<button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" disabled>🏠 Ativo</button>`;
             if (signed && !active) return `<button class="btn-sm" style="color:#4CAF50;border-color:#4CAF50" onclick="deliverKeysForTenant('${c.id}','${t.id}')">🏠 Entregar chaves</button>`;
-            if (hasDoc) return `<button class="btn-sm" style="color:#FFD54F;border-color:#FFD54F" onclick="regenContract('${c.id}')">📄 Reenviar</button>`;
-            return `<button class="btn-sm" style="color:#4CAF50;border-color:#4CAF50" onclick="generateContractForTenant('${c.id}')">📄 Gerar contrato</button>`;
+            if (hasDoc) return `<button class="btn-sm" style="color:#FFD54F;border-color:#FFD54F" onclick="regenContract('${c.id}',this)">📄 Reenviar</button>`;
+            return `<button class="btn-sm" style="color:#4CAF50;border-color:#4CAF50" onclick="generateContractForTenant('${c.id}',this)">📄 Gerar contrato</button>`;
           })()}
           <button class="btn-sm" style="background:#c0392b;border-color:#c0392b;color:#fff" onclick="deleteTenant('${t.id}','${(t.name||'').replace(/'/g,'')}')">Excluir</button>
         </td>
@@ -2214,21 +2279,21 @@
       const chargesSnap = await getDocs(chargesQuery);
 
       const orphans = chargesSnap.docs.filter(d => !validIds.has(d.data().tenantId));
-      if (orphans.length === 0) { alert('Nenhuma cobrança órfã encontrada.'); return; }
+      if (orphans.length === 0) { showToast('Nenhuma cobrança órfã encontrada.', 'info'); return; }
 
-      if (!confirm(`Encontradas ${orphans.length} cobranças de inquilinos removidos. Excluir?`)) return;
-
-      // Deleta em lotes de 500 (limite do Firestore batch)
-      for (let i = 0; i < orphans.length; i += 500) {
-        const batch = writeBatch(db);
-        orphans.slice(i, i + 500).forEach(d => batch.delete(d.ref));
-        await batch.commit();
-      }
-
-      alert(`${orphans.length} cobranças órfãs removidas.`);
-      await loadTenants();
+      showConfirm(`Encontradas ${orphans.length} cobranças de inquilinos removidos. Excluir?`, async () => {
+        try {
+          for (let i = 0; i < orphans.length; i += 500) {
+            const batch2 = writeBatch(db);
+            orphans.slice(i, i + 500).forEach(d => batch2.delete(d.ref));
+            await batch2.commit();
+          }
+          showToast(`${orphans.length} cobranças órfãs removidas.`, 'success');
+          await loadTenants();
+        } catch(e2) { showToast('Erro: ' + e2.message, 'error'); }
+      }, { danger: true, okText: 'Excluir' });
     } catch(e) {
-      alert('Erro: ' + e.message);
+      showToast('Erro: ' + e.message, 'error');
     } finally {
       btn.disabled = false; btn.textContent = '🗑 Limpar órfãs';
     }
@@ -2236,32 +2301,24 @@
 
   // ── Excluir inquilino ─────────────────────────────────────────
   window.deleteTenant = async function(tenantId, tenantName) {
-    if (!confirm(`Excluir "${tenantName || tenantId}" e todos os dados relacionados?\n\nEssa ação não pode ser desfeita.`)) return;
-    try {
-      const { deleteDoc, writeBatch } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-      const batch = writeBatch(db);
-
-      // Cobranças do inquilino
-      const chargesSnap = await getDocs(query(collection(db, 'charges'), where('tenantId', '==', tenantId)));
-      chargesSnap.docs.forEach(d => batch.delete(d.ref));
-
-      // Contratos do inquilino
-      const contractsSnap = await getDocs(query(collection(db, 'contracts'), where('tenantId', '==', tenantId)));
-      contractsSnap.docs.forEach(d => batch.delete(d.ref));
-
-      // Leads vinculados ao inquilino
-      const leadsSnap = await getDocs(query(collection(db, 'leads'), where('tenantId', '==', tenantId)));
-      leadsSnap.docs.forEach(d => batch.delete(d.ref));
-
-      // Documento do usuário
-      batch.delete(doc(db, 'users', tenantId));
-
-      await batch.commit();
-      alert(`Inquilino "${tenantName || tenantId}" excluído.`);
-      await loadTenants();
-    } catch(e) {
-      alert('Erro ao excluir: ' + e.message);
-    }
+    showConfirm(`Excluir "${tenantName || tenantId}" e todos os dados relacionados?\n\nEssa ação não pode ser desfeita.`, async () => {
+      try {
+        const { deleteDoc, writeBatch } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+        const batch = writeBatch(db);
+        const chargesSnap = await getDocs(query(collection(db, 'charges'), where('tenantId', '==', tenantId)));
+        chargesSnap.docs.forEach(d => batch.delete(d.ref));
+        const contractsSnap = await getDocs(query(collection(db, 'contracts'), where('tenantId', '==', tenantId)));
+        contractsSnap.docs.forEach(d => batch.delete(d.ref));
+        const leadsSnap = await getDocs(query(collection(db, 'leads'), where('tenantId', '==', tenantId)));
+        leadsSnap.docs.forEach(d => batch.delete(d.ref));
+        batch.delete(doc(db, 'users', tenantId));
+        await batch.commit();
+        showToast(`Inquilino "${tenantName || tenantId}" excluído.`, 'success');
+        await loadTenants();
+      } catch(e) {
+        showToast('Erro ao excluir: ' + e.message, 'error');
+      }
+    }, { danger: true, okText: 'Excluir' });
   };
 
   // ── Histórico de cobranças ────────────────────────────────────
@@ -2359,8 +2416,8 @@
 
   // ── Comprovante anual ─────────────────────────────────────────
   async function sendAnnualReceipt() {
-    const year = prompt('Ano do comprovante:', new Date().getFullYear().toString());
-    if (!year || isNaN(+year)) return;
+    showPrompt('Ano do comprovante:', new Date().getFullYear().toString(), async (year) => {
+    if (!year || isNaN(+year)) { showToast('Ano inválido.', 'error'); return; }
     const btn = $('btn-annual-receipt');
     btn.disabled = true; btn.textContent = 'Enviando...';
     try {
@@ -2375,6 +2432,7 @@
       showToast(`Comprovante de ${year} enviado para ${d.sent} inquilino(s).`, 'success');
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     finally { btn.disabled = false; btn.textContent = 'Comp. Anual'; }
+    });
   }
 
   // ── Relatório mensal ─────────────────────────────────────────
@@ -2421,8 +2479,7 @@
     const pct = parseFloat($('adjust-pct').value.replace(',', '.'));
     $('adjust-error').textContent = '';
     if (isNaN(pct) || pct === 0) { $('adjust-error').textContent = 'Informe um percentual válido.'; return; }
-    if (!confirm(`Aplicar ${pct > 0 ? '+' : ''}${pct}% em ${contracts.length} contrato(s) ativo(s)? Esta ação não pode ser desfeita.`)) return;
-
+    showConfirm(`Aplicar ${pct > 0 ? '+' : ''}${pct}% em ${contracts.length} contrato(s) ativo(s)? Esta ação não pode ser desfeita.`, async () => {
     $('adjust-save').disabled = true; $('adjust-save').textContent = 'Aplicando...';
     try {
       const r = await fetch('/api/locarpay-card', {
@@ -2440,6 +2497,7 @@
     } finally {
       $('adjust-save').disabled = false; $('adjust-save').textContent = 'Aplicar reajuste';
     }
+    });
   }
 
   // ── Encerrar contrato ─────────────────────────────────────────
@@ -2447,27 +2505,28 @@
     if (!editingTenantId) return;
     const c = contracts.find(x => x.tenantId === editingTenantId);
     if (!c) { showToast('Nenhum contrato ativo encontrado.', 'error'); return; }
-    if (!confirm(`Encerrar contrato de ${tenants.find(x=>x.id===editingTenantId)?.name || editingTenantId}?\nCobranças pendentes serão canceladas.`)) return;
-
-    const btn = $('et-close-contract');
-    btn.disabled = true; btn.textContent = 'Encerrando...';
-    try {
-      const r = await fetch('/api/locarpay-card', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'close-contract', contractId: c.id, tenantId: editingTenantId, ownerId: currentOwnerId })
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error);
-      $('modal-edit-tenant').style.display = 'none';
-      showToast('Contrato encerrado e cobranças pendentes canceladas.', 'success');
-      await loadTenants();
-      await renderMetrics();
-    } catch (e) {
-      showToast('Erro: ' + e.message, 'error');
-    } finally {
-      btn.disabled = false; btn.textContent = 'Encerrar contrato';
-    }
+    const tenantName = tenants.find(x=>x.id===editingTenantId)?.name || editingTenantId;
+    showConfirm(`Encerrar contrato de ${tenantName}?\nCobranças pendentes serão canceladas.`, async () => {
+      const btn = $('et-close-contract');
+      btn.disabled = true; btn.textContent = 'Encerrando...';
+      try {
+        const r = await fetch('/api/locarpay-card', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ step: 'close-contract', contractId: c.id, tenantId: editingTenantId, ownerId: currentOwnerId })
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error);
+        $('modal-edit-tenant').style.display = 'none';
+        showToast('Contrato encerrado e cobranças pendentes canceladas.', 'success');
+        await loadTenants();
+        await renderMetrics();
+      } catch (e) {
+        showToast('Erro: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Encerrar contrato';
+      }
+    }, { danger: true, okText: 'Encerrar' });
   }
 
   // ── Cobranças extras ──────────────────────────────────────────
@@ -3111,12 +3170,13 @@
   };
 
   window.removeLicense = async function(email) {
-    if (!confirm(`Remover licença de ${email}?`)) return;
-    try {
-      const { deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-      await deleteDoc(doc(db, 'licenses', email));
-      loadLicenses();
-    } catch(e) { alert('Erro: ' + e.message); }
+    showConfirm(`Remover licença de ${esc(email)}?`, async () => {
+      try {
+        const { deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+        await deleteDoc(doc(db, 'licenses', email));
+        loadLicenses();
+      } catch(e) { showToast('Erro: ' + e.message, 'error'); }
+    }, { danger: true, okText: 'Remover' });
   };
 
   function showLicMsg(text, color) {
@@ -3162,6 +3222,9 @@
   [$('modal-tenant'), $('modal-docs'), $('modal-billing'), $('modal-edit-tenant'), $('modal-extras'), $('modal-history'), $('modal-adjust-rent'), $('modal-credit-analysis'), $('modal-approve-lead'), $('modal-lead-detail')].forEach(m => {
     if (m) m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
   });
+  // Upgrade modal: backdrop close also clears PIX interval
+  const modalUpgrade = $('modal-upgrade');
+  if (modalUpgrade) modalUpgrade.addEventListener('click', e => { if (e.target === modalUpgrade) upgClose(); });
   $('docs-modal-close').addEventListener('click', () => { $('modal-docs').style.display = 'none'; });
 
   // Saudação dinâmica: primeira visita vs. retorno
