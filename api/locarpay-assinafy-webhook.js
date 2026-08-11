@@ -24,7 +24,7 @@ async function sendWhatsApp(phone, text) {
         number,
         mediatype: 'image',
         mimetype: 'image/png',
-        media: 'https://www.ilocarpay.com.br/logo.png',
+        media: 'https://www.ilocarpay.com.br/og-image.png',
         caption: text
       })
     });
