@@ -148,11 +148,18 @@ async function sendWhatsApp(phone, message) {
   const digits = phone.replace(/\D/g, '');
   if (digits.length < 10) return;
   const number = digits.startsWith('55') ? digits : `55${digits}`;
+  const headers = { 'Content-Type': 'application/json', 'apikey': apiKey };
   try {
-    await fetch(`${baseUrl}/message/sendText/${instance}`, {
+    await fetch(`${baseUrl}/message/sendMedia/${instance}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
-      body: JSON.stringify({ number, text: message })
+      headers,
+      body: JSON.stringify({
+        number,
+        mediatype: 'image',
+        mimetype: 'image/png',
+        media: 'https://www.ilocarpay.com.br/logo.png',
+        caption: message
+      })
     });
   } catch (e) { console.warn('[whatsapp]', e.message); }
 }
