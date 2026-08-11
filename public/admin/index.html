@@ -2231,6 +2231,10 @@
       const contractsSnap = await getDocs(query(collection(db, 'contracts'), where('tenantId', '==', tenantId)));
       contractsSnap.docs.forEach(d => batch.delete(d.ref));
 
+      // Leads vinculados ao inquilino
+      const leadsSnap = await getDocs(query(collection(db, 'leads'), where('tenantId', '==', tenantId)));
+      leadsSnap.docs.forEach(d => batch.delete(d.ref));
+
       // Documento do usuário
       batch.delete(doc(db, 'users', tenantId));
 
