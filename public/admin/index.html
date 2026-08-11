@@ -26,15 +26,20 @@
   // Abre documento do Firebase Storage autenticado
   async function openStorageDoc(urlOrPath) {
     try {
-      // Extrai o path do Storage a partir da URL pública ou usa direto se for path
       let path = urlOrPath;
       const match = urlOrPath.match(/\/o\/([^?]+)/);
       if (match) path = decodeURIComponent(match[1]);
-      const url = await getDownloadURL(storageRef(storage, path));
-      window.open(url, '_blank');
+      // Usa endpoint da API que gera URL assinada via Admin SDK (bypassa regras de Storage)
+      const res = await fetch('/api/locarpay-broker', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'get-signed-url', path })
+      });
+      const data = await res.json();
+      if (data.url) { window.open(data.url, '_blank'); return; }
+      window.open(urlOrPath, '_blank');
     } catch(e) {
       console.warn('[openStorageDoc] falha:', e.message);
-      // fallback: abre direto
       window.open(urlOrPath, '_blank');
     }
   }
