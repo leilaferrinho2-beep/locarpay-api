@@ -926,12 +926,18 @@ async function handleRejectLead(db, body) {
 
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
 
-async function handleGetSignedReadUrl(body, bucket) {
-  const { path } = body;
+async function handleGetSignedReadUrl(body) {
+  const { path, adminEmail } = body;
   if (!path) throw Object.assign(new Error('path obrigatório'), { status: 400 });
-  const bucketName = bucket || 'transgu-web-6d50f.firebasestorage.app';
-  // Arquivos foram enviados com makePublic() — URL pública direta, sem necessidade de assinar
-  const url = `https://storage.googleapis.com/${bucketName}/${path}`;
+  // Só admins autenticados podem obter URL de documento
+  if (!adminEmail) throw Object.assign(new Error('Acesso não autorizado'), { status: 403 });
+  const storage = getStorage();
+  const bucketName = 'transgu-web-6d50f.firebasestorage.app';
+  const file = storage.bucket(bucketName).file(path);
+  const [url] = await file.getSignedUrl({
+    action: 'read',
+    expires: Date.now() + 15 * 60 * 1000, // 15 minutos
+  });
   return { ok: true, url };
 }
 
@@ -965,7 +971,7 @@ async function handleUploadDoc(db, body) {
     const storage = getStorage();
     const file = storage.bucket(BUCKET).file(path);
     await file.save(buffer, { contentType: mime, resumable: false });
-    await file.makePublic();
+    // Não chamar makePublic() — arquivo fica privado, acessível só via URL assinada
     const publicUrl = `https://storage.googleapis.com/${BUCKET}/${path}`;
     return { ok: true, publicUrl, path };
   } catch (storageErr) {
