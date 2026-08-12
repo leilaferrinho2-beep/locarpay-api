@@ -1112,6 +1112,11 @@ export default async function handler(req, res) {
       await db.collection('leads').doc(leadId).update({ bothSigned: true, updatedAt: FieldValue.serverTimestamp() });
       result = { ok: true };
     }
+    else if (step === 'test-smtp') {
+      const to = req.body.to || 'contatotransgu@gmail.com';
+      await sendEmail(to, '🧪 Teste SMTP — iLocarPay', '<p>E-mail de teste enviado com sucesso.</p>');
+      result = { ok: true, sent: true, to };
+    }
     else throw Object.assign(new Error('step inválido'), { status: 400 });
     res.status(200).json(result);
   } catch (e) {
