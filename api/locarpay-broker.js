@@ -946,32 +946,36 @@ async function handleGetUploadUrl(body, bucket) {
   return { ok: true, uploadUrl: signedUrl, publicUrl, path };
 }
 
-async function handleUploadDoc(body, bucket) {
+async function handleUploadDoc(body) {
   const { ownerId, fileName, contentType, data } = body;
   if (!ownerId || !fileName || !data) throw Object.assign(new Error('Dados obrigatórios ausentes'), { status: 400 });
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path = `leads/${ownerId}/${Date.now()}_${safeName}`;
-  const storage = getStorage();
-  const bucketName = bucket || 'locarpayapp.appspot.com';
-  const file = storage.bucket(bucketName).file(path);
   const mime = contentType || 'image/jpeg';
-
-  // Gera signed URL de escrita e faz PUT do buffer via fetch (Admin SDK contorna regras de Storage)
-  const [signedUrl] = await file.getSignedUrl({
-    action: 'write',
-    expires: Date.now() + 5 * 60 * 1000,
-    version: 'v4',
-    contentType: mime,
-  });
   const buffer = Buffer.from(data, 'base64');
-  const putRes = await fetch(signedUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': mime },
-    body: buffer,
-  });
-  if (!putRes.ok) throw new Error(`GCS PUT falhou: ${putRes.status} ${await putRes.text()}`);
 
-  const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(path)}?alt=media`;
+  // Obtém token OAuth do service account via firebase-admin
+  const { getApp } = await import('firebase-admin/app');
+  const accessToken = (await getApp().options.credential.getAccessToken()).access_token;
+
+  // Tenta ambos os buckets via Firebase Storage REST API
+  const buckets = ['locarpayapp.appspot.com', 'locarpayapp.firebasestorage.app'];
+  let publicUrl = null;
+  let lastErr = '';
+  for (const bucketName of buckets) {
+    const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketName)}/o?uploadType=media&name=${encodeURIComponent(path)}`;
+    const res = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': mime },
+      body: buffer,
+    });
+    if (res.ok) {
+      publicUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketName)}/o/${encodeURIComponent(path)}?alt=media`;
+      break;
+    }
+    lastErr = `${bucketName}: ${res.status} ${await res.text()}`;
+  }
+  if (!publicUrl) throw new Error(`Upload falhou em todos os buckets: ${lastErr}`);
   return { ok: true, publicUrl, path };
 }
 
@@ -1045,7 +1049,7 @@ export default async function handler(req, res) {
     else if (step === 'reject-lead')       result = await handleRejectLead(db, req.body);
     else if (step === 'remove-lead')       result = await handleRemoveLead(db, req.body);
     else if (step === 'get-upload-url')    result = await handleGetUploadUrl(req.body, req._storageBucket);
-    else if (step === 'upload-doc')        result = await handleUploadDoc(req.body, req._storageBucket);
+    else if (step === 'upload-doc')        result = await handleUploadDoc(req.body);
     else if (step === 'get-signed-url')    result = await handleGetSignedReadUrl(req.body, req._storageBucket);
     else throw Object.assign(new Error('step inválido'), { status: 400 });
     res.status(200).json(result);
