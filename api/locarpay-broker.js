@@ -920,7 +920,7 @@ async function handleGetSignedReadUrl(body, bucket) {
   const { path } = body;
   if (!path) throw Object.assign(new Error('path obrigatório'), { status: 400 });
   const storage = getStorage();
-  const bucketName = bucket || 'locarpayapp.firebasestorage.app';
+  const bucketName = bucket || 'locarpayapp.appspot.com';
   const file = storage.bucket(bucketName).file(path);
   const [url] = await file.getSignedUrl({
     action: 'read',
@@ -935,7 +935,7 @@ async function handleGetUploadUrl(body, bucket) {
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path = `leads/${ownerId}/${Date.now()}_${safeName}`;
   const storage = getStorage();
-  const bucketName = bucket || 'locarpayapp.firebasestorage.app';
+  const bucketName = bucket || 'locarpayapp.appspot.com';
   const file = storage.bucket(bucketName).file(path);
   const [signedUrl] = await file.getSignedUrl({
     action: 'write',
@@ -952,7 +952,7 @@ async function handleUploadDoc(body, bucket) {
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path = `leads/${ownerId}/${Date.now()}_${safeName}`;
   const storage = getStorage();
-  const bucketName = bucket || 'locarpayapp.firebasestorage.app';
+  const bucketName = bucket || 'locarpayapp.appspot.com';
   const file = storage.bucket(bucketName).file(path);
   const mime = contentType || 'image/jpeg';
 
@@ -1032,7 +1032,7 @@ export default async function handler(req, res) {
     initFirebase();
     const db   = getFirestore();
     const sa   = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT || '{}');
-    req._storageBucket = sa.project_id ? `${sa.project_id}.firebasestorage.app` : null;
+    req._storageBucket = sa.project_id ? `${sa.project_id}.appspot.com` : null;
     const { step } = req.body || {};
     let result;
     if      (step === 'register-broker')   result = await handleRegisterBroker(db, req.body);
