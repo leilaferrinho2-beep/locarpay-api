@@ -233,12 +233,12 @@
       // Carrega todos (sem filtro)
       [usersSnap, contractsSnap] = await Promise.all([
         getDocs(query(collection(db, 'users'), where('role', '==', 'tenant'))),
-        getDocs(query(collection(db, 'contracts'), where('active', '==', true)))
+        getDocs(collection(db, 'contracts'))
       ]);
     } else {
       [usersSnap, contractsSnap] = await Promise.all([
         getDocs(query(collection(db, 'users'), where('ownerId', '==', currentOwnerId), where('role', '==', 'tenant'))),
-        getDocs(query(collection(db, 'contracts'), where('ownerId', '==', currentOwnerId), where('active', '==', true)))
+        getDocs(query(collection(db, 'contracts'), where('ownerId', '==', currentOwnerId)))
       ]);
     }
 
@@ -2217,9 +2217,11 @@
       const digital   = contract?.requiresDigitalContract;
       const status    = !contract
         ? '<span class="badge inactive">Sem contrato</span>'
-        : digital
-          ? '<span class="badge digital">Digital</span>'
-          : '<span class="badge active">Ativo</span>';
+        : !contract.active
+          ? '<span class="badge" style="background:#795548;color:#fff">Aguard. chaves</span>'
+          : digital
+            ? '<span class="badge digital">Digital</span>'
+            : '<span class="badge active">Ativo</span>';
       const docs      = t.docs || {};
       const docsCount = Object.keys(docs).length;
       const row = document.createElement('tr');
