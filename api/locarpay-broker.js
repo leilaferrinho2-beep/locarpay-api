@@ -1075,7 +1075,7 @@ export default async function handler(req, res) {
     initFirebase();
     const db   = getFirestore();
     const sa   = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT || '{}');
-    req._storageBucket = sa.project_id ? `${sa.project_id}.appspot.com` : null;
+    req._storageBucket = 'transgu-web-6d50f.firebasestorage.app';
     const { step } = req.body || {};
     let result;
     if      (step === 'register-broker')   result = await handleRegisterBroker(db, req.body);
