@@ -24,14 +24,11 @@ async function verifyAdmin(req) {
   const token = req.headers['x-admin-token'];
   if (!token) throw Object.assign(new Error('Token ausente'), { status: 401 });
 
-  // Aceita senha direta via env var ADMIN_SECRET (sem Firebase)
+  // Aceita senha direta via env var ADMIN_SECRET
   const secret = process.env.ADMIN_SECRET;
-  if (secret) {
-    if (token === secret) return { email: SUPER_ADMIN_EMAIL };
-    throw Object.assign(new Error('Senha incorreta'), { status: 401 });
-  }
+  if (secret && token === secret) return { email: SUPER_ADMIN_EMAIL };
 
-  // Fallback: Firebase ID token (somente se ADMIN_SECRET não estiver configurado)
+  // Aceita Firebase ID token do super admin
   try {
     const decoded = await getAuth().verifyIdToken(token);
     if (decoded.email !== SUPER_ADMIN_EMAIL)
