@@ -929,16 +929,30 @@ async function handleRejectLead(db, body) {
 async function handleGetSignedReadUrl(body) {
   const { path, adminEmail } = body;
   if (!path) throw Object.assign(new Error('path obrigatório'), { status: 400 });
-  // Só admins autenticados podem obter URL de documento
   if (!adminEmail) throw Object.assign(new Error('Acesso não autorizado'), { status: 403 });
   const storage = getStorage();
   const bucketName = 'transgu-web-6d50f.firebasestorage.app';
   const file = storage.bucket(bucketName).file(path);
-  const [url] = await file.getSignedUrl({
-    action: 'read',
-    expires: Date.now() + 15 * 60 * 1000, // 15 minutos
-  });
-  return { ok: true, url };
+  // Tenta URL assinada; se falhar (falta iam.signBlob), retorna URL de download via Admin SDK
+  try {
+    const [url] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 15 * 60 * 1000,
+    });
+    return { ok: true, url };
+  } catch (_) {
+    // Fallback: gera token de download via Admin SDK (não requer signBlob)
+    const [meta] = await file.getMetadata();
+    const token = meta?.metadata?.firebaseStorageDownloadTokens;
+    if (token) {
+      const url = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
+      return { ok: true, url };
+    }
+    // Último recurso: lê o arquivo e retorna base64
+    const [buf] = await file.download();
+    const mime = meta?.contentType || 'application/octet-stream';
+    return { ok: true, url: `data:${mime};base64,${buf.toString('base64')}` };
+  }
 }
 
 async function handleGetUploadUrl(body, bucket) {
