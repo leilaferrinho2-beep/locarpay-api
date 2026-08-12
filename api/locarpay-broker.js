@@ -999,6 +999,42 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
+  // Webhook da Assinafy — chamado quando documento é assinado por todos
+  if (req.method === 'POST' && req.query?.webhook === 'assinafy') {
+    try {
+      initFirebase();
+      const db = getFirestore();
+      const event = req.body?.event || req.body?.type || '';
+      const documentId = req.body?.data?.document_id || req.body?.document_id || '';
+      const isCompleted = event === 'document.completed' || event === 'finished' || req.body?.data?.status === 'completed';
+      if (isCompleted && documentId) {
+        // Acha o contrato pelo assinafyDocumentId
+        const contractSnap = await db.collection('contracts')
+          .where('assinafyDocumentId', '==', documentId).limit(1).get();
+        if (!contractSnap.empty) {
+          const contractDoc = contractSnap.docs[0];
+          const contractData = contractDoc.data();
+          await contractDoc.ref.update({ assinafyStatus: 'completed', updatedAt: FieldValue.serverTimestamp() });
+          // Atualiza lead com bothSigned=true
+          if (contractData.leadId) {
+            await db.collection('leads').doc(contractData.leadId).update({
+              bothSigned: true,
+              updatedAt: FieldValue.serverTimestamp()
+            });
+          } else {
+            // Busca lead pelo contractId
+            const leadSnap = await db.collection('leads')
+              .where('contractId', '==', contractDoc.id).limit(1).get();
+            if (!leadSnap.empty) {
+              await leadSnap.docs[0].ref.update({ bothSigned: true, updatedAt: FieldValue.serverTimestamp() });
+            }
+          }
+        }
+      }
+    } catch (e) { console.warn('[assinafy-webhook]', e.message); }
+    return res.status(200).json({ ok: true });
+  }
+
   if (req.method === 'GET') {
     const { view, contractId } = req.query || {};
     if (view === 'contract' && contractId) {
@@ -1044,6 +1080,12 @@ export default async function handler(req, res) {
     else if (step === 'get-upload-url')    result = await handleGetUploadUrl(req.body, req._storageBucket);
     else if (step === 'upload-doc')        result = await handleUploadDoc(db, req.body);
     else if (step === 'get-signed-url')    result = await handleGetSignedReadUrl(req.body, req._storageBucket);
+    else if (step === 'mark-both-signed') {
+      const { leadId } = req.body;
+      if (!leadId) throw Object.assign(new Error('leadId obrigatório'), { status: 400 });
+      await db.collection('leads').doc(leadId).update({ bothSigned: true, updatedAt: FieldValue.serverTimestamp() });
+      result = { ok: true };
+    }
     else throw Object.assign(new Error('step inválido'), { status: 400 });
     res.status(200).json(result);
   } catch (e) {

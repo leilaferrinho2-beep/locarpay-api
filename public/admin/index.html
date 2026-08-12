@@ -941,6 +941,7 @@
         <button class="btn-sm" style="color:#ef5350;border-color:#ef5350;margin-left:4px" onclick="rejectLead('${l.id}')">❌ Rejeitar</button>
       ` : l.status === 'approved' && l.contractId ? `
         <button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="viewLeadDetail('${l.id}')">🔍 Detalhes</button>
+        ${!l.bothSigned ? `<button class="btn-sm" style="color:#FFB74D;border-color:#FFB74D;margin-left:4px" onclick="markBothSigned('${l.id}')">✍️ Marcar como assinado</button>` : ''}
         <button class="btn-sm" style="color:#64B5F6;border-color:#64B5F6;margin-left:4px" onclick="deliverKeys('${l.contractId}','${l.tenantId||''}')">🏠 Entregar chaves</button>
         <button class="btn-sm" style="margin-left:4px" onclick="regenContract('${l.contractId}')">📄 Reenviar contrato</button>
         <button class="btn-sm" style="color:#ef5350;border-color:#ef5350;margin-left:4px" onclick="removeLead('${l.id}')">🗑 Remover</button>
@@ -1230,6 +1231,21 @@
         await loadTenants();
       } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     }, { okText: 'Confirmar entrega' });
+  };
+
+  window.markBothSigned = async (leadId) => {
+    showConfirm('Confirmar que ambas as partes já assinaram o contrato? O corretor poderá entregar as chaves.', async () => {
+      try {
+        const res = await fetch('/api/locarpay-broker', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ step: 'mark-both-signed', leadId })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        showToast('✍️ Contrato marcado como assinado. O corretor já pode entregar as chaves.', 'success');
+        await loadLeads();
+      } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    }, { okText: 'Confirmar' });
   };
 
   window.regenContract = async (contractId, btn) => {
