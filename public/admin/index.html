@@ -2303,16 +2303,14 @@
   window.deleteTenant = async function(tenantId, tenantName) {
     showConfirm(`Excluir "${tenantName || tenantId}" e todos os dados relacionados?\n\nEssa ação não pode ser desfeita.`, async () => {
       try {
-        const { deleteDoc, writeBatch } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-        const batch = writeBatch(db);
-        const chargesSnap = await getDocs(query(collection(db, 'charges'), where('tenantId', '==', tenantId)));
-        chargesSnap.docs.forEach(d => batch.delete(d.ref));
-        const contractsSnap = await getDocs(query(collection(db, 'contracts'), where('tenantId', '==', tenantId)));
-        contractsSnap.docs.forEach(d => batch.delete(d.ref));
-        const leadsSnap = await getDocs(query(collection(db, 'leads'), where('tenantId', '==', tenantId)));
-        leadsSnap.docs.forEach(d => batch.delete(d.ref));
-        batch.delete(doc(db, 'users', tenantId));
-        await batch.commit();
+        const token = await auth.currentUser.getIdToken();
+        const resp = await fetch('/api/admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ step: 'delete-tenant', tenantId })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Erro ao excluir');
         showToast(`Inquilino "${tenantName || tenantId}" excluído.`, 'success');
         await loadTenants();
       } catch(e) {
