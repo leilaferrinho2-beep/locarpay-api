@@ -698,15 +698,14 @@ async function handleDeleteTenant(db, body, req) {
     throw Object.assign(new Error('Token inválido'), { status: 401 });
   });
 
-  // Confirma que o caller é owner do tenant
+  // Confirma que o caller é owner válido ou super admin
+  const SUPER_ADMIN = 'denisfelicio20@gmail.com';
   const ownerSnap = await db.collection('owners').where('email', '==', decoded.email).limit(1).get();
-  if (ownerSnap.empty) throw Object.assign(new Error('Acesso negado'), { status: 403 });
-  const ownerId = ownerSnap.docs[0].id;
+  if (ownerSnap.empty && decoded.email !== SUPER_ADMIN)
+    throw Object.assign(new Error('Acesso negado'), { status: 403 });
 
   const userSnap = await db.collection('users').doc(tenantId).get();
   if (!userSnap.exists) throw Object.assign(new Error('Inquilino não encontrado'), { status: 404 });
-  if (userSnap.data().ownerId !== ownerId)
-    throw Object.assign(new Error('Acesso negado'), { status: 403 });
 
   // Revoga sessão Firebase do inquilino
   try {
