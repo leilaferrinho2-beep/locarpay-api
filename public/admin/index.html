@@ -3836,11 +3836,35 @@
 
 <!-- Modal: Detalhes do Lead -->
 <div id="modal-lead-detail" class="modal-overlay" style="display:none">
-  <div class="modal-box" style="max-width:680px;max-height:85vh;overflow-y:auto;padding:28px">
+  <div id="lead-detail-box" class="modal-box" style="max-width:680px;max-height:85vh;overflow-y:auto;padding:28px;transition:max-width .2s,max-height .2s">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
       <h3 style="margin:0">📋 Detalhes do Lead</h3>
-      <button onclick="document.getElementById('modal-lead-detail').style.display='none'"
-        style="background:none;border:none;color:#888;font-size:22px;cursor:pointer;line-height:1">✕</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button id="lead-detail-maximize-btn"
+          onclick="(function(){
+            const box=document.getElementById('lead-detail-box');
+            const isMax=box.dataset.maximized==='1';
+            if(isMax){
+              box.style.maxWidth='680px';box.style.maxHeight='85vh';
+              box.style.width='';box.style.height='';
+              box.dataset.maximized='0';
+              document.getElementById('lead-detail-maximize-btn').textContent='⛶';
+              document.getElementById('lead-detail-maximize-btn').title='Maximizar';
+            } else {
+              box.style.maxWidth='98vw';box.style.maxHeight='96vh';
+              box.style.width='98vw';box.style.height='96vh';
+              box.dataset.maximized='1';
+              document.getElementById('lead-detail-maximize-btn').textContent='⛶';
+              document.getElementById('lead-detail-maximize-btn').title='Restaurar';
+            }
+          })()"
+          title="Maximizar"
+          style="background:none;border:none;color:#aaa;font-size:20px;cursor:pointer;line-height:1;padding:2px 6px;border-radius:4px"
+          onmouseover="this.style.color='#fff';this.style.background='#333'"
+          onmouseout="this.style.color='#aaa';this.style.background='none'">⛶</button>
+        <button onclick="document.getElementById('modal-lead-detail').style.display='none';document.getElementById('lead-detail-box').style.maxWidth='680px';document.getElementById('lead-detail-box').style.maxHeight='85vh';document.getElementById('lead-detail-box').style.width='';document.getElementById('lead-detail-box').style.height='';document.getElementById('lead-detail-box').dataset.maximized='0';"
+          style="background:none;border:none;color:#888;font-size:22px;cursor:pointer;line-height:1">✕</button>
+      </div>
     </div>
     <div id="lead-detail-body"></div>
   </div>
