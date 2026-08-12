@@ -1006,7 +1006,7 @@ export default async function handler(req, res) {
       const db = getFirestore();
       const event = req.body?.event || req.body?.type || '';
       const documentId = req.body?.data?.document_id || req.body?.document_id || '';
-      const isCompleted = event === 'document.completed' || event === 'finished' || req.body?.data?.status === 'completed';
+      const isCompleted = event === 'document_ready' || event === 'document.completed' || event === 'finished' || req.body?.data?.status === 'completed' || req.body?.data?.status === 'ready';
       if (isCompleted && documentId) {
         // Acha o contrato pelo assinafyDocumentId
         const contractSnap = await db.collection('contracts')
