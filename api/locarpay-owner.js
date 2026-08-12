@@ -6,6 +6,7 @@
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, Timestamp }       from 'firebase-admin/firestore';
+import { getAuth }                        from 'firebase-admin/auth';
 import nodemailer                         from 'nodemailer';
 
 const PLANS = {
@@ -684,6 +685,51 @@ async function handleAsaasWebhook(db, body) {
   return { ok: true, event, ignored: true };
 }
 
+async function handleDeleteTenant(db, body, req) {
+  const { tenantId } = body;
+  if (!tenantId) throw Object.assign(new Error('tenantId obrigatório'), { status: 400 });
+
+  // Verifica Firebase ID token no header Authorization
+  const authHeader = req.headers['authorization'] || '';
+  const idToken = authHeader.replace('Bearer ', '').trim();
+  if (!idToken) throw Object.assign(new Error('Token ausente'), { status: 401 });
+
+  const decoded = await getAuth().verifyIdToken(idToken).catch(() => {
+    throw Object.assign(new Error('Token inválido'), { status: 401 });
+  });
+
+  // Confirma que o caller é owner do tenant
+  const ownerSnap = await db.collection('owners').where('email', '==', decoded.email).limit(1).get();
+  if (ownerSnap.empty) throw Object.assign(new Error('Acesso negado'), { status: 403 });
+  const ownerId = ownerSnap.docs[0].id;
+
+  const userSnap = await db.collection('users').doc(tenantId).get();
+  if (!userSnap.exists) throw Object.assign(new Error('Inquilino não encontrado'), { status: 404 });
+  if (userSnap.data().ownerId !== ownerId)
+    throw Object.assign(new Error('Acesso negado'), { status: 403 });
+
+  // Revoga sessão Firebase do inquilino
+  try {
+    const fbUser = await getAuth().getUserByEmail(userSnap.data().email);
+    await getAuth().revokeRefreshTokens(fbUser.uid);
+  } catch (_) {}
+
+  // Deleta cobranças, contratos, leads e usuário
+  const [chargesSnap, contractsSnap, leadsSnap] = await Promise.all([
+    db.collection('charges').where('tenantId', '==', tenantId).get(),
+    db.collection('contracts').where('tenantId', '==', tenantId).get(),
+    db.collection('leads').where('tenantId', '==', tenantId).get(),
+  ]);
+  const batch = db.batch();
+  chargesSnap.docs.forEach(d => batch.delete(d.ref));
+  contractsSnap.docs.forEach(d => batch.delete(d.ref));
+  leadsSnap.docs.forEach(d => batch.delete(d.ref));
+  batch.delete(db.collection('users').doc(tenantId));
+  await batch.commit();
+
+  return { ok: true };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -724,6 +770,7 @@ export default async function handler(req, res) {
     if (step === 'notify-trial')   return res.status(200).json(await handleNotifyTrial(db, body));
     if (step === 'setup-webhook')          return res.status(200).json(await handleSetupWebhook(db, body));
     if (step === 'setup-payment-webhook')  return res.status(200).json(await handleSetupPaymentWebhook(db, body));
+    if (step === 'delete-tenant')  return res.status(200).json(await handleDeleteTenant(db, body, req));
     return res.status(400).json({ error: 'step invalido' });
 
   } catch (e) {
