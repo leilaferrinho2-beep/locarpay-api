@@ -878,7 +878,7 @@ async function handleGetSignedReadUrl(body, bucket) {
 }
 
 async function handleGetUploadUrl(body, bucket) {
-  const { ownerId, fileName, contentType } = body;
+  const { ownerId, fileName } = body;
   if (!ownerId || !fileName) throw Object.assign(new Error('ownerId e fileName obrigatórios'), { status: 400 });
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path = `leads/${ownerId}/${Date.now()}_${safeName}`;
@@ -887,11 +887,26 @@ async function handleGetUploadUrl(body, bucket) {
   const file = storage.bucket(bucketName).file(path);
   const [signedUrl] = await file.getSignedUrl({
     action: 'write',
-    expires: Date.now() + 15 * 60 * 1000, // 15 min
-    contentType: contentType || 'image/jpeg',
+    expires: Date.now() + 15 * 60 * 1000,
+    version: 'v4',
   });
   const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(path)}?alt=media`;
   return { ok: true, uploadUrl: signedUrl, publicUrl, path };
+}
+
+async function handleUploadDoc(body, bucket) {
+  const { ownerId, fileName, contentType, data } = body;
+  if (!ownerId || !fileName || !data) throw Object.assign(new Error('Dados obrigatórios ausentes'), { status: 400 });
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `leads/${ownerId}/${Date.now()}_${safeName}`;
+  const storage = getStorage();
+  const bucketName = bucket || 'locarpayapp.firebasestorage.app';
+  const file = storage.bucket(bucketName).file(path);
+  const buffer = Buffer.from(data, 'base64');
+  await file.save(buffer, { metadata: { contentType: contentType || 'image/jpeg' } });
+  await file.makePublic().catch(() => {});
+  const publicUrl = `https://storage.googleapis.com/${bucketName}/${path}`;
+  return { ok: true, publicUrl, path };
 }
 
 export default async function handler(req, res) {
@@ -964,6 +979,7 @@ export default async function handler(req, res) {
     else if (step === 'reject-lead')       result = await handleRejectLead(db, req.body);
     else if (step === 'remove-lead')       result = await handleRemoveLead(db, req.body);
     else if (step === 'get-upload-url')    result = await handleGetUploadUrl(req.body, req._storageBucket);
+    else if (step === 'upload-doc')        result = await handleUploadDoc(req.body, req._storageBucket);
     else if (step === 'get-signed-url')    result = await handleGetSignedReadUrl(req.body, req._storageBucket);
     else throw Object.assign(new Error('step inválido'), { status: 400 });
     res.status(200).json(result);
