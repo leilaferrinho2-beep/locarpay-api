@@ -929,13 +929,9 @@ async function handleRejectLead(db, body) {
 async function handleGetSignedReadUrl(body, bucket) {
   const { path } = body;
   if (!path) throw Object.assign(new Error('path obrigatório'), { status: 400 });
-  const storage = getStorage();
   const bucketName = bucket || 'transgu-web-6d50f.firebasestorage.app';
-  const file = storage.bucket(bucketName).file(path);
-  const [url] = await file.getSignedUrl({
-    action: 'read',
-    expires: Date.now() + 60 * 60 * 1000, // 1h
-  });
+  // Arquivos foram enviados com makePublic() — URL pública direta, sem necessidade de assinar
+  const url = `https://storage.googleapis.com/${bucketName}/${path}`;
   return { ok: true, url };
 }
 
