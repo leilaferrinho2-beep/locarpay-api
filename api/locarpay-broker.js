@@ -663,21 +663,36 @@ async function createAssinafyContract(db, contractId, data) {
   }, apiKey);
   const assignmentId = assignRes?.data?.id;
 
-  // 4. Tenta publicar/enviar o documento (alguns planos Assinafy precisam deste passo)
+  // 4. Tenta publicar/enviar o documento
+  let sendRes = null;
   try {
-    await assinafyReq('POST', `documents/${documentId}/send`, null, apiKey);
+    sendRes = await assinafyReq('POST', `documents/${documentId}/send`, null, apiKey);
   } catch (_) {
-    try { await assinafyReq('POST', `documents/${documentId}/publish`, null, apiKey); } catch (_) {}
+    try { sendRes = await assinafyReq('POST', `documents/${documentId}/publish`, null, apiKey); } catch (_) {}
   }
 
-  // 5. Extrai URLs de assinatura
-  const signingUrls = assignRes?.data?.signing_urls || [];
+  // 5. Extrai URLs de assinatura — tenta da resposta do assignment, depois do send, depois busca o documento
+  let signingUrls = assignRes?.data?.signing_urls || sendRes?.data?.signing_urls || [];
+  if (!signingUrls.length) {
+    try {
+      const docDetail = await assinafyReq('GET', `documents/${documentId}`, null, apiKey);
+      signingUrls = docDetail?.data?.signing_urls || docDetail?.data?.assignments?.[0]?.signing_urls || [];
+    } catch (_) {}
+  }
   const ownerSignUrl  = signingUrls.find(u => u.signer_id === s1Id)?.url || null;
   const tenantSignUrl = signingUrls.find(u => u.signer_id === s2Id)?.url || null;
 
-  // 6. Envia links por SMTP (garantia de entrega independente do Assinafy)
-  if (ownerSignUrl && data.ownerEmail) {
+  // 6. Envia e-mail ao proprietário — com link de assinatura se disponível, ou apenas aviso com PDF
+  if (data.ownerEmail) {
     try {
+      const btnSection = ownerSignUrl
+        ? `<div style="text-align:center;margin:28px 0">
+            <a href="${ownerSignUrl}" style="background:#4CAF50;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
+              ✍️ Assinar contrato agora
+            </a>
+           </div>
+           <p style="color:#888;font-size:13px">Após sua assinatura, o contrato será enviado ao inquilino para assinatura.</p>`
+        : `<p style="color:#444">Em breve você receberá o link de assinatura digital da Assinafy no mesmo e-mail. Por favor, verifique também sua caixa de spam.</p>`;
       await sendEmail(data.ownerEmail, '📝 Contrato aguarda sua assinatura — iLocarPay', `
         <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
           <div style="background:#1a1a1a;padding:32px;text-align:center">
@@ -685,13 +700,8 @@ async function createAssinafyContract(db, contractId, data) {
           </div>
           <div style="padding:32px">
             <p>Olá, <strong>${data.ownerName || 'Proprietário'}</strong>!</p>
-            <p>O contrato de locação do imóvel está aguardando a sua assinatura digital.</p>
-            <div style="text-align:center;margin:28px 0">
-              <a href="${ownerSignUrl}" style="background:#4CAF50;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
-                ✍️ Assinar contrato agora
-              </a>
-            </div>
-            <p style="color:#888;font-size:13px">Após sua assinatura, o contrato será enviado ao inquilino para assinatura.</p>
+            <p>O contrato de locação do imóvel <strong>${data.propertyAddress || ''}</strong> está aguardando a sua assinatura digital.</p>
+            ${btnSection}
           </div>
         </div>
       `);
