@@ -860,7 +860,53 @@
     });
   }
 
+  function playLeadSound() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0.18, ctx.currentTime);
+      master.connect(ctx.destination);
+
+      // Nota 1: suave ding (Sol5)
+      const o1 = ctx.createOscillator();
+      const g1 = ctx.createGain();
+      o1.type = 'sine';
+      o1.frequency.setValueAtTime(784, ctx.currentTime);
+      o1.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.08);
+      g1.gain.setValueAtTime(0, ctx.currentTime);
+      g1.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.01);
+      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
+      o1.connect(g1); g1.connect(master);
+      o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.56);
+
+      // Nota 2: Si5 (terça acima, levemente atrasada)
+      const o2 = ctx.createOscillator();
+      const g2 = ctx.createGain();
+      o2.type = 'sine';
+      o2.frequency.setValueAtTime(988, ctx.currentTime + 0.12);
+      g2.gain.setValueAtTime(0, ctx.currentTime + 0.12);
+      g2.gain.linearRampToValueAtTime(0.8, ctx.currentTime + 0.14);
+      g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
+      o2.connect(g2); g2.connect(master);
+      o2.start(ctx.currentTime + 0.12); o2.stop(ctx.currentTime + 0.71);
+
+      // Nota 3: Ré6 (quinta, acorde completo)
+      const o3 = ctx.createOscillator();
+      const g3 = ctx.createGain();
+      o3.type = 'sine';
+      o3.frequency.setValueAtTime(1175, ctx.currentTime + 0.26);
+      g3.gain.setValueAtTime(0, ctx.currentTime + 0.26);
+      g3.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 0.28);
+      g3.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.0);
+      o3.connect(g3); g3.connect(master);
+      o3.start(ctx.currentTime + 0.26); o3.stop(ctx.currentTime + 1.01);
+
+      setTimeout(() => ctx.close(), 1200);
+    } catch (e) { /* silencioso se browser bloquear */ }
+  }
+
   function showLeadAlert(count, lead) {
+    playLeadSound();
     let el = $('lead-alert-banner');
     if (!el) {
       el = document.createElement('div');
