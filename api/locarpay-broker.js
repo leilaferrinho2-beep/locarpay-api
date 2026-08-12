@@ -930,7 +930,7 @@ async function handleGetSignedReadUrl(body, bucket) {
   const { path } = body;
   if (!path) throw Object.assign(new Error('path obrigatório'), { status: 400 });
   const storage = getStorage();
-  const bucketName = bucket || 'locarpayapp.appspot.com';
+  const bucketName = bucket || 'transgu-web-6d50f.firebasestorage.app';
   const file = storage.bucket(bucketName).file(path);
   const [url] = await file.getSignedUrl({
     action: 'read',
