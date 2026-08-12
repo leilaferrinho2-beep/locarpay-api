@@ -860,9 +860,18 @@
     });
   }
 
+  // AudioContext compartilhado — desbloqueado no primeiro clique do usuário
+  let _audioCtx = null;
+  function _getAudioCtx() {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    return _audioCtx;
+  }
+  document.addEventListener('click', () => _getAudioCtx(), { once: false, passive: true });
+
   function playLeadSound() {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = _getAudioCtx();
       const master = ctx.createGain();
       master.gain.setValueAtTime(0.18, ctx.currentTime);
       master.connect(ctx.destination);
