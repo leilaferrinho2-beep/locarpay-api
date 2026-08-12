@@ -1,0 +1,11 @@
+import { readFileSync } from 'fs';
+import { GoogleAuth } from 'google-auth-library';
+const PROJECT = 'locarpayapp';
+const sa = JSON.parse(readFileSync('C:/Users/denis/Downloads/locarpayapp-firebase-adminsdk-fbsvc-e92d24aa50.json', 'utf8'));
+const auth = new GoogleAuth({ credentials: sa, scopes: ['https://www.googleapis.com/auth/firebase'] });
+const client = await auth.getClient();
+const token = (await client.getAccessToken()).token;
+const headers = { Authorization: 'Bearer ' + token };
+const res = await fetch('https://firebaserules.googleapis.com/v1/projects/' + PROJECT + '/releases', { headers });
+const data = await res.json();
+console.log(JSON.stringify(data, null, 2));
