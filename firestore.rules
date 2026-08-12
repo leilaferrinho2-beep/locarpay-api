@@ -84,7 +84,12 @@ service cloud.firestore {
     // ── brokers ──────────────────────────────────────────────────────────────
     match /brokers/{brokerId} {
       allow read: if isAuth() && (
-        resource.data.get('email','') == myEmail() || isMaster()
+        resource.data.get('email','') == myEmail() ||
+        isMaster() ||
+        // owner da imobiliaria le seus proprios corretores
+        (resource.data.get('ownerId','') != '' &&
+          exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
+          get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail())
       );
       allow write: if isMaster();
     }
