@@ -954,10 +954,24 @@ async function handleUploadDoc(body, bucket) {
   const storage = getStorage();
   const bucketName = bucket || 'locarpayapp.firebasestorage.app';
   const file = storage.bucket(bucketName).file(path);
+  const mime = contentType || 'image/jpeg';
+
+  // Gera signed URL de escrita e faz PUT do buffer via fetch (Admin SDK contorna regras de Storage)
+  const [signedUrl] = await file.getSignedUrl({
+    action: 'write',
+    expires: Date.now() + 5 * 60 * 1000,
+    version: 'v4',
+    contentType: mime,
+  });
   const buffer = Buffer.from(data, 'base64');
-  await file.save(buffer, { metadata: { contentType: contentType || 'image/jpeg' } });
-  await file.makePublic().catch(() => {});
-  const publicUrl = `https://storage.googleapis.com/${bucketName}/${path}`;
+  const putRes = await fetch(signedUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': mime },
+    body: buffer,
+  });
+  if (!putRes.ok) throw new Error(`GCS PUT falhou: ${putRes.status} ${await putRes.text()}`);
+
+  const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(path)}?alt=media`;
   return { ok: true, publicUrl, path };
 }
 
