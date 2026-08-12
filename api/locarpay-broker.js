@@ -486,6 +486,9 @@ async function handleApproveLead(db, body) {
     startDate:           cd.startDate || lp.startDate || '',
     endDate:             cd.endDate   || lp.endDate   || '',
     deposit:             cd.deposit   || parseFloat(lp.deposit)    || 0,
+    landlordName,
+    landlordEmail,
+    landlordCpf,
     active:              false, // ativa só após entregar as chaves
     assinafyStatus:      'pending',
     leadId,
@@ -523,6 +526,7 @@ async function handleApproveLead(db, body) {
   }
 
   // Envia PDF do contrato por e-mail ao proprietário do imóvel (sempre, independente da Assinafy)
+  if (!landlordEmail) console.warn('[approve-lead] landlordEmail vazio — e-mail ao proprietário não enviado. owner.email:', owner.email, 'lead.landlord:', JSON.stringify(lead.landlord));
   if (landlordEmail) {
     try {
       const pdfData = await generateContractPdf({
@@ -573,7 +577,7 @@ async function handleApproveLead(db, body) {
           </div>` : ''}
           <p style="color:#444">Você receberá o contrato por e-mail para assinar digitalmente. Acompanhe tudo pelo aplicativo:</p>
           <div style="text-align:center;margin:28px 0">
-            <a href="https://www.ilocarpay.com.br/download/locarpay-v135.apk"
+            <a href="https://www.ilocarpay.com.br/download/locarpay-v186.apk"
                style="background:#4CAF50;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
               📱 Baixar app iLocarPay
             </a>
@@ -1111,11 +1115,6 @@ export default async function handler(req, res) {
       if (!leadId) throw Object.assign(new Error('leadId obrigatório'), { status: 400 });
       await db.collection('leads').doc(leadId).update({ bothSigned: true, updatedAt: FieldValue.serverTimestamp() });
       result = { ok: true };
-    }
-    else if (step === 'test-smtp') {
-      const to = req.body.to || 'contatotransgu@gmail.com';
-      await sendEmail(to, '🧪 Teste SMTP — iLocarPay', '<p>E-mail de teste enviado com sucesso.</p>');
-      result = { ok: true, sent: true, to };
     }
     else throw Object.assign(new Error('step inválido'), { status: 400 });
     res.status(200).json(result);
