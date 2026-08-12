@@ -122,6 +122,7 @@
   let contracts = [];
   let leads     = [];
   let leadsUnsubscribe = null;
+  let leadsListUnsubscribe = null;
 
   function $(id) { return document.getElementById(id); }
 
@@ -904,19 +905,30 @@
     if (el) el.remove();
   };
 
-  async function loadLeads() {
+  function loadLeads() {
     if (!currentOwnerId) return;
     const tbody = $('leads-tbody');
     if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="empty">Carregando...</td></tr>';
-    try {
-      const snap = await getDocs(query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId), limit(100)));
-      leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      leads.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      renderLeads();
-    } catch (e) {
-      console.error('loadLeads:', e);
-      if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="empty" style="color:#ef5350">Erro ao carregar leads: ${e.message}</td></tr>`;
-    }
+    if (leadsListUnsubscribe) leadsListUnsubscribe();
+    leadsListUnsubscribe = onSnapshot(
+      query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId), limit(100)),
+      snap => {
+        leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        leads.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        renderLeads();
+        // Notifica se algum lead mudou para bothSigned=true
+        snap.docChanges().forEach(change => {
+          if (change.type === 'modified' && change.doc.data().bothSigned && !change.oldIndex < 0) {
+            const l = change.doc.data();
+            showToast(`✍️ Contrato assinado por ambas as partes — ${l.tenant?.name || 'Inquilino'}`, 'success');
+          }
+        });
+      },
+      e => {
+        console.error('loadLeads:', e);
+        if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="empty" style="color:#ef5350">Erro: ${e.message}</td></tr>`;
+      }
+    );
   }
 
   function renderLeads() {
