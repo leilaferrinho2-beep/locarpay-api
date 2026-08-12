@@ -950,18 +950,26 @@ async function handleUploadDoc(db, body) {
   const { ownerId, fileName, contentType, data } = body;
   if (!ownerId || !fileName || !data) throw Object.assign(new Error('Dados obrigatórios ausentes'), { status: 400 });
   const mime = contentType || 'image/jpeg';
-  // Salva base64 no Firestore — sem depender do Firebase Storage
-  const docRef = db.collection('doc_uploads').doc();
-  await docRef.set({
-    ownerId,
-    fileName,
-    mime,
-    data,   // base64 string
-    createdAt: FieldValue.serverTimestamp()
-  });
-  // URL "virtual" que o painel usa para exibir inline
-  const publicUrl = `data:${mime};base64,${data}`;
-  return { ok: true, publicUrl, path: docRef.id };
+  const BUCKET = 'transgu-web-6d50f.firebasestorage.app';
+
+  try {
+    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `leads/${ownerId}/${Date.now()}_${safeName}`;
+    const buffer = Buffer.from(data, 'base64');
+    const storage = getStorage();
+    const file = storage.bucket(BUCKET).file(path);
+    await file.save(buffer, { contentType: mime, resumable: false });
+    await file.makePublic();
+    const publicUrl = `https://storage.googleapis.com/${BUCKET}/${path}`;
+    return { ok: true, publicUrl, path };
+  } catch (storageErr) {
+    console.warn('[upload-doc] storage falhou, fallback Firestore:', storageErr.message);
+    // Fallback: salva base64 no Firestore
+    const docRef = db.collection('doc_uploads').doc();
+    await docRef.set({ ownerId, fileName, mime, data, createdAt: FieldValue.serverTimestamp() });
+    const publicUrl = `data:${mime};base64,${data}`;
+    return { ok: true, publicUrl, path: docRef.id };
+  }
 }
 
 export default async function handler(req, res) {
