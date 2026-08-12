@@ -2304,9 +2304,9 @@
     showConfirm(`Excluir "${tenantName || tenantId}" e todos os dados relacionados?\n\nEssa ação não pode ser desfeita.`, async () => {
       try {
         const token = await auth.currentUser.getIdToken();
-        const resp = await fetch('/api/admin', {
+        const resp = await fetch('/api/locarpay-owner', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
           body: JSON.stringify({ step: 'delete-tenant', tenantId })
         });
         const data = await resp.json();
