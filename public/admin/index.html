@@ -27,9 +27,16 @@
   async function openStorageDoc(urlOrPath) {
     try {
       let path = urlOrPath;
-      const match = urlOrPath.match(/\/o\/([^?]+)/);
-      if (match) path = decodeURIComponent(match[1]);
-      // Usa endpoint da API que gera URL assinada via Admin SDK (bypassa regras de Storage)
+      // Firebase Storage URL: .../o/PATH?...
+      const m1 = urlOrPath.match(/\/o\/([^?]+)/);
+      if (m1) { path = decodeURIComponent(m1[1]); }
+      // Google Storage URL: storage.googleapis.com/BUCKET/PATH
+      else {
+        const m2 = urlOrPath.match(/storage\.googleapis\.com\/[^/]+\/(.+?)(\?|$)/);
+        if (m2) path = m2[1];
+        // Já é um path relativo (não começa com http)
+        else if (!urlOrPath.startsWith('http')) path = urlOrPath;
+      }
       const res = await fetch('/api/locarpay-broker', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -37,10 +44,10 @@
       });
       const data = await res.json();
       if (data.url) { window.open(data.url, '_blank'); return; }
-      window.open(urlOrPath, '_blank');
+      throw new Error(data.error || 'sem URL');
     } catch(e) {
       console.warn('[openStorageDoc] falha:', e.message);
-      window.open(urlOrPath, '_blank');
+      alert('Não foi possível abrir o documento. Tente novamente.');
     }
   }
   window.openStorageDoc = openStorageDoc;
