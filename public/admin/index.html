@@ -987,12 +987,20 @@
 
     const propAddr = [p.street, p.number, p.complement, p.neighborhood, p.city, p.state].filter(Boolean).join(', ');
     const docsHtml = (l.docs || []).map(d => {
-      const urlOrPath = d.path || d.url || '';
-      const isPdf = urlOrPath.includes('.pdf') || (d.url || '').includes('application%2Fpdf');
+      const url = d.url || '';
+      const isBase64 = url.startsWith('data:');
+      const isPdf = url.includes('.pdf') || url.includes('application%2Fpdf') || url.includes('application/pdf');
       const icon = isPdf ? '📄' : '🖼️';
-      return `<button onclick="openStorageDoc('${urlOrPath.replace(/'/g,"\\'")}');event.stopPropagation()"
+      if (isBase64 && !isPdf) {
+        return `<div style="margin:4px;display:inline-block">
+          <div style="font-size:11px;color:#4CAF50;margin-bottom:2px">${icon} ${esc(d.type||'Documento')}</div>
+          <img src="${url}" style="max-width:200px;max-height:150px;border-radius:6px;border:1px solid #4CAF50;cursor:pointer"
+            onclick="window.open(this.src,'_blank')" title="Clique para ampliar">
+        </div>`;
+      }
+      return `<button onclick="openStorageDoc('${(d.path||url).replace(/'/g,"\\'")}');event.stopPropagation()"
         style="display:inline-flex;align-items:center;gap:6px;margin:4px;padding:8px 12px;background:#1a2a1a;border:1px solid #4CAF50;border-radius:8px;color:#4CAF50;font-size:12px;cursor:pointer;font-weight:600">
-        ${icon} ${d.type || 'Documento'} ⬇
+        ${icon} ${esc(d.type||'Documento')} ⬇
        </button>`;
     }).join('');
 
