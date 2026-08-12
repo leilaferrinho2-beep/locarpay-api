@@ -284,10 +284,19 @@
       }
     } catch (_) {}
 
+    let leadsCount = 0;
+    try {
+      if (currentOwnerId) {
+        const leadsSnap = await getDocs(query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId), where('status', '==', 'pending')));
+        leadsCount = leadsSnap.size;
+      }
+    } catch (_) {}
+
     const cards = [
       { label: 'Inquilinos',       value: totalTenants,           icon: '👤', color: '#4CAF50' },
       { label: 'Contratos ativos', value: totalContracts,         icon: '📄', color: '#4CAF50' },
-      { label: 'Pendentes',        value: pendingCount,           icon: '⏳', color: '#FFB74D' },
+      { label: 'Leads em análise', value: leadsCount,             icon: '📋', color: leadsCount > 0 ? '#FFB74D' : '#888' },
+      { label: 'Cobranças pend.',  value: pendingCount,           icon: '⏳', color: '#FFB74D' },
       { label: 'Pagas',            value: paidCount,              icon: '✅', color: '#81C784' },
       { label: 'Aluguel/mês',      value: fmt.format(totalRent),  icon: '💰', color: '#CE93D8' },
     ];
