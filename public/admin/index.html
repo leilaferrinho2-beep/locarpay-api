@@ -33,7 +33,7 @@
       const res = await fetch('/api/locarpay-broker', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'get-signed-url', path })
+        body: JSON.stringify({ step: 'get-signed-url', path, adminEmail: auth.currentUser?.email || '' })
       });
       const data = await res.json();
       if (data.url) { window.open(data.url, '_blank'); return; }
