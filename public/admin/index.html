@@ -2306,7 +2306,7 @@
         const token = await auth.currentUser.getIdToken();
         const resp = await fetch('/api/admin', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
           body: JSON.stringify({ step: 'delete-tenant', tenantId })
         });
         const data = await resp.json();
