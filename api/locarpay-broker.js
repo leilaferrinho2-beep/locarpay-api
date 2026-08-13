@@ -134,10 +134,10 @@ async function getAssinafyAccount(apiKey) {
 
 async function sendEmail(to, subject, html, attachments) {
   const transporter = nodemailer.createTransport({
-    host: 'smtp.titan.email', port: 587, secure: false,
-    auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
+    host: 'smtp.gmail.com', port: 587, secure: false,
+    auth: { user: 'denisfelicio2@gmail.com', pass: process.env.GMAIL_APP_PASSWORD }
   });
-  await transporter.sendMail({ from: 'iLocarPay <denis@dlftech.com.br>', to, subject, html, attachments });
+  await transporter.sendMail({ from: 'iLocarPay <denisfelicio2@gmail.com>', to, subject, html, attachments });
 }
 
 async function sendContractEmail({ landlordName, landlordEmail, tenantName, tenantEmail, propAddr, pdfData }) {
