@@ -1201,8 +1201,16 @@
     $('approve-end').value = endDate.toISOString().slice(0,10);
     $('approve-address').value = propAddr || l.propertyDescription || '';
 
-    // Sempre mostra seção do proprietário para confirmar/corrigir e-mail
+    // Mostra seção do proprietário; ajusta aviso conforme dados disponíveis
     $('approve-landlord-section').style.display = 'block';
+    const hasLandlordData = !!(l.landlord?.name && l.landlord?.email);
+    const landlordWarning = $('approve-landlord-warning');
+    if (landlordWarning) {
+      landlordWarning.textContent = hasLandlordData
+        ? '✅ Dados do proprietário recebidos do app. Confirme antes de aprovar:'
+        : '⚠️ Dados do proprietário não encontrados neste lead. Preencha para gerar o contrato:';
+      landlordWarning.style.color = hasLandlordData ? '#4ade80' : '#f59e0b';
+    }
     $('approve-landlord-name').value  = l.landlord?.name  || '';
     $('approve-landlord-email').value = l.landlord?.email || '';
     $('approve-landlord-cpf').value   = l.landlord?.cpf   || '';
@@ -3914,7 +3922,7 @@
     </div>
 
     <div id="approve-landlord-section" style="margin-top:14px;padding:12px;background:#0f1117;border:1px solid #f59e0b44;border-radius:8px;display:none">
-      <p style="font-size:12px;color:#f59e0b;margin:0 0 10px">⚠️ Dados do proprietário não encontrados neste lead. Preencha para gerar o contrato:</p>
+      <p id="approve-landlord-warning" style="font-size:12px;color:#f59e0b;margin:0 0 10px">⚠️ Dados do proprietário não encontrados neste lead. Preencha para gerar o contrato:</p>
       <label>Nome do proprietário</label>
       <input id="approve-landlord-name" type="text" placeholder="Nome completo">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px">
