@@ -973,7 +973,7 @@ async function handleGetSignedReadUrl(body) {
 }
 
 async function handleGetUploadUrl(body, bucket) {
-  const { ownerId, fileName } = body;
+  const { ownerId, fileName, contentType } = body;
   if (!ownerId || !fileName) throw Object.assign(new Error('ownerId e fileName obrigatórios'), { status: 400 });
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path = `leads/${ownerId}/${Date.now()}_${safeName}`;
@@ -981,13 +981,15 @@ async function handleGetUploadUrl(body, bucket) {
   const bucketName = bucket || 'transgu-web-6d50f.firebasestorage.app';
   const file = storage.bucket(bucketName).file(path);
   try {
-    const [signedUrl] = await file.getSignedUrl({
+    const signedOpts = {
       action: 'write',
-      expires: Date.now() + 15 * 60 * 1000,
+      expires: Date.now() + 30 * 60 * 1000, // 30 min (PDFs grandes demoram mais)
       version: 'v4',
-    });
+    };
+    if (contentType) signedOpts.contentType = contentType;
+    const [signedUrl] = await file.getSignedUrl(signedOpts);
     const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(path)}?alt=media`;
-    console.log('[get-upload-url] signed URL ok para', path);
+    console.log('[get-upload-url] signed URL ok para', path, 'contentType:', contentType || 'any');
     return { ok: true, uploadUrl: signedUrl, publicUrl, path };
   } catch (e) {
     console.error('[get-upload-url] getSignedUrl falhou:', e.message);
