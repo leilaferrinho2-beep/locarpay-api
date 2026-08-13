@@ -525,31 +525,7 @@ async function handleApproveLead(db, body) {
     console.error('[approve-lead] Assinafy error:', e.message);
   }
 
-  // Envia PDF do contrato por e-mail ao proprietário do imóvel (sempre, independente da Assinafy)
-  if (!landlordEmail) console.warn('[approve-lead] landlordEmail vazio — e-mail ao proprietário não enviado. owner.email:', owner.email, 'lead.landlord:', JSON.stringify(lead.landlord));
-  if (landlordEmail) {
-    try {
-      const pdfData = await generateContractPdf({
-        contractId,
-        ownerName:    landlordName,
-        ownerEmail:   landlordEmail,
-        ownerCpf:     landlordCpf,
-        tenantName:   lead.tenant.name,
-        tenantEmail,
-        tenantCpf:    lead.tenant.cpf,
-        propertyCode:    lead.propertyCode,
-        propertyAddress: propAddr,
-        baseRent:  cd.baseRent  || parseFloat(lp.rentValue)  || 0,
-        dueDay:    cd.dueDay    || lp.dueDay    || 10,
-        startDate: cd.startDate || lp.startDate || '',
-        endDate:   cd.endDate   || lp.endDate   || '',
-        deposit:   cd.deposit   || parseFloat(lp.deposit)    || 0
-      });
-      await sendContractEmail({ landlordName, landlordEmail, tenantName: lead.tenant.name, tenantEmail, propAddr, pdfData });
-    } catch (e) { console.warn('[approve-lead] contract email error:', e.message); }
-  }
-
-  // Atualiza lead
+  // Atualiza lead PRIMEIRO (crítico) — antes dos envios que podem demorar
   await leadRef.update({
     status:      'approved',
     tenantId,
@@ -558,71 +534,90 @@ async function handleApproveLead(db, body) {
     updatedAt:   FieldValue.serverTimestamp()
   });
 
-  // Envia e-mail de boas-vindas ao inquilino com link do app
-  try {
-    const prop = lead.property || {};
-    const propAddr = [prop.street, prop.number, prop.complement, prop.neighborhood, prop.city, prop.state]
-      .filter(Boolean).join(', ') || lead.propertyDescription || '';
-    await sendEmail(tenantEmail, '🎉 Sua locação foi aprovada — iLocarPay', `
-      <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
-        <div style="background:#1a1a1a;padding:32px;text-align:center">
-          <h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1>
-          <p style="color:#ccc;margin:8px 0 0">Gestão inteligente de aluguéis</p>
-        </div>
-        <div style="padding:32px">
-          <p style="font-size:18px;font-weight:bold;color:#1a1a1a">Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉</p>
-          <p style="color:#444"><strong>${owner.name || 'Sua imobiliária'}</strong> aprovou a sua locação.</p>
-          ${propAddr ? `<div style="background:#f0f7f0;border-left:4px solid #4CAF50;padding:12px 16px;border-radius:4px;margin:16px 0">
-            <strong>Imóvel:</strong> ${propAddr}
-          </div>` : ''}
-          <p style="color:#444">Você receberá o contrato por e-mail para assinar digitalmente. Acompanhe tudo pelo aplicativo:</p>
-          <div style="text-align:center;margin:28px 0">
-            <a href="https://www.ilocarpay.com.br/download/locarpay-v186.apk"
-               style="background:#4CAF50;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
-              📱 Baixar app iLocarPay
-            </a>
+  // Dispara todos os envios em paralelo (não bloqueia a resposta entre si)
+  if (!landlordEmail) console.warn('[approve-lead] landlordEmail vazio. owner.email:', owner.email, 'lead.landlord:', JSON.stringify(lead.landlord));
+
+  const contractPdfParams = {
+    contractId,
+    ownerName:    landlordName,
+    ownerEmail:   landlordEmail,
+    ownerCpf:     landlordCpf,
+    tenantName:   lead.tenant.name,
+    tenantEmail,
+    tenantCpf:    lead.tenant.cpf,
+    propertyCode:    lead.propertyCode,
+    propertyAddress: propAddr,
+    baseRent:  cd.baseRent  || parseFloat(lp.rentValue)  || 0,
+    dueDay:    cd.dueDay    || lp.dueDay    || 10,
+    startDate: cd.startDate || lp.startDate || '',
+    endDate:   cd.endDate   || lp.endDate   || '',
+    deposit:   cd.deposit   || parseFloat(lp.deposit)    || 0
+  };
+
+  const propAddrWa = [lead.property?.street, lead.property?.number, lead.property?.city].filter(Boolean).join(', ') || lead.propertyDescription || 'imóvel';
+
+  await Promise.allSettled([
+    // PDF ao proprietário
+    landlordEmail ? (async () => {
+      try {
+        const pdfData = await generateContractPdf(contractPdfParams);
+        await sendContractEmail({ landlordName, landlordEmail, tenantName: lead.tenant.name, tenantEmail, propAddr, pdfData });
+        console.log('[approve-lead] PDF enviado ao proprietário:', landlordEmail);
+      } catch (e) { console.warn('[approve-lead] contract email error:', e.message); }
+    })() : Promise.resolve(),
+
+    // E-mail boas-vindas ao inquilino
+    (async () => {
+      try {
+        await sendEmail(tenantEmail, '🎉 Sua locação foi aprovada — iLocarPay', `
+          <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
+            <div style="background:#1a1a1a;padding:32px;text-align:center">
+              <h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1>
+              <p style="color:#ccc;margin:8px 0 0">Gestão inteligente de aluguéis</p>
+            </div>
+            <div style="padding:32px">
+              <p style="font-size:18px;font-weight:bold;color:#1a1a1a">Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉</p>
+              <p style="color:#444"><strong>${owner.name || 'Sua imobiliária'}</strong> aprovou a sua locação.</p>
+              ${propAddr ? `<div style="background:#f0f7f0;border-left:4px solid #4CAF50;padding:12px 16px;border-radius:4px;margin:16px 0"><strong>Imóvel:</strong> ${propAddr}</div>` : ''}
+              <p style="color:#444">Você receberá o contrato por e-mail para assinar digitalmente. Acompanhe tudo pelo aplicativo:</p>
+              <div style="text-align:center;margin:28px 0">
+                <a href="https://www.ilocarpay.com.br/download/locarpay-v188.apk"
+                   style="background:#4CAF50;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
+                  📱 Baixar app iLocarPay
+                </a>
+              </div>
+              <p style="color:#888;font-size:13px">Após instalar, entre com o e-mail <strong>${tenantEmail}</strong> para acessar seu contrato e acompanhar as cobranças.</p>
+              <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+              <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay • <a href="https://www.ilocarpay.com.br" style="color:#4CAF50">ilocarpay.com.br</a></p>
+            </div>
           </div>
-          <p style="color:#888;font-size:13px">Após instalar, entre com o e-mail <strong>${tenantEmail}</strong> para acessar seu contrato e acompanhar as cobranças.</p>
-          <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-          <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay • <a href="https://www.ilocarpay.com.br" style="color:#4CAF50">ilocarpay.com.br</a></p>
-        </div>
+        `);
+        console.log('[approve-lead] e-mail boas-vindas enviado ao inquilino:', tenantEmail);
+      } catch (e) { console.warn('[approve-lead] tenant email error:', e.message); }
+    })(),
+
+    // WhatsApp proprietário
+    landlordPhone ? sendWhatsApp(landlordPhone,
+      `Olá, ${landlordName}! 🏠\n\nA locação do imóvel *${propAddrWa}* foi aprovada pela imobiliária.\n\nVocê receberá um e-mail com o PDF do contrato e um link para assinatura digital. Verifique sua caixa de entrada (${landlordEmail}).\n\n— iLocarPay`
+    ).catch(e => console.warn('[approve-lead] whatsapp landlord:', e.message)) : Promise.resolve(),
+
+    // WhatsApp inquilino
+    lead.tenant.phone ? sendWhatsApp(lead.tenant.phone,
+      `Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉\n\nSua locação do imóvel *${propAddrWa}* foi aprovada!\n\nO contrato será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o link no seu e-mail (${tenantEmail}).\n\nBaixe o app iLocarPay:\nhttps://www.ilocarpay.com.br\n\n— iLocarPay`
+    ).catch(e => console.warn('[approve-lead] whatsapp tenant:', e.message)) : Promise.resolve(),
+
+    // E-mail ao corretor
+    lead.brokerEmail ? sendEmail(lead.brokerEmail, '✅ Lead aprovado — iLocarPay', `
+      <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px">
+        <h2 style="color:#4CAF50">iLocarPay</h2>
+        <p>Olá, <strong>${lead.brokerName || lead.brokerEmail}</strong>!</p>
+        <p>O lead <strong>${lead.tenant.name}</strong> foi <strong style="color:#4CAF50">aprovado</strong>.</p>
+        <p>O contrato foi enviado para assinatura digital. Após a assinatura de ambas as partes, as chaves poderão ser entregues.</p>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+        <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay</p>
       </div>
-    `);
-  } catch (e) { console.warn('[approve-lead] email error:', e.message); }
-
-  // WhatsApp para o proprietário do imóvel
-  if (landlordPhone) {
-    const prop = lead.property || {};
-    const addr = [prop.street, prop.number, prop.city].filter(Boolean).join(', ') || lead.propertyDescription || 'imóvel';
-    await sendWhatsApp(landlordPhone,
-      `Olá, ${landlordName}! 🏠\n\nA locação do imóvel *${addr}* foi aprovada pela imobiliária.\n\nVocê receberá um e-mail da Assinafy para assinar o contrato digitalmente. Por favor, verifique sua caixa de entrada (${landlordEmail}).\n\n— iLocarPay`
-    );
-  }
-
-  // WhatsApp para o inquilino
-  if (lead.tenant.phone) {
-    const prop = lead.property || {};
-    const addr = [prop.street, prop.number, prop.city].filter(Boolean).join(', ') || lead.propertyDescription || 'imóvel';
-    await sendWhatsApp(lead.tenant.phone,
-      `Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉\n\nSua locação do imóvel *${addr}* foi aprovada!\n\nO contrato será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o contrato no seu e-mail (${tenantEmail}) para assinar digitalmente.\n\nBaixe o app iLocarPay para acompanhar tudo:\nhttps://www.ilocarpay.com.br\n\n— iLocarPay`
-    );
-  }
-
-  // Notifica corretor
-  if (lead.brokerEmail) {
-    try {
-      await sendEmail(lead.brokerEmail, '✅ Lead aprovado — iLocarPay', `
-        <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px">
-          <h2 style="color:#4CAF50">iLocarPay</h2>
-          <p>Olá, <strong>${lead.brokerName || lead.brokerEmail}</strong>!</p>
-          <p>O lead <strong>${lead.tenant.name}</strong> foi <strong style="color:#4CAF50">aprovado</strong>.</p>
-          <p>O contrato foi enviado para assinatura digital. Após a assinatura de ambas as partes, as chaves poderão ser entregues.</p>
-          <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-          <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay</p>
-        </div>
-      `);
-    } catch (e) { console.warn('[approve-lead] broker email error:', e.message); }
-  }
+    `).catch(e => console.warn('[approve-lead] broker email:', e.message)) : Promise.resolve(),
+  ]);
 
   return { ok: true, tenantId, contractId, assinafy: assinafyResult };
 }
