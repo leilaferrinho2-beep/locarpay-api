@@ -669,24 +669,36 @@ async function createAssinafyContract(db, contractId, data) {
 
   // 4. Tenta publicar/enviar o documento
   let sendRes = null;
+  let sendErr = null;
   try {
     sendRes = await assinafyReq('POST', `documents/${documentId}/send`, null, apiKey);
-  } catch (_) {
-    try { sendRes = await assinafyReq('POST', `documents/${documentId}/publish`, null, apiKey); } catch (_) {}
+    console.log('[assinafy] send ok:', JSON.stringify(sendRes?.data || sendRes).slice(0, 300));
+  } catch (e) {
+    sendErr = e.message;
+    console.warn('[assinafy] send falhou, tentando publish:', e.message);
+    try { sendRes = await assinafyReq('POST', `documents/${documentId}/publish`, null, apiKey); } catch (e2) {
+      console.warn('[assinafy] publish tb falhou:', e2.message);
+    }
   }
 
-  // 5. Extrai URLs de assinatura — tenta da resposta do assignment, depois do send, depois busca o documento
+  // 5. Extrai URLs de assinatura
   let signingUrls = assignRes?.data?.signing_urls || sendRes?.data?.signing_urls || [];
   if (!signingUrls.length) {
     try {
       const docDetail = await assinafyReq('GET', `documents/${documentId}`, null, apiKey);
-      signingUrls = docDetail?.data?.signing_urls || docDetail?.data?.assignments?.[0]?.signing_urls || [];
-    } catch (_) {}
+      console.log('[assinafy] GET document:', JSON.stringify(docDetail?.data || docDetail).slice(0, 500));
+      signingUrls = docDetail?.data?.signing_urls
+        || docDetail?.data?.assignments?.[0]?.signing_urls
+        || docDetail?.data?.assignments?.flatMap?.(a => a.signing_urls || [])
+        || [];
+    } catch (e) { console.warn('[assinafy] GET document error:', e.message); }
   }
+  console.log('[assinafy] s1Id:', s1Id, 's2Id:', s2Id, 'signingUrls:', JSON.stringify(signingUrls).slice(0, 400));
   const ownerSignUrl  = signingUrls.find(u => u.signer_id === s1Id)?.url || null;
   const tenantSignUrl = signingUrls.find(u => u.signer_id === s2Id)?.url || null;
+  console.log('[assinafy] ownerSignUrl:', ownerSignUrl, 'tenantSignUrl:', tenantSignUrl);
 
-  // 6. Envia e-mail ao proprietário — com link de assinatura se disponível, ou apenas aviso com PDF
+  // 6. E-mail ao proprietário — com botão de assinatura se URL disponível
   if (data.ownerEmail) {
     try {
       const btnSection = ownerSignUrl
@@ -696,7 +708,7 @@ async function createAssinafyContract(db, contractId, data) {
             </a>
            </div>
            <p style="color:#888;font-size:13px">Após sua assinatura, o contrato será enviado ao inquilino para assinatura.</p>`
-        : `<p style="color:#444">Em breve você receberá o link de assinatura digital da Assinafy no mesmo e-mail. Por favor, verifique também sua caixa de spam.</p>`;
+        : `<p style="color:#444">Em breve você receberá um e-mail separado da <strong>Assinafy</strong> com o link de assinatura digital. Verifique também sua caixa de spam.</p>`;
       await sendEmail(data.ownerEmail, '📝 Contrato aguarda sua assinatura — iLocarPay', `
         <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
           <div style="background:#1a1a1a;padding:32px;text-align:center">
@@ -709,28 +721,34 @@ async function createAssinafyContract(db, contractId, data) {
           </div>
         </div>
       `);
+      console.log('[assinafy] e-mail proprietário enviado para', data.ownerEmail);
     } catch (e) { console.warn('[assinafy] owner sign email error:', e.message); }
   }
 
-  if (tenantSignUrl && data.tenantEmail) {
+  // Inquilino: envia aviso de que o proprietário assina primeiro; link chegará pela Assinafy após a assinatura
+  if (data.tenantEmail) {
     try {
-      await sendEmail(data.tenantEmail, '📝 Contrato aguarda sua assinatura — iLocarPay', `
+      const btnSection = tenantSignUrl
+        ? `<div style="text-align:center;margin:28px 0">
+            <a href="${tenantSignUrl}" style="background:#4CAF50;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
+              ✍️ Assinar contrato agora
+            </a>
+           </div>`
+        : `<p style="color:#444">O proprietário assina primeiro. Assim que ele concluir, você receberá o link de assinatura no seu e-mail automaticamente.</p>`;
+      await sendEmail(data.tenantEmail, '📋 Seu contrato foi gerado — iLocarPay', `
         <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
           <div style="background:#1a1a1a;padding:32px;text-align:center">
             <h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1>
           </div>
           <div style="padding:32px">
             <p>Olá, <strong>${data.tenantName || 'Inquilino'}</strong>!</p>
-            <p>O proprietário já assinou o contrato de locação. Agora é a sua vez!</p>
-            <div style="text-align:center;margin:28px 0">
-              <a href="${tenantSignUrl}" style="background:#4CAF50;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
-                ✍️ Assinar contrato agora
-              </a>
-            </div>
+            <p>O contrato de locação do imóvel <strong>${data.propertyAddress || ''}</strong> foi gerado e aguarda assinatura das partes.</p>
+            ${btnSection}
           </div>
         </div>
       `);
-    } catch (e) { console.warn('[assinafy] tenant sign email error:', e.message); }
+      console.log('[assinafy] e-mail inquilino enviado para', data.tenantEmail);
+    } catch (e) { console.warn('[assinafy] tenant email error:', e.message); }
   }
 
   // 7. Salva IDs no contrato
