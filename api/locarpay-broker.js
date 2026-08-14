@@ -1398,6 +1398,14 @@ async function handleCronRetryAssinafy(db) {
       }
       result = { accountId, s1Id, s2Id, assign: assignRes?.data || assignRes };
     }
+    else if (step === 'save-assinafy-key') {
+      const { apiKey, callerEmail } = req.body;
+      if (!apiKey) throw Object.assign(new Error('apiKey obrigatório'), { status: 400 });
+      const MASTER = process.env.MASTER_EMAIL || 'contatotransgu@gmail.com';
+      if (callerEmail !== MASTER) throw Object.assign(new Error('Sem permissão'), { status: 403 });
+      await db.collection('config').doc('assinafy').set({ apiKey }, { merge: true });
+      result = { ok: true };
+    }
     else if (step === 'retry-assinafy') {
       // Reenviar contrato ao Assinafy quando a primeira tentativa falhou
       const { contractId } = req.body;
