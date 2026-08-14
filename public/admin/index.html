@@ -873,6 +873,27 @@
     finally { if (btn) { btn.disabled = false; btn.textContent = '💾 Salvar análise'; } }
   };
 
+  window.saveAssinafyKey = async () => {
+    const key = ($('assinafy-api-key')?.value || '').trim();
+    if (!key) { showToast('Cole a chave antes de salvar', 'error'); return; }
+    const st = $('assinafy-key-status');
+    st.textContent = 'Salvando...'; st.style.color = '#888';
+    try {
+      const res = await fetch('/api/locarpay-broker', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'save-assinafy-key', apiKey: key, callerEmail: auth.currentUser?.email })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      st.textContent = '✅ Chave Assinafy salva com sucesso.'; st.style.color = '#4CAF50';
+      $('assinafy-api-key').value = '';
+      showToast('Chave Assinafy atualizada', 'success');
+    } catch (e) {
+      st.textContent = '❌ Erro: ' + e.message; st.style.color = '#ef5350';
+    }
+  };
+
   window.retryAssinafy = async (contractId) => {
     if (!contractId) return showToast('contractId não encontrado', 'error');
     const btn = event?.target;
@@ -3893,6 +3914,28 @@
             <span class="slider"></span>
           </label>
         </div>
+      </div>
+
+      <!-- Assinafy -->
+      <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:16px;padding:28px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <span style="font-size:22px">✍️</span>
+          <div>
+            <div style="font-size:16px;font-weight:700;color:#f0f0f0">Assinafy</div>
+            <div style="font-size:12px;color:#666">Assinatura eletrônica de contratos</div>
+          </div>
+        </div>
+        <div style="border-top:1px solid #2a2d3e;margin:20px 0"></div>
+        <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">API KEY</label>
+        <div style="position:relative;margin-bottom:6px">
+          <input id="assinafy-api-key" type="password" placeholder="Cole aqui a chave API do Assinafy" autocomplete="off"
+            style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 42px 11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box"
+            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+          <button onclick="const el=$('assinafy-api-key');el.type=el.type==='password'?'text':'password'"
+            style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;cursor:pointer;font-size:15px">👁</button>
+        </div>
+        <div id="assinafy-key-status" style="margin-bottom:14px;font-size:12px;color:#555"></div>
+        <button class="btn" onclick="saveAssinafyKey()" style="font-size:13px">Salvar chave</button>
       </div>
 
       <!-- Serasa -->
