@@ -133,35 +133,51 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 }
 .btn-dl:hover { background:#2196F3; }
 
+/* ── Greeting ── */
+.greeting-wrap { padding:24px 20px 8px; }
+.greeting-sub  { font-size:13px; color:var(--muted); font-weight:500; margin-bottom:2px; }
+.greeting-name { font-size:26px; font-weight:900; letter-spacing:-.5px; }
+
 /* ── Stats row ── */
-.stats-row { display:flex; gap:12px; margin:20px 16px 0; }
+.stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:16px 16px 0; }
 .stat-card {
-  flex:1; background:var(--surface); border:1px solid var(--border);
-  border-radius:14px; padding:16px 14px; text-align:center;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:16px; padding:16px 14px;
+  display:flex; flex-direction:column; gap:6px;
 }
-.stat-num { font-size:28px; font-weight:900; letter-spacing:-1px; }
-.stat-lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:4px; font-weight:600; }
+.stat-icon { font-size:18px; line-height:1; }
+.stat-num  { font-size:26px; font-weight:900; letter-spacing:-1px; line-height:1; }
+.stat-lbl  { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-weight:700; }
 
 /* ── Lead cards ── */
 .lead-card {
   background:var(--surface); border:1px solid var(--border);
-  border-radius:var(--card-r); padding:18px 20px; margin-bottom:12px;
-  transition:border-color .2s;
+  border-radius:var(--card-r); padding:0; margin-bottom:12px;
+  overflow:hidden; transition:border-color .2s, box-shadow .2s;
 }
-.lead-card:hover { border-color:rgba(66,165,245,.25); }
-.lead-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-.lead-name { font-size:16px; font-weight:700; }
-.lead-prop { font-size:13px; color:var(--muted); margin-top:2px; }
+.lead-card:hover { border-color:rgba(66,165,245,.3); box-shadow:0 4px 20px rgba(0,0,0,.3); }
+.lead-card-accent {
+  height:3px; width:100%;
+}
+.lead-card-body { padding:16px 18px 14px; }
+.lead-top  { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:12px; }
+.lead-name { font-size:16px; font-weight:800; letter-spacing:-.2px; line-height:1.2; }
 .lead-pill {
-  font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px;
-  white-space:nowrap;
+  font-size:10px; font-weight:700; padding:4px 10px; border-radius:20px;
+  white-space:nowrap; flex-shrink:0; margin-top:2px;
 }
-.pill-pending  { background:rgba(255,213,79,.12); color:var(--yellow); border:1px solid rgba(255,213,79,.25); }
-.pill-analyzing{ background:rgba(66,165,245,.12); color:var(--blue);   border:1px solid rgba(66,165,245,.25); }
-.pill-approved { background:rgba(76,175,80,.12);  color:var(--green);  border:1px solid rgba(76,175,80,.25); }
-.pill-rejected { background:rgba(239,83,80,.12);  color:var(--red);    border:1px solid rgba(239,83,80,.25); }
-.pill-active   { background:rgba(76,175,80,.2);   color:var(--green);  border:1px solid rgba(76,175,80,.4); }
-.lead-bottom { display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
+.pill-pending  { background:rgba(255,213,79,.12); color:var(--yellow); border:1px solid rgba(255,213,79,.3); }
+.pill-analyzing{ background:rgba(66,165,245,.12); color:var(--blue);   border:1px solid rgba(66,165,245,.3); }
+.pill-approved { background:rgba(76,175,80,.12);  color:var(--green);  border:1px solid rgba(76,175,80,.3); }
+.pill-rejected { background:rgba(239,83,80,.12);  color:var(--red);    border:1px solid rgba(239,83,80,.3); }
+.pill-active   { background:rgba(76,175,80,.2);   color:var(--green);  border:1px solid rgba(76,175,80,.45); }
+.lead-addr-block { margin-bottom:12px; }
+.lead-addr-line  { display:flex; align-items:flex-start; gap:7px; margin-bottom:3px; }
+.lead-addr-icon  { font-size:13px; flex-shrink:0; margin-top:1px; }
+.lead-addr-text  { font-size:13px; color:var(--muted); line-height:1.4; }
+.lead-addr-text strong { color:rgba(255,255,255,.75); font-weight:600; }
+.lead-meta { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+.lead-rent { font-size:18px; font-weight:900; color:var(--green); letter-spacing:-.3px; }
 .lead-date { font-size:12px; color:var(--muted); }
 .lead-docs { font-size:12px; color:var(--blue); }
 .timeline-bar {
@@ -386,11 +402,29 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
       <span class="btn-dl">Baixar</span>
     </a>
 
+    <!-- Greeting -->
+    <div class="greeting-wrap fadein">
+      <div class="greeting-sub" id="greeting-time">Bem-vindo</div>
+      <div class="greeting-name" id="greeting-name">Corretor</div>
+    </div>
+
     <!-- Stats -->
     <div class="stats-row fadein">
-      <div class="stat-card"><div class="stat-num" id="stat-total">—</div><div class="stat-lbl">Total de leads</div></div>
-      <div class="stat-card"><div class="stat-num" id="stat-pend" style="color:var(--yellow)">—</div><div class="stat-lbl">Em análise</div></div>
-      <div class="stat-card"><div class="stat-num" id="stat-ok" style="color:var(--green)">—</div><div class="stat-lbl">Aprovados</div></div>
+      <div class="stat-card">
+        <div class="stat-icon">📋</div>
+        <div class="stat-num" id="stat-total">—</div>
+        <div class="stat-lbl">Total</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🔍</div>
+        <div class="stat-num" id="stat-pend" style="color:var(--yellow)">—</div>
+        <div class="stat-lbl">Em análise</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">✅</div>
+        <div class="stat-num" id="stat-ok" style="color:var(--green)">—</div>
+        <div class="stat-lbl">Aprovados</div>
+      </div>
     </div>
 
     <!-- Leads -->
@@ -639,6 +673,15 @@ async function loadLeads(uid) {
       return;
     }
 
+    // Greeting com nome do corretor
+    const brokerName = all[0]?.brokerName || currentUser?.email?.split('@')[0] || 'Corretor';
+    const hr = new Date().getHours();
+    const greet = hr < 12 ? 'Bom dia' : hr < 18 ? 'Boa tarde' : 'Boa noite';
+    const greetEl = $('greeting-name'); if (greetEl) greetEl.textContent = brokerName;
+    const greetTime = $('greeting-time'); if (greetTime) greetTime.textContent = greet + ',';
+
+    const accentColor = { pending:'#FFD54F', analyzing:'#42A5F5', approved:'#4CAF50', rejected:'#ef5350', active:'#4CAF50' };
+
     list.innerHTML = all.map(l => {
       const [pillClass, pillLabel] = statusMap[l.status] || ['pill-pending','⏳ Enviado'];
       const dt = l.createdAt?.seconds ? new Date(l.createdAt.seconds*1000).toLocaleDateString('pt-BR') : '—';
@@ -649,20 +692,63 @@ async function loadLeads(uid) {
                 ${i<timelineSteps.length-1?'<div class="ts-line"></div>':''}`;
       }).join('');
       const docs = l.documentUrls?.length ? `📎 ${l.documentUrls.length} doc${l.documentUrls.length>1?'s':''}` : '';
+      const accent = accentColor[l.status] || '#42A5F5';
+
+      // Monta endereço completo
+      const p = l.property || {};
+      const street    = p.street    || '';
+      const number    = p.number    || '';
+      const complement= p.complement|| '';
+      const hood      = p.neighborhood || '';
+      const city      = p.city      || '';
+      const state     = p.state     || '';
+      const cep       = p.cep       || '';
+      const rentVal   = p.rentValue || l.rentValue || '';
+
+      let addrLine1 = [street, number, complement].filter(Boolean).join(', ');
+      let addrLine2 = [hood, city && state ? `${city} — ${state}` : city || state].filter(Boolean).join(', ');
+      // Fallback para campo legado
+      if (!addrLine1 && !addrLine2) {
+        const full = l.propertyAddress || '';
+        const parts = full.split(',').map(s => s.trim()).filter(Boolean);
+        addrLine1 = parts.slice(0, 2).join(', ');
+        addrLine2 = parts.slice(2).join(', ');
+      }
+      const fmtRent = rentVal ? 'R$ ' + parseFloat(rentVal).toLocaleString('pt-BR', {minimumFractionDigits:2}) + '/mês' : '';
+
       return `<div class="lead-card fadein">
-        <div class="lead-top">
-          <div>
+        <div class="lead-card-accent" style="background:${accent}"></div>
+        <div class="lead-card-body">
+          <div class="lead-top">
             <div class="lead-name">${l.tenantName||'—'}</div>
-            <div class="lead-prop">${l.propertyAddress||'Imóvel não informado'}</div>
+            <span class="lead-pill ${pillClass}">${pillLabel}</span>
           </div>
-          <span class="lead-pill ${pillClass}">${pillLabel}</span>
+
+          <div class="lead-addr-block">
+            ${addrLine1 ? `<div class="lead-addr-line">
+              <span class="lead-addr-icon">📍</span>
+              <span class="lead-addr-text"><strong>${addrLine1}</strong></span>
+            </div>` : ''}
+            ${addrLine2 ? `<div class="lead-addr-line">
+              <span class="lead-addr-icon" style="opacity:0"></span>
+              <span class="lead-addr-text">${addrLine2}</span>
+            </div>` : ''}
+            ${cep ? `<div class="lead-addr-line">
+              <span class="lead-addr-icon" style="opacity:0"></span>
+              <span class="lead-addr-text">CEP: <strong>${cep}</strong></span>
+            </div>` : ''}
+          </div>
+
+          <div class="lead-meta">
+            ${fmtRent ? `<span class="lead-rent">${fmtRent}</span>` : ''}
+            <span class="lead-date">📅 ${dt}</span>
+            ${docs ? `<span class="lead-docs">${docs}</span>` : ''}
+          </div>
+
+          <div class="timeline-bar" style="margin-top:12px">${tl}</div>
+
+          ${l.rejectReason ? `<p style="font-size:12px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid rgba(239,83,80,.15)">❌ ${l.rejectReason}</p>` : ''}
         </div>
-        <div class="timeline-bar">${tl}</div>
-        <div class="lead-bottom">
-          <span class="lead-date">📅 ${dt}</span>
-          ${docs?`<span class="lead-docs">${docs}</span>`:''}
-        </div>
-        ${l.rejectReason ? `<p style="font-size:12px;color:var(--red);margin-top:8px;padding-top:8px;border-top:1px solid rgba(239,83,80,.2)">Motivo: ${l.rejectReason}</p>` : ''}
       </div>`;
     }).join('');
   } catch(e) { list.innerHTML = `<p style="color:var(--red);text-align:center;padding:20px">${e.message}</p>`; }
