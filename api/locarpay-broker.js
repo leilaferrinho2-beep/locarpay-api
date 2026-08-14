@@ -1401,8 +1401,8 @@ async function handleCronRetryAssinafy(db) {
     else if (step === 'save-assinafy-key') {
       const { apiKey, callerEmail } = req.body;
       if (!apiKey) throw Object.assign(new Error('apiKey obrigatório'), { status: 400 });
-      const MASTER = process.env.MASTER_EMAIL || 'contatotransgu@gmail.com';
-      if (callerEmail !== MASTER) throw Object.assign(new Error('Sem permissão'), { status: 403 });
+      const ALLOWED = [process.env.MASTER_EMAIL || 'contatotransgu@gmail.com', 'denisfelicio20@gmail.com'];
+      if (!ALLOWED.includes(callerEmail)) throw Object.assign(new Error('Sem permissão'), { status: 403 });
       await db.collection('config').doc('assinafy').set({ apiKey }, { merge: true });
       result = { ok: true };
     }
