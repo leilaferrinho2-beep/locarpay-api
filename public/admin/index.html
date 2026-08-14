@@ -831,6 +831,52 @@
   window.consultarSerasa   = () => doConsulta('serasa');
   window.consultarBoaVista = () => doConsulta('boavista');
 
+  // ── Análise de Crédito no Lead ─────────────────────────────────
+  function validateCpf(cpf) {
+    const d = (cpf || '').replace(/\D/g, '');
+    if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false;
+    let sum = 0;
+    for (let i = 0; i < 9; i++) sum += +d[i] * (10 - i);
+    let r = (sum * 10) % 11; if (r === 10 || r === 11) r = 0;
+    if (r !== +d[9]) return false;
+    sum = 0;
+    for (let i = 0; i < 10; i++) sum += +d[i] * (11 - i);
+    r = (sum * 10) % 11; if (r === 10 || r === 11) r = 0;
+    return r === +d[10];
+  }
+
+  window.saveCreditChecklistLead = async (leadId) => {
+    const btn = document.getElementById('ca-lead-save-' + leadId);
+    if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+    try {
+      const get = (id) => { const el = document.getElementById(id + '-' + leadId); return el ? (el.type === 'checkbox' ? el.checked : el.value) : null; };
+      const data = {
+        checklist: {
+          cpf:       get('ck-cpf'),
+          rg:        get('ck-rg'),
+          income:    get('ck-income'),
+          address:   get('ck-address'),
+          guarantor: get('ck-guarantor'),
+          bankStatement: get('ck-bank'),
+          references:    get('ck-refs'),
+        },
+        status:    get('ca-lead-status'),
+        notes:     (get('ca-lead-notes') || '').trim(),
+        updatedAt: serverTimestamp(),
+        updatedBy: auth.currentUser?.email || 'admin',
+      };
+      await updateDoc(doc(db, 'leads', leadId), { creditAnalysis: data });
+      const l = leads.find(x => x.id === leadId);
+      if (l) l.creditAnalysis = { ...data, updatedAt: new Date() };
+      showToast('Análise de crédito salva', 'success');
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = '💾 Salvar análise'; } }
+  };
+
+  window.consultarSerasaLead = (leadId, cpf) => {
+    showToast('Integração Serasa em configuração — cadastre as credenciais em Configurações → Bureaus de Crédito', 'info');
+  };
+
   window.switchOwner = async (ownerId) => {
     currentOwnerId   = ownerId;
     currentOwnerData = allOwners.find(o => o.id === ownerId);
@@ -1003,30 +1049,41 @@
       rejected:  ['#ef5350','❌ Reprovado'],
       delivered: ['#42A5F5','🏠 Chaves entregues']
     };
+    const contractStatusCfg = {
+      AGUARDANDO_PROPRIETARIO: ['#FFB74D','✍️ Aguard. proprietário'],
+      AGUARDANDO_INQUILINO:    ['#CE93D8','✍️ Aguard. inquilino'],
+      CONTRATO_ASSINADO:       ['#81C784','🔐 Contrato assinado'],
+      CHAVES_ENTREGUES:        ['#42A5F5','🔑 Chaves entregues']
+    };
     tbody.innerHTML = leads.map(l => {
       const [col, lbl] = statusCfg[l.status] || statusCfg.pending;
+      const [cCol, cLbl] = l.contractStatus ? (contractStatusCfg[l.contractStatus] || [col, lbl]) : [col, lbl];
       const prop = l.property
         ? [l.property.street, l.property.number, l.property.city].filter(Boolean).join(', ')
         : (l.propertyDescription || '—');
       const rent = l.property?.rentValue ? `R$ ${l.property.rentValue}` : '';
+      const cs = l.contractStatus || '';
       const btns = l.status === 'pending' ? `
         <button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="viewLeadDetail('${l.id}')">🔍 Detalhes</button>
         <button class="btn-sm" style="color:#4CAF50;border-color:#4CAF50;margin-left:4px" onclick="openApproveModal('${l.id}')">✅ Aprovar</button>
         <button class="btn-sm" style="color:#ef5350;border-color:#ef5350;margin-left:4px" onclick="rejectLead('${l.id}')">❌ Rejeitar</button>
       ` : l.status === 'approved' && l.contractId ? `
         <button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="viewLeadDetail('${l.id}')">🔍 Detalhes</button>
-        ${!l.bothSigned ? `<button class="btn-sm" style="color:#FFB74D;border-color:#FFB74D;margin-left:4px" onclick="markBothSigned('${l.id}')">✍️ Marcar como assinado</button>` : ''}
-        <button class="btn-sm" style="color:#64B5F6;border-color:#64B5F6;margin-left:4px" onclick="deliverKeys('${l.contractId}','${l.tenantId||''}')">🏠 Entregar chaves</button>
-        <button class="btn-sm" style="margin-left:4px" onclick="regenContract('${l.contractId}')">📄 Reenviar contrato</button>
+        ${cs === 'CONTRATO_ASSINADO' || cs === 'CHAVES_ENTREGUES' ? '' : `<button class="btn-sm" style="margin-left:4px" onclick="regenContract('${l.contractId}')">📄 Reenviar contrato</button>`}
+        ${cs === 'CONTRATO_ASSINADO' ? `<button class="btn-sm" style="color:#64B5F6;border-color:#64B5F6;margin-left:4px" onclick="deliverKeys('${l.contractId}','${l.tenantId||''}')">🔑 Entregar chaves</button>` : ''}
+        ${!cs ? `<button class="btn-sm" style="color:#64B5F6;border-color:#64B5F6;margin-left:4px" onclick="deliverKeys('${l.contractId}','${l.tenantId||''}')">🏠 Entregar chaves</button>` : ''}
         <button class="btn-sm" style="color:#ef5350;border-color:#ef5350;margin-left:4px" onclick="removeLead('${l.id}')">🗑 Remover</button>
       ` : `
         <button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="viewLeadDetail('${l.id}')">🔍 Detalhes</button>
         <button class="btn-sm" style="color:#ef5350;border-color:#ef5350;margin-left:4px" onclick="removeLead('${l.id}')">🗑 Remover</button>`;
+      const statusLine = cs
+        ? `<span style="color:${cCol};font-weight:600">${cLbl}</span>`
+        : `<span style="color:${col};font-weight:600">${lbl}</span>`;
       return `<tr>
         <td><strong>${esc(l.tenant?.name)||'—'}</strong><br><span style="font-size:11px;color:#888">${esc(l.tenant?.email)||''}</span><br><span style="font-size:11px;color:#666">${esc(l.tenant?.cpf)||''}</span></td>
         <td><span style="font-size:12px">${esc(prop)}</span>${rent ? `<br><span style="color:#4CAF50;font-size:12px;font-weight:600">${esc(rent)}/mês</span>` : ''}</td>
         <td>${esc(l.brokerName||l.brokerEmail||'—')}</td>
-        <td><span style="color:${col};font-weight:600">${lbl}</span><br><span style="font-size:11px;color:#666">${(l.docs||[]).length} doc(s)</span></td>
+        <td>${statusLine}<br><span style="font-size:11px;color:#666">${(l.docs||[]).length} doc(s)</span></td>
         <td style="white-space:nowrap">${btns}</td>
       </tr>`;
     }).join('');
@@ -1146,6 +1203,94 @@
           fmtRow('Renda fiador', g.guarantorIncome ? `R$ ${g.guarantorIncome}` : '')
         ) : '')
       )}
+
+      ${(() => {
+        const cpf      = t.cpf || '';
+        const income   = parseFloat(t.income) || 0;
+        const rent     = parseFloat(p.rentValue) || 0;
+        const ratio    = rent > 0 ? (income / rent) : 0;
+        const cpfOk    = validateCpf(cpf);
+        const ratioOk  = ratio >= 3;
+        const ratioWarn= ratio > 0 && ratio < 3;
+        const ca       = l.creditAnalysis || {};
+        const ck       = ca.checklist || {};
+        const riskScore= (cpfOk?1:0) + (ratioOk?2:ratioWarn?1:0);
+        const riskLabel= riskScore >= 3 ? ['🟢','Baixo risco','#4CAF50'] : riskScore === 2 ? ['🟡','Risco moderado','#FFD54F'] : ['🔴','Alto risco','#ef5350'];
+        const chk = (id, label, checked) =>
+          `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font-size:13px;color:#ccc;border-bottom:1px solid #1a1a1a">
+             <input type="checkbox" id="${id}-${l.id}" ${checked?'checked':''} style="width:16px;height:16px;accent-color:#FF9800;cursor:pointer">
+             ${label}
+           </label>`;
+        return `<div style="margin-bottom:16px">
+          <div style="color:#FF9800;font-weight:700;font-size:13px;margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid #2a2a2a">🔍 Análise de Crédito</div>
+
+          <!-- Auto-score -->
+          <div style="background:#1a1200;border:1px solid #FF980033;border-radius:10px;padding:12px 14px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span style="font-size:22px">${riskLabel[0]}</span>
+              <div>
+                <div style="font-size:14px;font-weight:700;color:${riskLabel[2]}">${riskLabel[1]}</div>
+                <div style="font-size:11px;color:#666">Score automático baseado nos dados do lead</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div style="background:#111;border-radius:8px;padding:10px;text-align:center">
+                <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">CPF</div>
+                <div style="font-size:15px;font-weight:700;color:${cpfOk?'#4CAF50':'#ef5350'}">${cpfOk?'✅ Válido':'❌ Inválido'}</div>
+                <div style="font-size:10px;color:#555;margin-top:2px">${cpf||'Não informado'}</div>
+              </div>
+              <div style="background:#111;border-radius:8px;padding:10px;text-align:center">
+                <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Renda / Aluguel</div>
+                <div style="font-size:15px;font-weight:700;color:${ratioOk?'#4CAF50':ratioWarn?'#FFD54F':'#ef5350'}">${ratio>0?ratio.toFixed(1)+'x':'—'}</div>
+                <div style="font-size:10px;color:#555;margin-top:2px">${income>0?'R$ '+income.toLocaleString('pt-BR')+' / R$ '+rent.toLocaleString('pt-BR'):'Renda não informada'}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Checklist manual -->
+          <div style="margin-bottom:10px;padding:12px 14px;background:#111;border-radius:10px;border:1px solid #2a2a2a">
+            <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;font-weight:700">Checklist manual</div>
+            ${chk('ck-cpf',      '📋 CPF verificado (documento físico)',    ck.cpf)}
+            ${chk('ck-rg',       '🪪 RG / CNH conferido',                   ck.rg)}
+            ${chk('ck-income',   '💰 Comprovante de renda verificado',       ck.income)}
+            ${chk('ck-bank',     '🏦 Extrato bancário conferido',            ck.bankStatement)}
+            ${chk('ck-address',  '📍 Comprovante de residência conferido',   ck.address)}
+            ${chk('ck-guarantor','🤝 Fiador / garantia verificada',          ck.guarantor)}
+            ${chk('ck-refs',     '📞 Referências pessoais verificadas',      ck.references)}
+          </div>
+
+          <!-- Parecer + observações -->
+          <div style="display:grid;grid-template-columns:140px 1fr;gap:8px;margin-bottom:10px">
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px">Parecer</div>
+              <select id="ca-lead-status-${l.id}" style="width:100%;background:#111;color:#e0e0e0;border:1px solid #2a2a2a;border-radius:8px;padding:8px;font-size:13px">
+                <option value="pending"   ${(ca.status||'pending')==='pending'  ?'selected':''}>⏳ Em análise</option>
+                <option value="approved"  ${ca.status==='approved' ?'selected':''}>✅ Aprovado</option>
+                <option value="analyzing" ${ca.status==='analyzing'?'selected':''}>🔎 Pendências</option>
+                <option value="rejected"  ${ca.status==='rejected' ?'selected':''}>❌ Reprovado</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:4px">Observações</div>
+              <textarea id="ca-lead-notes-${l.id}" rows="2" placeholder="Anote aqui observações sobre o inquilino..."
+                style="width:100%;background:#111;color:#e0e0e0;border:1px solid #2a2a2a;border-radius:8px;padding:8px;font-size:12px;resize:vertical;box-sizing:border-box">${esc(ca.notes||'')}</textarea>
+            </div>
+          </div>
+
+          <!-- Botões de ação -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="ca-lead-save-${l.id}" onclick="saveCreditChecklistLead('${l.id}')"
+              style="background:#FF9800;color:#000;border:none;border-radius:8px;padding:9px 18px;font-weight:700;font-size:13px;cursor:pointer">
+              💾 Salvar análise
+            </button>
+            <button onclick="consultarSerasaLead('${l.id}','${cpf}')"
+              style="background:#1a1a1a;color:#888;border:1px solid #333;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px">
+              🔍 Serasa Experian <span style="background:#333;color:#666;font-size:10px;padding:2px 6px;border-radius:4px">Em breve</span>
+            </button>
+            ${ca.updatedAt ? `<span style="font-size:11px;color:#555;align-self:center">Última análise: ${new Date(ca.updatedAt?.seconds?ca.updatedAt.seconds*1000:ca.updatedAt).toLocaleDateString('pt-BR')}</span>` : ''}
+          </div>
+        </div>`;
+      })()}
 
       <div style="margin-bottom:16px">
         <div style="color:#4CAF50;font-weight:700;font-size:13px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #2a2a2a">📎 Documentos (${(l.docs||[]).length})</div>
