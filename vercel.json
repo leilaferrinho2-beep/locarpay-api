@@ -1,19 +1,19 @@
 {
   "cleanUrls": true,
   "rewrites": [
-{ "source": "/billing-webhook",   "destination": "/api/locarpay-owner" },
-    { "source": "/payment-webhook",   "destination": "/api/locarpay-card" },
-    { "source": "/admin", "destination": "/admin/index.html" },
-    { "source": "/admin/", "destination": "/admin/index.html" },
-    { "source": "/locarpay/admin", "destination": "/admin/index.html" },
-    { "source": "/locarpay/admin/", "destination": "/admin/index.html" },
-    { "source": "/broker", "destination": "/broker/index.html" },
-    { "source": "/broker/", "destination": "/broker/index.html" },
-    { "source": "/superadmin", "destination": "/superadmin/index.html" },
-    { "source": "/superadmin/", "destination": "/superadmin/index.html" },
-    { "source": "/api/version", "destination": "/version.json" },
-    { "source": "/api/locarpay-reassign-contract", "destination": "/api/locarpay-fix-contract" },
-    { "source": "/api/locarpay-sync-status", "destination": "/api/locarpay-card" }
+    { "source": "/billing-webhook",              "destination": "/api/locarpay-owner" },
+    { "source": "/payment-webhook",              "destination": "/api/locarpay-card" },
+    { "source": "/admin",                        "destination": "/admin/index.html" },
+    { "source": "/admin/",                       "destination": "/admin/index.html" },
+    { "source": "/locarpay/admin",               "destination": "/admin/index.html" },
+    { "source": "/locarpay/admin/",              "destination": "/admin/index.html" },
+    { "source": "/broker",                       "destination": "/broker/index.html" },
+    { "source": "/broker/",                      "destination": "/broker/index.html" },
+    { "source": "/superadmin",                   "destination": "/superadmin/index.html" },
+    { "source": "/superadmin/",                  "destination": "/superadmin/index.html" },
+    { "source": "/api/version",                  "destination": "/version.json" },
+    { "source": "/api/locarpay-reassign-contract","destination": "/api/locarpay-fix-contract" },
+    { "source": "/api/locarpay-sync-status",     "destination": "/api/locarpay-card" }
   ],
   "headers": [
     {
@@ -38,13 +38,7 @@
     "api/locarpay-broker.js": { "maxDuration": 60 }
   },
   "crons": [
-    {
-      "path": "/api/locarpay-owner",
-      "schedule": "0 11 * * *"
-    },
-    {
-      "path": "/api/locarpay-card?step=cron-daily",
-      "schedule": "0 13 * * *"
-    }
+    { "path": "/api/locarpay-owner",           "schedule": "0 11 * * *" },
+    { "path": "/api/locarpay-card?step=cron-daily", "schedule": "0 13 * * *" }
   ]
 }

@@ -24,6 +24,8 @@ function initFirebase() {
 const ASSINAFY_BASE = 'https://api.assinafy.com.br/v1';
 const APP_BASE_URL  = process.env.APP_BASE_URL || 'https://ilocarpay.com.br';
 
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function assinafyReq(method, path, body, apiKey) {
@@ -516,35 +518,53 @@ async function handleApproveLead(db, body) {
     await leadRef.update({ landlord: landlordOverride });
   }
 
-  // Gera contrato no Assinafy
+  // Gera contrato no Assinafy — com 3 tentativas automáticas
   let assinafyResult = null;
-  try {
-    assinafyResult = await createAssinafyContract(db, contractId, {
-      contractId,
-      ownerName:    landlordName,
-      ownerEmail:   landlordEmail,
-      ownerCpf:     landlordCpf,
-      tenantName:   lead.tenant.name,
-      tenantEmail,
-      tenantCpf:    lead.tenant.cpf,
-      tenantPhone:  lead.tenant.phone,
-      propertyCode:    lead.propertyCode,
-      propertyAddress: propAddr,
-      baseRent:  cd.baseRent  || parseFloat(lp.rentValue)  || 0,
-      dueDay:    cd.dueDay    || lp.dueDay    || 10,
-      startDate: cd.startDate || lp.startDate || '',
-      endDate:   cd.endDate   || lp.endDate   || '',
-      deposit:   cd.deposit   || parseFloat(lp.deposit)    || 0
-    });
-  } catch (e) {
-    console.error('[approve-lead] Assinafy error:', e.message);
-    // Salva o erro no contrato para visibilidade no painel
+  const assinafyPayload = {
+    contractId,
+    ownerName:    landlordName,
+    ownerEmail:   landlordEmail,
+    ownerCpf:     landlordCpf,
+    tenantName:   lead.tenant.name,
+    tenantEmail,
+    tenantCpf:    lead.tenant.cpf,
+    tenantPhone:  lead.tenant.phone,
+    propertyCode:    lead.propertyCode,
+    propertyAddress: propAddr,
+    baseRent:  cd.baseRent  || parseFloat(lp.rentValue)  || 0,
+    dueDay:    cd.dueDay    || lp.dueDay    || 10,
+    startDate: cd.startDate || lp.startDate || '',
+    endDate:   cd.endDate   || lp.endDate   || '',
+    deposit:   cd.deposit   || parseFloat(lp.deposit)    || 0
+  };
+  let assinafyLastError = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      assinafyResult = await createAssinafyContract(db, contractId, assinafyPayload);
+      assinafyLastError = null;
+      console.log(`[assinafy] contrato enviado na tentativa ${attempt}`);
+      break;
+    } catch (e) {
+      assinafyLastError = e.message;
+      console.error(`[approve-lead] Assinafy tentativa ${attempt}/3 falhou:`, e.message);
+      if (attempt < 3) await sleep(3000 * attempt); // 3s, 6s
+    }
+  }
+  if (assinafyLastError) {
+    // Salva erro no contrato para visibilidade no painel
     try {
       await db.collection('contracts').doc(contractId).update({
-        assinafyError: e.message,
+        assinafyError:  assinafyLastError,
         assinafyStatus: 'error',
-        updatedAt: FieldValue.serverTimestamp()
+        updatedAt:      FieldValue.serverTimestamp()
       });
+    } catch (_) {}
+    // Alerta WhatsApp ao admin
+    try {
+      const adminPhone = process.env.ADMIN_WHATSAPP || '5514996270111';
+      await sendWhatsApp(adminPhone,
+        `⚠️ iLocarPay: falha ao enviar contrato ${contractId} ao Assinafy após 3 tentativas.\nErro: ${assinafyLastError}\nAcesse o painel e clique em "Reenviar ao Assinafy".`
+      );
     } catch (_) {}
   }
 
@@ -1236,6 +1256,60 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
+async function handleCronRetryAssinafy(db) {
+  // Busca contratos com erro Assinafy criados nas últimas 48h
+  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  const snap = await db.collection('contracts')
+    .where('assinafyStatus', '==', 'error')
+    .where('createdAt', '>=', cutoff)
+    .limit(10)
+    .get();
+  if (snap.empty) return { retried: 0 };
+
+  let retried = 0, failed = 0;
+  for (const contractSnap of snap.docs) {
+    const contractId = contractSnap.id;
+    const c = contractSnap.data();
+    // Não retentar se já foi enviado por outro caminho
+    if (c.assinafyDocumentId) continue;
+    try {
+      // Busca lead para reconstruir os dados
+      const leadsSnap = await db.collection('leads').where('contractId', '==', contractId).limit(1).get();
+      if (leadsSnap.empty) continue;
+      const lead = leadsSnap.docs[0].data();
+      const t = lead.tenant || {};
+      const p = lead.property || {};
+      const landlord = lead.landlord || {};
+      const propAddr = [p.street, p.number, p.complement, p.neighborhood, p.city, p.state].filter(Boolean).join(', ');
+      await createAssinafyContract(db, contractId, {
+        contractId,
+        ownerName:       landlord.name       || c.landlordName    || '',
+        ownerEmail:      landlord.email      || c.landlordEmail   || '',
+        ownerCpf:        landlord.cpf        || c.landlordCpf     || '',
+        tenantName:      t.name              || c.tenantName      || '',
+        tenantEmail:     t.email             || c.tenantEmail     || '',
+        tenantCpf:       t.cpf               || '',
+        tenantPhone:     t.phone             || '',
+        propertyCode:    lead.propertyCode   || p.code            || '',
+        propertyAddress: propAddr            || c.propertyAddress || '',
+        baseRent:        c.baseRent          || parseFloat(p.rentValue) || 0,
+        dueDay:          c.dueDay            || p.dueDay          || 10,
+        startDate:       c.startDate         || p.startDate       || '',
+        endDate:         c.endDate           || p.endDate         || '',
+        deposit:         c.deposit           || parseFloat(p.deposit) || 0,
+      });
+      await contractSnap.ref.update({ assinafyError: null, updatedAt: FieldValue.serverTimestamp() });
+      console.log('[cron-retry-assinafy] sucesso:', contractId);
+      retried++;
+    } catch (e) {
+      console.error('[cron-retry-assinafy] falhou novamente:', contractId, e.message);
+      failed++;
+    }
+    await sleep(2000);
+  }
+  return { retried, failed };
+}
+
   if (req.method === 'GET') {
     const { view, contractId } = req.query || {};
     if (view === 'contract' && contractId) {
@@ -1260,6 +1334,18 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, endpoint: 'locarpay-broker' });
   }
 
+  // Cron: retentar contratos que falharam no Assinafy
+  if (req.method === 'POST' && req.body?.step === 'cron-retry-assinafy') {
+    try {
+      initFirebase();
+      const db = getFirestore();
+      const result = await handleCronRetryAssinafy(db);
+      return res.status(200).json(result);
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
@@ -1277,6 +1363,7 @@ export default async function handler(req, res) {
     else if (step === 'generate-contract')    result = await handleGenerateContract(db, req.body);
     else if (step === 'deliver-keys')         result = await handleDeliverKeys(db, req.body);
     else if (step === 'check-contract-status') result = await handleCheckContractStatus(db, req.body);
+    else if (step === 'cron-retry-assinafy')   result = await handleCronRetryAssinafy(db);
     else if (step === 'reject-lead')       result = await handleRejectLead(db, req.body);
     else if (step === 'remove-lead')       result = await handleRemoveLead(db, req.body);
     else if (step === 'get-upload-url')    result = await handleGetUploadUrl(req.body, req._storageBucket);

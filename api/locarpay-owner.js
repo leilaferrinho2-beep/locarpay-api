@@ -655,7 +655,15 @@ async function handleCronDaily(db) {
     results[ownerId] = settled;
   }));
 
-  return { ok: true, ran: now.toISOString(), owners: ownersSnap.size, results };
+  // 6. Retentar contratos que falharam no Assinafy
+  let retryResult = {};
+  try {
+    const BROKER_URL = 'https://ilocarpay.com.br/api/locarpay-broker';
+    retryResult = await post(BROKER_URL, { step: 'cron-retry-assinafy' });
+    if (retryResult.retried > 0) console.log('[cron] assinafy retry:', retryResult);
+  } catch (_) {}
+
+  return { ok: true, ran: now.toISOString(), owners: ownersSnap.size, results, assinafyRetry: retryResult };
 }
 
 async function handleAsaasWebhook(db, body) {
