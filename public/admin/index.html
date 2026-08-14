@@ -873,6 +873,26 @@
     finally { if (btn) { btn.disabled = false; btn.textContent = '💾 Salvar análise'; } }
   };
 
+  window.retryAssinafy = async (contractId) => {
+    if (!contractId) return showToast('contractId não encontrado', 'error');
+    const btn = event?.target;
+    if (btn) { btn.disabled = true; btn.textContent = '🔄 Enviando...'; }
+    try {
+      const res = await fetch('/api/locarpay-broker', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'retry-assinafy', contractId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showToast('Contrato enviado ao Assinafy! Email disparado para proprietário.', 'success');
+      $('modal-lead-detail').style.display = 'none';
+    } catch (e) {
+      showToast('Erro ao reenviar: ' + e.message, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '🔄 Reenviar ao Assinafy'; }
+    }
+  };
+
   window.consultarSerasaLead = (leadId, cpf) => {
     showToast('Integração Serasa em configuração — cadastre as credenciais em Configurações → Bureaus de Crédito', 'info');
   };
@@ -1300,7 +1320,21 @@
       ${contractData ? `<div style="margin-bottom:16px">
         <div style="color:#42A5F5;font-weight:700;font-size:13px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #2a2a2a">📋 Contrato</div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <span style="font-size:12px;color:#888">Status Assinafy: <strong style="color:${contractData.assinafyStatus==='completed'?'#4CAF50':'#FFD54F'}">${contractData.assinafyStatus==='completed'?'✅ Assinado por ambas as partes':contractData.assinafyStatus==='sent'?'⏳ Aguardando assinaturas':'📝 '+contractData.assinafyStatus}</strong></span>
+          <span style="font-size:12px;color:#888">Status Assinafy:
+            <strong style="color:${contractData.assinafyStatus==='completed'?'#4CAF50':contractData.assinafyStatus==='error'?'#ef5350':'#FFD54F'}">
+              ${contractData.assinafyStatus==='completed'?'✅ Assinado por ambas as partes':contractData.assinafyStatus==='sent'?'⏳ Aguardando assinaturas':contractData.assinafyStatus==='error'?'❌ Falha no envio':'📝 '+(contractData.assinafyStatus||'—')}
+            </strong>
+          </span>
+          ${contractData.assinafyStatus==='error' ? `
+            <div style="width:100%;margin-top:6px">
+              <div style="font-size:11px;color:#ef5350;background:#1a0a0a;border:1px solid #ef535033;border-radius:6px;padding:8px 10px;margin-bottom:8px;word-break:break-word">
+                ⚠️ Erro: ${esc(contractData.assinafyError||'Desconhecido')}
+              </div>
+              <button onclick="retryAssinafy('${l.contractId}')"
+                style="background:#ef5350;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-weight:700;font-size:13px;cursor:pointer">
+                🔄 Reenviar ao Assinafy
+              </button>
+            </div>` : ''}
           ${contractData.signedStoragePath ? `<button onclick="openStorageDoc('${contractData.signedStoragePath}')"
             style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#0d1e2e;border:1px solid #42A5F5;border-radius:8px;color:#42A5F5;font-size:12px;cursor:pointer;font-weight:700">
             📄 Baixar Contrato Assinado ⬇

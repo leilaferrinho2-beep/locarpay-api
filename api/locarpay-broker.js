@@ -132,12 +132,26 @@ async function getAssinafyAccount(apiKey) {
   return accountId;
 }
 
+async function getOrCreateSigner(apiKey, accountId, name, email) {
+  try {
+    const res = await assinafyReq('POST', `accounts/${accountId}/signers`, { full_name: name, email }, apiKey);
+    return res?.data?.id || res?.id;
+  } catch (e) {
+    if (!e.message.includes('400')) throw e;
+    // Signatário já existe — busca pelo e-mail
+    const list = await assinafyReq('GET', `accounts/${accountId}/signers`, null, apiKey);
+    const existing = (list?.data || []).find(s => s.email?.toLowerCase() === email.toLowerCase());
+    if (existing) return existing.id;
+    throw new Error(`Signatário não encontrado para ${email}`);
+  }
+}
+
 async function sendEmail(to, subject, html, attachments) {
   const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', port: 587, secure: false,
-    auth: { user: 'denisfelicio2@gmail.com', pass: process.env.GMAIL_APP_PASSWORD }
+    host: 'smtp.titan.email', port: 465, secure: true,
+    auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
   });
-  await transporter.sendMail({ from: 'iLocarPay <denisfelicio2@gmail.com>', to, subject, html, attachments });
+  await transporter.sendMail({ from: 'iLocarPay <denis@dlftech.com.br>', to, subject, html, attachments });
 }
 
 async function sendContractEmail({ landlordName, landlordEmail, tenantName, tenantEmail, propAddr, pdfData }) {
@@ -491,6 +505,7 @@ async function handleApproveLead(db, body) {
     landlordCpf,
     active:              false, // ativa só após entregar as chaves
     assinafyStatus:      'pending',
+    contractStatus:      'AGUARDANDO_PROPRIETARIO',
     leadId,
     createdAt:           FieldValue.serverTimestamp(),
     updatedAt:           FieldValue.serverTimestamp()
@@ -523,15 +538,24 @@ async function handleApproveLead(db, body) {
     });
   } catch (e) {
     console.error('[approve-lead] Assinafy error:', e.message);
+    // Salva o erro no contrato para visibilidade no painel
+    try {
+      await db.collection('contracts').doc(contractId).update({
+        assinafyError: e.message,
+        assinafyStatus: 'error',
+        updatedAt: FieldValue.serverTimestamp()
+      });
+    } catch (_) {}
   }
 
   // Atualiza lead PRIMEIRO (crítico) — antes dos envios que podem demorar
   await leadRef.update({
-    status:      'approved',
+    status:         'approved',
+    contractStatus: 'AGUARDANDO_PROPRIETARIO',
     tenantId,
     contractId,
-    approvedAt:  FieldValue.serverTimestamp(),
-    updatedAt:   FieldValue.serverTimestamp()
+    approvedAt:     FieldValue.serverTimestamp(),
+    updatedAt:      FieldValue.serverTimestamp()
   });
 
   // Dispara todos os envios em paralelo (não bloqueia a resposta entre si)
@@ -642,38 +666,32 @@ async function createAssinafyContract(db, contractId, data) {
   const documentId = docRes?.data?.id || docRes?.id;
   if (!documentId) throw new Error('Assinafy não retornou documentId: ' + JSON.stringify(docRes));
 
-  // 2. Cria signatários
-  const [s1Res, s2Res] = await Promise.all([
-    assinafyReq('POST', `accounts/${accountId}/signers`,
-      { full_name: data.ownerName  || 'Proprietário', email: data.ownerEmail  }, apiKey),
-    assinafyReq('POST', `accounts/${accountId}/signers`,
-      { full_name: data.tenantName || 'Inquilino',    email: data.tenantEmail }, apiKey),
+  // 2. Cria signatários (get-or-create)
+  const [s1Id, s2Id] = await Promise.all([
+    getOrCreateSigner(apiKey, accountId, data.ownerName  || 'Proprietário', data.ownerEmail),
+    getOrCreateSigner(apiKey, accountId, data.tenantName || 'Inquilino',    data.tenantEmail),
   ]);
-  const s1Id = s1Res?.data?.id;
-  const s2Id = s2Res?.data?.id;
   if (!s1Id || !s2Id) throw new Error('Assinafy não retornou IDs dos signatários');
 
   // 3. Cria assignment (sequencial: proprietário step 1, inquilino step 2)
   const assignRes = await assinafyReq('POST', `documents/${documentId}/assignments`, {
+    method:  'virtual',
+    message: `Por favor, assine o contrato de locação do imóvel ${data.propertyAddress || ''}.`.trim(),
     signers: [
-      { id: s1Id, step: 1, action: 'sign' },
-      { id: s2Id, step: 2, action: 'sign' }
+      { id: s1Id, step: 1, action: 'sign', verification_method: 'Email', notification_methods: ['Email'] },
+      { id: s2Id, step: 2, action: 'sign', verification_method: 'Email', notification_methods: ['Email'] }
     ]
   }, apiKey);
-  const assignmentId = assignRes?.data?.id;
+  const assignmentId = assignRes?.data?.id || assignRes?.id;
+  console.log('[assinafy] assignment:', JSON.stringify(assignRes?.data || assignRes).slice(0, 300));
 
-  // 4. Tenta publicar/enviar o documento
+  // 4. Tenta send/publish para garantir envio
   let sendRes = null;
-  let sendErr = null;
   try {
     sendRes = await assinafyReq('POST', `documents/${documentId}/send`, null, apiKey);
-    console.log('[assinafy] send ok:', JSON.stringify(sendRes?.data || sendRes).slice(0, 300));
-  } catch (e) {
-    sendErr = e.message;
-    console.warn('[assinafy] send falhou, tentando publish:', e.message);
-    try { sendRes = await assinafyReq('POST', `documents/${documentId}/publish`, null, apiKey); } catch (e2) {
-      console.warn('[assinafy] publish tb falhou:', e2.message);
-    }
+    console.log('[assinafy] send ok:', JSON.stringify(sendRes?.data || sendRes).slice(0, 200));
+  } catch (_) {
+    try { sendRes = await assinafyReq('POST', `documents/${documentId}/publish`, null, apiKey); } catch (_) {}
   }
 
   // 5. Extrai URLs de assinatura
@@ -851,6 +869,89 @@ async function handleGenerateContract(db, body) {
 
 // ── DELIVER KEYS ──────────────────────────────────────────────────────────────
 
+async function handleCheckContractStatus(db, body) {
+  const { contractId, assinafyDocumentId } = body;
+  if (!contractId && !assinafyDocumentId) throw Object.assign(new Error('contractId ou assinafyDocumentId obrigatório'), { status: 400 });
+
+  let contractSnap;
+  if (contractId) {
+    contractSnap = await db.collection('contracts').doc(contractId).get();
+  } else {
+    const q = await db.collection('contracts').where('assinafyDocumentId', '==', assinafyDocumentId).limit(1).get();
+    contractSnap = q.empty ? null : q.docs[0];
+  }
+  if (!contractSnap || !contractSnap.exists) throw Object.assign(new Error('Contrato não encontrado'), { status: 404 });
+  const c = contractSnap.data();
+
+  const documentId   = c.assinafyDocumentId;
+  const assignmentId = c.assinafyAssignmentId;
+  const signerId1    = c.assinafySignerId1;
+  const signerId2    = c.assinafySignerId2;
+  if (!documentId || !assignmentId) return { contractStatus: c.contractStatus || 'AGUARDANDO_PROPRIETARIO', changed: false };
+
+  const configSnap = await db.collection('config').doc('assinafy').get();
+  const apiKey = configSnap.data()?.apiKey;
+  if (!apiKey) return { contractStatus: c.contractStatus, changed: false };
+
+  // Busca o documento — o Assinafy embute info de assignment dentro de data.assignment
+  const docData = await assinafyReq('GET', `documents/${documentId}`, null, apiKey);
+  const docInner = docData?.data || docData;
+  // assignment pode estar em data.assignment ou data.assignments[0]
+  const assignDetail = docInner?.assignment || (docInner?.assignments || [])[0] || {};
+  const signers = assignDetail?.signers || [];
+  const s1 = signers.find(s => s.id === signerId1) || signers.find(s => s.step === 1);
+  const s2 = signers.find(s => s.id === signerId2) || signers.find(s => s.step === 2);
+  const s1Signed = s1?.completed || s1?.signed_at != null;
+  const s2Signed = s2?.completed || s2?.signed_at != null;
+
+  let newStatus = c.contractStatus || 'AGUARDANDO_PROPRIETARIO';
+  let changed = false;
+
+  if (s1Signed && s2Signed && newStatus !== 'CONTRATO_ASSINADO') {
+    newStatus = 'CONTRATO_ASSINADO';
+    changed = true;
+  } else if (s1Signed && !s2Signed && newStatus === 'AGUARDANDO_PROPRIETARIO') {
+    newStatus = 'AGUARDANDO_INQUILINO';
+    changed = true;
+    // Envia e-mail ao inquilino com link de assinatura
+    const signingUrls = assignDetail?.data?.signing_urls || [];
+    const tenantUrl   = signingUrls.find(u => u.signer_id === signerId2)?.url || null;
+    if (tenantUrl && c.tenantEmail) {
+      try {
+        await sendEmail(c.tenantEmail, '📝 Contrato aguarda sua assinatura — iLocarPay', `
+          <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
+            <div style="background:#1a1a1a;padding:32px;text-align:center"><h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1></div>
+            <div style="padding:32px">
+              <p>Olá, <strong>${c.tenantName || 'Inquilino'}</strong>!</p>
+              <p>O proprietário assinou o contrato. Agora é a sua vez!</p>
+              <div style="text-align:center;margin:28px 0">
+                <a href="${tenantUrl}" style="background:#4CAF50;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">✍️ Assinar contrato agora</a>
+              </div>
+            </div>
+          </div>
+        `);
+      } catch (e) { console.warn('[check-status] email inquilino:', e.message); }
+    }
+  }
+
+  // Sempre garante assinafyStatus = 'completed' quando ambos assinaram
+  if (s1Signed && s2Signed && c.assinafyStatus !== 'completed') {
+    await contractSnap.ref.update({ assinafyStatus: 'completed', updatedAt: FieldValue.serverTimestamp() });
+  }
+  if (changed) {
+    const contractUpdates = { contractStatus: newStatus, updatedAt: FieldValue.serverTimestamp() };
+    if (newStatus === 'CONTRATO_ASSINADO') contractUpdates.assinafyStatus = 'completed';
+    await contractSnap.ref.update(contractUpdates);
+    if (c.leadId) {
+      const updates = { contractStatus: newStatus, updatedAt: FieldValue.serverTimestamp() };
+      if (newStatus === 'CONTRATO_ASSINADO') updates.bothSigned = true;
+      await db.collection('leads').doc(c.leadId).update(updates);
+    }
+  }
+
+  return { contractStatus: newStatus, changed, s1Signed, s2Signed };
+}
+
 async function handleDeliverKeys(db, body) {
   const { contractId, tenantId } = body;
   if (!contractId || !tenantId) throw Object.assign(new Error('contractId e tenantId obrigatórios'), { status: 400 });
@@ -858,6 +959,7 @@ async function handleDeliverKeys(db, body) {
   await Promise.all([
     db.collection('contracts').doc(contractId).update({
       active:           true,
+      contractStatus:   'CHAVES_ENTREGUES',
       keysDeliveredAt:  FieldValue.serverTimestamp(),
       updatedAt:        FieldValue.serverTimestamp()
     }),
@@ -868,10 +970,16 @@ async function handleDeliverKeys(db, body) {
     })
   ]);
 
-  // Atualiza lead se existir
+  // Atualiza lead com status final (lido em tempo real pelo app do corretor)
   try {
     const leads = await db.collection('leads').where('contractId', '==', contractId).limit(1).get();
-    if (!leads.empty) await leads.docs[0].ref.update({ status: 'delivered', updatedAt: FieldValue.serverTimestamp() });
+    if (!leads.empty) {
+      await leads.docs[0].ref.update({
+        status:         'delivered',
+        contractStatus: 'CHAVES_ENTREGUES',
+        updatedAt:      FieldValue.serverTimestamp()
+      });
+    }
   } catch (_) {}
 
   // Push notification ao inquilino
@@ -988,7 +1096,7 @@ async function handleGetUploadUrl(body, bucket) {
     };
     if (contentType) signedOpts.contentType = contentType;
     const [signedUrl] = await file.getSignedUrl(signedOpts);
-    const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(path)}?alt=media`;
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${path}`;
     console.log('[get-upload-url] signed URL ok para', path, 'contentType:', contentType || 'any');
     return { ok: true, uploadUrl: signedUrl, publicUrl, path };
   } catch (e) {
@@ -1050,34 +1158,76 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
-  // Webhook da Assinafy — chamado quando documento é assinado por todos
+  // Webhook da Assinafy
   if (req.method === 'POST' && req.query?.webhook === 'assinafy') {
     try {
       initFirebase();
       const db = getFirestore();
-      const event = req.body?.event || req.body?.type || '';
-      const documentId = req.body?.data?.document_id || req.body?.document_id || '';
-      const isCompleted = event === 'document_ready' || event === 'document.completed' || event === 'finished' || req.body?.data?.status === 'completed' || req.body?.data?.status === 'ready';
-      if (isCompleted && documentId) {
-        // Acha o contrato pelo assinafyDocumentId
-        const contractSnap = await db.collection('contracts')
+      const event      = req.body?.event || req.body?.type || '';
+      const documentId = req.body?.data?.document_id || req.body?.document_id || req.body?.data?.id || '';
+      const signerStep = req.body?.data?.signer?.step ?? req.body?.data?.step ?? null;
+      console.log('[assinafy-webhook] event:', event, 'documentId:', documentId, 'step:', signerStep, 'body:', JSON.stringify(req.body).slice(0, 400));
+
+      const isSignerSigned = event === 'signer_signed_document';
+      const isCompleted    = event === 'document_ready' || event === 'document.completed' || event === 'finished';
+
+      if ((isSignerSigned || isCompleted) && documentId) {
+        let contractSnap = await db.collection('contracts')
           .where('assinafyDocumentId', '==', documentId).limit(1).get();
+        if (contractSnap.empty) {
+          console.warn('[assinafy-webhook] contrato NÃO encontrado por assinafyDocumentId:', documentId);
+          // Fallback: tenta pelo e-mail do signatário no payload
+          const signerEmail = req.body?.event?.signer?.email || req.body?.signer?.email || null;
+          if (signerEmail) {
+            const fallback = await db.collection('contracts')
+              .where('tenantEmail', '==', signerEmail).orderBy('createdAt', 'desc').limit(1).get();
+            if (!fallback.empty) {
+              contractSnap = fallback;
+              console.log('[assinafy-webhook] contrato encontrado via tenantEmail fallback:', signerEmail);
+            }
+          }
+        }
         if (!contractSnap.empty) {
-          const contractDoc = contractSnap.docs[0];
+          const contractDoc  = contractSnap.docs[0];
           const contractData = contractDoc.data();
-          await contractDoc.ref.update({ assinafyStatus: 'completed', updatedAt: FieldValue.serverTimestamp() });
-          // Atualiza lead com bothSigned=true
-          if (contractData.leadId) {
-            await db.collection('leads').doc(contractData.leadId).update({
-              bothSigned: true,
-              updatedAt: FieldValue.serverTimestamp()
-            });
-          } else {
-            // Busca lead pelo contractId
-            const leadSnap = await db.collection('leads')
-              .where('contractId', '==', contractDoc.id).limit(1).get();
-            if (!leadSnap.empty) {
-              await leadSnap.docs[0].ref.update({ bothSigned: true, updatedAt: FieldValue.serverTimestamp() });
+
+          if (isCompleted) {
+            console.log('[assinafy-webhook] document_ready → atualizando contrato', contractDoc.id);
+            await contractDoc.ref.update({ assinafyStatus: 'completed', contractStatus: 'CONTRATO_ASSINADO', updatedAt: FieldValue.serverTimestamp() });
+            const leadId = contractData.leadId;
+            if (leadId) {
+              await db.collection('leads').doc(leadId).update({ bothSigned: true, contractStatus: 'CONTRATO_ASSINADO', updatedAt: FieldValue.serverTimestamp() });
+            }
+          }
+
+          // Proprietário assinou (step 1) → busca URL do inquilino e envia e-mail
+          if (isSignerSigned && (signerStep === 1 || signerStep === null)) {
+            await contractDoc.ref.update({ contractStatus: 'AGUARDANDO_INQUILINO', updatedAt: FieldValue.serverTimestamp() });
+            // Busca URL de assinatura do inquilino (step 2) na Assinafy
+            const configSnap = await db.collection('config').doc('assinafy').get();
+            const apiKey = configSnap.data()?.apiKey;
+            if (apiKey && contractData.assinafyAssignmentId) {
+              try {
+                const acctId = await getAssinafyAccount(apiKey);
+                const assignDetail = await assinafyReq('GET', `accounts/${acctId}/documents/${documentId}/assignments/${contractData.assinafyAssignmentId}`, null, apiKey);
+                const signingUrls  = assignDetail?.data?.signing_urls || assignDetail?.signing_urls || [];
+                const tenantUrl    = signingUrls.find(u => u.signer_id === contractData.assinafySignerId2)?.url || null;
+                if (tenantUrl && contractData.tenantEmail) {
+                  await sendEmail(contractData.tenantEmail, '📝 Contrato aguarda sua assinatura — iLocarPay', `
+                    <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
+                      <div style="background:#1a1a1a;padding:32px;text-align:center"><h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1></div>
+                      <div style="padding:32px">
+                        <p>Olá, <strong>${contractData.tenantName || 'Inquilino'}</strong>!</p>
+                        <p>O proprietário assinou o contrato. Agora é a sua vez!</p>
+                        <div style="text-align:center;margin:28px 0">
+                          <a href="${tenantUrl}" style="background:#4CAF50;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">✍️ Assinar contrato agora</a>
+                        </div>
+                      </div>
+                    </div>
+                  `);
+                  console.log('[assinafy-webhook] e-mail inquilino enviado para', contractData.tenantEmail);
+                }
+              } catch (e) { console.warn('[assinafy-webhook] erro ao buscar URL inquilino:', e.message); }
             }
           }
         }
@@ -1123,14 +1273,81 @@ export default async function handler(req, res) {
     else if (step === 'update-broker')     result = await handleUpdateBroker(db, req.body);
     else if (step === 'delete-broker')     result = await handleDeleteBroker(db, req.body);
     else if (step === 'submit-lead')       result = await handleSubmitLead(db, req.body);
-    else if (step === 'approve-lead')      result = await handleApproveLead(db, req.body);
-    else if (step === 'generate-contract') result = await handleGenerateContract(db, req.body);
-    else if (step === 'deliver-keys')      result = await handleDeliverKeys(db, req.body);
+    else if (step === 'approve-lead')         result = await handleApproveLead(db, req.body);
+    else if (step === 'generate-contract')    result = await handleGenerateContract(db, req.body);
+    else if (step === 'deliver-keys')         result = await handleDeliverKeys(db, req.body);
+    else if (step === 'check-contract-status') result = await handleCheckContractStatus(db, req.body);
     else if (step === 'reject-lead')       result = await handleRejectLead(db, req.body);
     else if (step === 'remove-lead')       result = await handleRemoveLead(db, req.body);
     else if (step === 'get-upload-url')    result = await handleGetUploadUrl(req.body, req._storageBucket);
     else if (step === 'upload-doc')        result = await handleUploadDoc(db, req.body);
     else if (step === 'get-signed-url')    result = await handleGetSignedReadUrl(req.body, req._storageBucket);
+    else if (step === 'test-email') {
+      const { to } = req.body;
+      if (!to) throw Object.assign(new Error('to obrigatório'), { status: 400 });
+      await sendEmail(to, '✅ Teste SMTP — iLocarPay', '<p>E-mail de teste enviado com sucesso!</p>');
+      result = { ok: true, to, smtp: 'noreply@dlftech.com.br' };
+    }
+    else if (step === 'test-assinafy') {
+      const { documentId, ownerEmail, tenantEmail } = req.body;
+      const configSnap = await db.collection('config').doc('assinafy').get();
+      const apiKey = configSnap.data()?.apiKey;
+      const accountId = await getAssinafyAccount(apiKey);
+      // Cria signatários de teste (get-or-create)
+      let s1Id, s2Id, assignRes;
+      try { s1Id = await getOrCreateSigner(apiKey, accountId, 'Proprietário Teste', ownerEmail  || 'denisfelicio20@gmail.com'); } catch(e) { s1Id = null; }
+      try { s2Id = await getOrCreateSigner(apiKey, accountId, 'Inquilino Teste',    tenantEmail || 'denisfelicio2@gmail.com');  } catch(e) { s2Id = null; }
+      if (s1Id && s2Id) {
+        try {
+          assignRes = await assinafyReq('POST', `documents/${documentId}/assignments`, {
+            method: 'virtual',
+            message: 'Por favor, assine o contrato de locação.',
+            signers: [
+              { id: s1Id, step: 1, action: 'sign', verification_method: 'Email', notification_methods: ['Email'] },
+              { id: s2Id, step: 2, action: 'sign', verification_method: 'Email', notification_methods: ['Email'] }
+            ]
+          }, apiKey);
+        } catch(e) { assignRes = { error: e.message }; }
+      }
+      result = { accountId, s1Id, s2Id, assign: assignRes?.data || assignRes };
+    }
+    else if (step === 'retry-assinafy') {
+      // Reenviar contrato ao Assinafy quando a primeira tentativa falhou
+      const { contractId } = req.body;
+      if (!contractId) throw Object.assign(new Error('contractId obrigatório'), { status: 400 });
+      const contractSnap = await db.collection('contracts').doc(contractId).get();
+      if (!contractSnap.exists) throw Object.assign(new Error('Contrato não encontrado'), { status: 404 });
+      const c = contractSnap.data();
+      if (c.assinafyDocumentId) throw Object.assign(new Error('Contrato já enviado ao Assinafy: ' + c.assinafyDocumentId), { status: 409 });
+      // Busca lead para reconstruir os dados
+      const leadsSnap = await db.collection('leads').where('contractId', '==', contractId).limit(1).get();
+      if (leadsSnap.empty) throw Object.assign(new Error('Lead não encontrado para este contrato'), { status: 404 });
+      const lead = leadsSnap.docs[0].data();
+      const t = lead.tenant || {};
+      const p = lead.property || {};
+      const landlord = lead.landlord || {};
+      const propAddr = [p.street, p.number, p.complement, p.neighborhood, p.city, p.state].filter(Boolean).join(', ');
+      const assinafyResult = await createAssinafyContract(db, contractId, {
+        contractId,
+        ownerName:       landlord.name || c.landlordName || '',
+        ownerEmail:      landlord.email || c.landlordEmail || '',
+        ownerCpf:        landlord.cpf || c.landlordCpf || '',
+        tenantName:      t.name || c.tenantName || '',
+        tenantEmail:     t.email || c.tenantEmail || '',
+        tenantCpf:       t.cpf || '',
+        tenantPhone:     t.phone || '',
+        propertyCode:    lead.propertyCode || p.code || '',
+        propertyAddress: propAddr || c.propertyAddress || '',
+        baseRent:        c.baseRent || parseFloat(p.rentValue) || 0,
+        dueDay:          c.dueDay || p.dueDay || 10,
+        startDate:       c.startDate || p.startDate || '',
+        endDate:         c.endDate || p.endDate || '',
+        deposit:         c.deposit || parseFloat(p.deposit) || 0,
+      });
+      // Limpa o erro anterior
+      await contractSnap.ref.update({ assinafyError: null, updatedAt: FieldValue.serverTimestamp() });
+      result = { ok: true, assinafyDocumentId: assinafyResult?.documentId || null };
+    }
     else if (step === 'mark-both-signed') {
       const { leadId } = req.body;
       if (!leadId) throw Object.assign(new Error('leadId obrigatório'), { status: 400 });
