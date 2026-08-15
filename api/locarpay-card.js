@@ -137,11 +137,13 @@ async function handleInit(db, body, apiKey) {
   const today        = new Date(); today.setHours(0, 0, 0, 0);
   const dueDateOnly  = new Date(dueDateObj); dueDateOnly.setHours(0, 0, 0, 0);
   const diasAtraso   = Math.max(0, Math.floor((today - dueDateOnly) / 86400000));
-  const finePercentage = (configData.finePercentage ?? 2) / 100;
-  const interestRate   = (configData.interestRate   ?? 1) / 100 / 30;
+  const finePercentage       = (configData.finePercentage          ?? 2)    / 100;
+  const interestRate         = (configData.interestRate             ?? 1)    / 100 / 30;
+  const monetaryCorrectionRate = (configData.monetaryCorrectionRate ?? 0.35) / 100 / 30;
   let valueComAtraso = baseValue;
   if (diasAtraso > 0) {
-    valueComAtraso = parseFloat((baseValue * (1 + finePercentage + interestRate * diasAtraso)).toFixed(2));
+    const dailyRate = interestRate + monetaryCorrectionRate;
+    valueComAtraso = parseFloat((baseValue * (1 + finePercentage + dailyRate * diasAtraso)).toFixed(2));
   }
   const realValue = parseFloat(((valueComAtraso + cardFeeFixed) / (1 - cardFeeRate)).toFixed(2));
 
@@ -494,8 +496,9 @@ async function handlePreview(db, body) {
 
   const cardFeeRate  = (cfg.cardFeePercentage ?? 2.99) / 100;
   const cardFeeFixed = cfg.cardFeeFixed ?? 0.49;
-  const finePercentage = (cfg.finePercentage ?? 2) / 100;
-  const interestRate   = (cfg.interestRate   ?? 1) / 100 / 30;
+  const finePercentage         = (cfg.finePercentage          ?? 2)    / 100;
+  const interestRate           = (cfg.interestRate             ?? 1)    / 100 / 30;
+  const monetaryCorrectionRate = (cfg.monetaryCorrectionRate   ?? 0.35) / 100 / 30;
 
   const baseValue   = charge.totalAmount || charge.baseRent || 5;
   const dueDateObj  = charge.dueDate?.toDate ? charge.dueDate.toDate() : new Date(charge.dueDate?.seconds * 1000);
@@ -504,17 +507,18 @@ async function handlePreview(db, body) {
   const diasAtraso  = Math.max(0, Math.floor((today - dueDateOnly) / 86400000));
 
   let valueComAtraso = baseValue;
-  let multa = 0, juros = 0;
+  let multa = 0, juros = 0, correcao = 0;
   if (diasAtraso > 0) {
-    multa = parseFloat((baseValue * finePercentage).toFixed(2));
-    juros = parseFloat((baseValue * interestRate * diasAtraso).toFixed(2));
-    valueComAtraso = parseFloat((baseValue + multa + juros).toFixed(2));
+    multa   = parseFloat((baseValue * finePercentage).toFixed(2));
+    juros   = parseFloat((baseValue * interestRate * diasAtraso).toFixed(2));
+    correcao = parseFloat((baseValue * monetaryCorrectionRate * diasAtraso).toFixed(2));
+    valueComAtraso = parseFloat((baseValue + multa + juros + correcao).toFixed(2));
   }
 
   const totalCartao = parseFloat(((valueComAtraso + cardFeeFixed) / (1 - cardFeeRate)).toFixed(2));
   const taxaCartao  = parseFloat((totalCartao - valueComAtraso).toFixed(2));
 
-  return { baseValue, multa, juros, diasAtraso, valueComAtraso, taxaCartao, totalCartao };
+  return { baseValue, multa, juros, correcao, diasAtraso, valueComAtraso, taxaCartao, totalCartao };
 }
 
 // ── SYNC CUSTOMERS (atualiza mobilePhone no Asaas para todos os inquilinos) ──
@@ -864,6 +868,12 @@ async function handleMarkOverdue(db, body) {
 
   if (overdue.length === 0) return { ok: true, updated: 0 };
 
+  // Carrega config do owner para taxas personalizadas
+  let ownerCfg = {};
+  if (ownerId) {
+    try { ownerCfg = (await db.collection('owners').doc(ownerId).get()).data() || {}; } catch (_) {}
+  }
+
   const nowMs = Date.now();
   const batch = db.batch();
 
@@ -873,21 +883,26 @@ async function handleMarkOverdue(db, body) {
     const dueDateMs = dueSecs * 1000;
     const diasAtraso = Math.max(1, Math.floor((nowMs - dueDateMs) / 86400000));
 
-    // Aplica multa 2% (uma única vez) e juros 0.033%/dia
+    // Aplica multa 2%, juros 1%/mês e correção monetária (IPCA-E ~0,35%/mês)
     const baseRent = data.baseRent || data.totalAmount || 0;
+    const cfgFine       = (ownerCfg?.finePercentage          ?? 2)    / 100;
+    const cfgInterest   = (ownerCfg?.interestRate             ?? 1)    / 100 / 30;
+    const cfgCorrecao   = (ownerCfg?.monetaryCorrectionRate   ?? 0.35) / 100 / 30;
     const multaJaAplicada = (data.multaAplicada || 0) > 0;
-    const multa  = multaJaAplicada ? (data.multaAplicada || 0) : baseRent * 0.02;
-    const juros  = baseRent * 0.00033 * diasAtraso;
+    const multa    = multaJaAplicada ? (data.multaAplicada || 0) : baseRent * cfgFine;
+    const juros    = baseRent * cfgInterest * diasAtraso;
+    const correcao = baseRent * cfgCorrecao * diasAtraso;
 
     const extrasTotal = (data.extras || []).reduce((s, e) => s + (e.value || 0), 0);
-    const totalAmount = baseRent + extrasTotal + multa + juros;
+    const totalAmount = baseRent + extrasTotal + multa + juros + correcao;
 
     batch.update(d.ref, {
-      status:         'overdue',
-      multaAplicada:  multa,
-      jurosAplicado:  juros,
+      status:           'overdue',
+      multaAplicada:    multa,
+      jurosAplicado:    juros,
+      correcaoAplicada: correcao,
       diasAtraso,
-      totalAmount:    Math.round(totalAmount * 100) / 100
+      totalAmount:      Math.round(totalAmount * 100) / 100
     });
   });
 
