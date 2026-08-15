@@ -173,6 +173,14 @@
 
     loadBrokers();
 
+    // Cobranças em atraso
+    const fine = $('config-fine');
+    const interest = $('config-interest');
+    const correction = $('config-correction');
+    if (fine) fine.value = currentOwnerData?.finePercentage ?? 2;
+    if (interest) interest.value = currentOwnerData?.interestRate ?? 1;
+    if (correction) correction.value = currentOwnerData?.monetaryCorrectionRate ?? 0.35;
+
     // Boa Vista
     const bcid = $('boavista-client-id');
     const bcss = $('boavista-client-secret');
@@ -641,6 +649,30 @@
   };
 
   // ── Análise de Crédito ────────────────────────────────────────
+  window.saveChargeConfig = async () => {
+    const st = $('charge-config-status');
+    const fine = parseFloat($('config-fine')?.value);
+    const interest = parseFloat($('config-interest')?.value);
+    const correction = parseFloat($('config-correction')?.value);
+    if (isNaN(fine) || isNaN(interest) || isNaN(correction)) {
+      if (st) { st.textContent = '❌ Preencha todos os campos.'; st.style.color = '#ef5350'; }
+      return;
+    }
+    if (st) { st.textContent = 'Salvando...'; st.style.color = '#888'; }
+    try {
+      await updateDoc(doc(db, 'owners', currentOwnerId), {
+        finePercentage: fine,
+        interestRate: interest,
+        monetaryCorrectionRate: correction
+      });
+      currentOwnerData = { ...currentOwnerData, finePercentage: fine, interestRate: interest, monetaryCorrectionRate: correction };
+      if (st) { st.textContent = '✅ Configuração salva.'; st.style.color = '#4CAF50'; }
+      showToast('Configuração de atraso atualizada', 'success');
+    } catch (e) {
+      if (st) { st.textContent = '❌ Erro: ' + e.message; st.style.color = '#ef5350'; }
+    }
+  };
+
   window.toggleCreditAnalysis = async (enabled) => {
     try {
       await updateDoc(doc(db, 'owners', currentOwnerId), { creditAnalysisEnabled: enabled });
@@ -3965,6 +3997,37 @@
           <button class="btn-outline" onclick="testBureauCredentials('serasa')" style="font-size:13px">Testar conexão</button>
           <button class="btn" onclick="saveBureauCredentials('serasa')" style="font-size:13px">Salvar</button>
         </div>
+      </div>
+
+      <!-- Cobranças em Atraso -->
+      <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:16px;padding:28px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <span style="font-size:22px">💰</span>
+          <div>
+            <div style="font-size:16px;font-weight:700;color:#f0f0f0">Cobranças em Atraso</div>
+            <div style="font-size:12px;color:#666">Multa, juros e correção monetária aplicados após o vencimento</div>
+          </div>
+        </div>
+        <div style="border-top:1px solid #2a2d3e;margin:20px 0"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">MULTA (%)</label>
+            <input id="config-fine" type="number" min="0" max="10" step="0.1" placeholder="2" style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            <small style="color:#555;font-size:11px">Padrão: 2%</small>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">JUROS (% ao mês)</label>
+            <input id="config-interest" type="number" min="0" max="5" step="0.1" placeholder="1" style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            <small style="color:#555;font-size:11px">Padrão: 1%/mês</small>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">CORREÇÃO IPCA-E (% ao mês)</label>
+            <input id="config-correction" type="number" min="0" max="5" step="0.01" placeholder="0.35" style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            <small style="color:#555;font-size:11px">Padrão: 0,35%/mês (≈ 4,2% ao ano)</small>
+          </div>
+        </div>
+        <div id="charge-config-status" style="margin-bottom:10px;font-size:12px;color:#555"></div>
+        <button class="btn" onclick="saveChargeConfig()" style="font-size:13px">Salvar configuração</button>
       </div>
 
       <!-- Boa Vista -->

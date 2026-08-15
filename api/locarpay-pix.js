@@ -74,12 +74,12 @@ export default async function handler(req, res) {
     const db = getFirestore();
 
     const { tenantId, chargeId } = req.body || {};
-    if (!tenantId || !chargeId) return res.status(400).json({ error: 'tenantId e chargeId obrigatórios' });
+    if (!tenantId) return res.status(400).json({ error: 'tenantId obrigatório' });
 
     // Lê dados do Firestore
     const [userSnap, chargeSnap] = await Promise.all([
       db.collection('users').doc(tenantId).get(),
-      db.collection('charges').doc(chargeId).get(),
+      chargeId ? db.collection('charges').doc(chargeId).get() : Promise.resolve({ exists: false }),
     ]);
 
     if (!userSnap.exists) return res.status(404).json({ error: 'Inquilino não encontrado' });
@@ -191,9 +191,10 @@ export default async function handler(req, res) {
 
     // Configurações de atraso (lidas do Firestore ou padrão)
     const configData = (configSnap.exists ? configSnap.data() : {}) || {};
-    const finePercentage    = configData.finePercentage    ?? 2;
-    const interestRate      = configData.interestRate      ?? 1;
-    const cardFeePercentage = configData.cardFeePercentage ?? 2.99;
+    const finePercentage         = configData.finePercentage          ?? 2;
+    const interestRate           = configData.interestRate             ?? 1;
+    const monetaryCorrectionRate = configData.monetaryCorrectionRate   ?? 0.35;
+    const cardFeePercentage      = configData.cardFeePercentage        ?? 2.99;
 
     // Lê walletId master e percentual de comissão para split automático
     let splitEntry = null;
@@ -212,7 +213,7 @@ export default async function handler(req, res) {
       dueDate,
       description: `Aluguel ${dueDate.slice(0, 7)}`,
       fine:     { value: finePercentage },
-      interest: { value: interestRate }
+      interest: { value: parseFloat((interestRate + monetaryCorrectionRate).toFixed(4)) }
     };
     if (splitEntry) paymentBody.split = [splitEntry];
 
