@@ -3609,14 +3609,21 @@
   });
   $('otp-code-input').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-verify-otp').click(); });
 
-  $('tab-overview').addEventListener('click', () => { setTab('overview'); });
-  $('tab-tenants').addEventListener('click', () => { setTab('tenants');  setTimeout(loadTenants,    0); });
-  $('tab-owners').addEventListener('click',  () => { setTab('owners');   setTimeout(loadOwners,     0); });
-  $('tab-overdue').addEventListener('click', () => { setTab('overdue');  setTimeout(loadOverdue,    0); });
-  $('tab-licenses').addEventListener('click',() => { setTab('licenses'); setTimeout(loadLicenses,   0); });
-  $('tab-config').addEventListener('click',  () => { setTab('config');   setTimeout(() => { loadBrokers(); loadConfigTab(); }, 0); });
-  $('tab-leads').addEventListener('click',   () => { setTab('leads');    setTimeout(loadLeads,      0); });
-  $('tab-brokers').addEventListener('click', () => { setTab('brokers');  setTimeout(loadBrokersTab, 0); });
+  function goTab(tab, loadFn) {
+    // Marca tab ativa visualmente de imediato (só CSS, sem DOM pesado)
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    $('tab-' + tab)?.classList.add('active');
+    // Adia todo o trabalho pesado (setTab esconde/mostra painéis, loadFn faz queries)
+    setTimeout(() => { setTab(tab); if (loadFn) loadFn(); }, 0);
+  }
+  $('tab-overview').addEventListener('click', () => goTab('overview'));
+  $('tab-tenants').addEventListener('click',  () => goTab('tenants',  loadTenants));
+  $('tab-owners').addEventListener('click',   () => goTab('owners',   loadOwners));
+  $('tab-overdue').addEventListener('click',  () => goTab('overdue',  loadOverdue));
+  $('tab-licenses').addEventListener('click', () => goTab('licenses', loadLicenses));
+  $('tab-config').addEventListener('click',   () => goTab('config',   () => { loadBrokers(); loadConfigTab(); }));
+  $('tab-leads').addEventListener('click',    () => goTab('leads',    loadLeads));
+  $('tab-brokers').addEventListener('click',  () => goTab('brokers',  loadBrokersTab));
   $('tab-plano').addEventListener('click',   () => { setTab('plano'); renderPlanoTab?.(); });
   $('tab-chamados').addEventListener('click', () => { setTab('chamados'); $('chamados-badge').style.display='none'; });
 
