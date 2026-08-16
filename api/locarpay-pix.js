@@ -213,18 +213,10 @@ export default async function handler(req, res) {
     const monetaryCorrectionRate = configData.monetaryCorrectionRate   ?? 0.35; // % a.m. IPCA-E
     const cardFeePercentage      = configData.cardFeePercentage        ?? 2.99;
 
-    // Cálculo de acréscimos conforme Lei 8.245/91 (Lei do Inquilinato) e lei civil brasileira:
-    //   Multa: percentual único no primeiro dia de atraso
-    //   Juros de mora + correção: proporcional por dia (taxa mensal / 30)
-    let value = baseValue;
-    let description = `Aluguel ${chargeDueDate ? chargeDueDate.toISOString().slice(0,7) : dueDate.slice(0,7)}`;
-    if (isOverdue && daysOverdue > 0) {
-      const fineAmount     = baseValue * (finePercentage / 100);
-      const dailyRate      = (interestRate + monetaryCorrectionRate) / 100 / 30;
-      const interestAmount = baseValue * dailyRate * daysOverdue;
-      value = parseFloat((baseValue + fineAmount + interestAmount).toFixed(2));
-      description += ` (${daysOverdue}d atraso: multa ${finePercentage}% + juros ${(interestRate + monetaryCorrectionRate).toFixed(2)}%/mês)`;
-    }
+    // Valor base — não embutimos multa/juros no valor para não exceder limite do Asaas.
+    // O Asaas aplica fine/interest automaticamente via PIX dinâmico ao receber o pagamento.
+    const value = baseValue;
+    const description = `Aluguel ${chargeDueDate ? chargeDueDate.toISOString().slice(0,7) : dueDate.slice(0,7)}`;
 
     // Lê walletId master e percentual de comissão para split automático
     let splitEntry = null;
@@ -235,14 +227,17 @@ export default async function handler(req, res) {
       if (masterWalletId) splitEntry = { walletId: masterWalletId, percentualValor: commissionPct };
     } catch (_) {}
 
-    // Cria cobrança no Asaas com valor já corrigido (sem fine/interest adicionais,
-    // pois já calculamos manualmente para controle diário exato)
+    // Cria cobrança PIX no Asaas:
+    //  - fine + interest configurados: Asaas aplica automaticamente após vencimento (PIX dinâmico)
+    //  - dueDate=hoje para vencidos: Asaas aceita hoje e contabiliza atraso a partir de amanhã
     const paymentBody = {
       customer:    customerId,
       billingType: 'PIX',
       value,
       dueDate,
-      description
+      description,
+      fine:     { value: finePercentage },
+      interest: { value: parseFloat((interestRate + monetaryCorrectionRate).toFixed(4)) }
     };
     if (splitEntry) paymentBody.split = [splitEntry];
 
