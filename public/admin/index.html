@@ -1855,7 +1855,7 @@
         const histHtml = allContracts.length
           ? allContracts.map(c => `
               <tr style="border-bottom:1px solid #1a1d2e">
-                <td style="padding:7px 10px;font-size:12px">${esc(c.propertyCode || c.propertyAddress || '—')}</td>
+                <td style="padding:7px 10px;font-size:12px">${esc(c.propertyCode || (() => { if (c.propertyLogradouro) { let a = c.propertyLogradouro; if (c.propertyNumero) a += `, ${c.propertyNumero}`; if (c.propertyBairro) a += `, ${c.propertyBairro}`; const cu = [c.propertyCidade, c.propertyEstado].filter(Boolean).join('/'); if (cu) a += `, ${cu}`; return a; } return c.propertyAddress || ''; })() || '—')}</td>
                 <td style="padding:7px 10px;font-size:12px">${esc(c.tenantName || '—')}</td>
                 <td style="padding:7px 10px;font-size:12px;color:#4CAF50">${fmt(c.baseRent)}/mês</td>
                 <td style="padding:7px 10px;font-size:12px">${c.startDate || '—'}</td>
@@ -2711,7 +2711,7 @@
         <td style="font-size:12px">${property}</td>
         <td>${rent}</td>
         <td>${status}</td>
-        <td><span class="badge ${docsCount>0?'active':'inactive'}" style="cursor:pointer" onclick="openDocsModal_${t.id}()">📄 ${docsCount}/5</span></td>
+        <td style="text-align:center"><span class="badge ${docsCount>0?'active':'inactive'}" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;font-size:12px;font-weight:700;flex-direction:column;gap:1px" onclick="openDocsModal_${t.id}()"><span style="font-size:14px">📄</span>${docsCount}/5</span></td>
         <td style="white-space:nowrap">
           <button class="btn-sm" onclick="openEditTenant('${t.id}')">Editar</button>
           <button class="btn-sm btn-sm-alt" onclick="openExtras('${t.id}')">+Extra</button>
