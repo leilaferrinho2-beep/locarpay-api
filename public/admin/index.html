@@ -125,8 +125,9 @@
   let currentOwnerData = null;
   let isMaster         = false;
   let allOwners        = [];
-  let tenants   = [];
-  let contracts = [];
+  let tenants      = [];
+  let contracts    = [];
+  let leadDocsMap  = {}; // leadId → docs[] do corretor
   let leads     = [];
   let leadsUnsubscribe = null;
   let leadsListUnsubscribe = null;
@@ -260,15 +261,18 @@
 
     contracts = contractsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    // Carrega leads para suprir bairro em contratos antigos (criados antes dos campos individuais)
+    // Carrega leads para suprir bairro e docs em contratos antigos
     let leadNeighborhoodMap = {}; // leadId → { neighborhood, street, number, city, state }
+    leadDocsMap = {};             // leadId → docs[] (global para uso no modal)
     try {
       const leadsQ = isMaster && !currentOwnerId
         ? getDocs(collection(db, 'leads'))
         : getDocs(query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId)));
       (await leadsQ).docs.forEach(d => {
-        const lp = d.data().property || {};
+        const data = d.data();
+        const lp = data.property || {};
         leadNeighborhoodMap[d.id] = lp;
+        leadDocsMap[d.id] = (data.docs || []).filter(doc => doc && doc.url);
       });
     } catch (_) {}
     // Injeta bairro e campos individuais nos contratos que não têm (criados via approve-lead antigo)
@@ -440,6 +444,11 @@
         dupSnap.docs.forEach(d => Object.assign(docs, d.data()?.docs || {}));
       } catch (_) {}
     }
+    // Também carrega docs do lead (enviados pelo corretor)
+    const tenantContract  = contracts.find(c => c.tenantId === tenant.id);
+    const tenantLeadId    = tenantContract?.leadId;
+    const fromLeadDocs    = (tenantLeadId && leadDocsMap[tenantLeadId]) || [];
+
     $('docs-modal-name').textContent = tenant.name || tenant.email;
     const grid = $('docs-grid');
     grid.innerHTML = '';
@@ -454,6 +463,31 @@
       }
       grid.appendChild(cell);
     });
+
+    // Exibe docs enviados pelo corretor no lead (formato array)
+    if (fromLeadDocs.length > 0) {
+      const section = document.createElement('div');
+      section.style.cssText = 'margin-top:20px;border-top:1px solid #2a2a2a;padding-top:14px;width:100%';
+      section.innerHTML = `<div style="color:#4CAF50;font-weight:700;font-size:13px;margin-bottom:10px">📎 Documentos enviados pelo corretor (${fromLeadDocs.length})</div>`;
+      const leadGrid = document.createElement('div');
+      leadGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px';
+      fromLeadDocs.forEach((d, i) => {
+        const url    = d.url || '';
+        const name   = d.name || d.label || d.type || `Documento ${i + 1}`;
+        const isPdf  = url.includes('.pdf') || url.includes('application%2Fpdf');
+        const cell   = document.createElement('div');
+        cell.style.cssText = 'text-align:center;width:120px';
+        if (isPdf) {
+          cell.innerHTML = `<a href="${url}" target="_blank" rel="noopener" style="display:block;background:#1a1a2e;border-radius:8px;padding:20px 10px;text-decoration:none"><span style="font-size:32px">📄</span></a><div style="font-size:11px;color:#aaa;margin-top:4px">✅ ${esc(name)}</div>`;
+        } else {
+          cell.innerHTML = `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" style="width:100%;border-radius:8px;object-fit:cover;height:80px" alt="${esc(name)}" onerror="this.style.display='none'"></a><div style="font-size:11px;color:#aaa;margin-top:4px">✅ ${esc(name)}</div>`;
+        }
+        leadGrid.appendChild(cell);
+      });
+      section.appendChild(leadGrid);
+      grid.parentElement.appendChild(section);
+    }
+
     $('modal-docs').style.display = 'flex';
   }
 
@@ -2663,7 +2697,9 @@
             ? '<span class="badge digital">Digital</span>'
             : '<span class="badge active">Ativo</span>';
       const docs      = t.docs || {};
-      const docsCount = Object.keys(docs).length;
+      const tenantLeadId  = contracts.find(c => c.tenantId === t.id)?.leadId;
+      const leadDocs      = (tenantLeadId && leadDocsMap[tenantLeadId]) || [];
+      const docsCount     = Object.keys(docs).length + leadDocs.length;
       const row = document.createElement('tr');
       row.innerHTML = `
         <td>${esc(t.name) || '—'}</td>
