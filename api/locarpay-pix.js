@@ -146,72 +146,76 @@ export default async function handler(req, res) {
     const cpf   = user.cpf   || '';
     const phone = user.phone || '';
 
-    // Verifica se a cobrança está vencida
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    // Data de hoje (meia-noite horário Brasil UTC-3)
+    const nowBR = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    nowBR.setHours(0, 0, 0, 0);
+    const todayStr = nowBR.toISOString().slice(0, 10); // YYYY-MM-DD
+
     const chargeDueDate = charge.dueDate?.seconds
       ? new Date(charge.dueDate.seconds * 1000)
       : null;
-    const isOverdue = chargeDueDate && chargeDueDate < today;
 
-    // Se não está vencida e já tem PIX salvo, retorna direto
+    // Dias de atraso (0 = ainda no prazo)
+    let daysOverdue = 0;
+    if (chargeDueDate) {
+      const dueMidnight = new Date(chargeDueDate); dueMidnight.setHours(0, 0, 0, 0);
+      daysOverdue = Math.max(0, Math.floor((nowBR - dueMidnight) / 86400000));
+    }
+    const isOverdue = daysOverdue > 0;
+
+    // Se não está vencida e o QR foi gerado hoje, retorna direto
+    const pixDate = charge.pixGeneratedDate; // YYYY-MM-DD
     if (!isOverdue && charge.pixCopyPaste && charge.pixQrCode) {
-      return res.status(200).json({
-        pixCopyPaste: charge.pixCopyPaste,
-        pixQrCode:    charge.pixQrCode
-      });
+      return res.status(200).json({ pixCopyPaste: charge.pixCopyPaste, pixQrCode: charge.pixQrCode });
     }
 
-    // Se está vencida e tem cobrança antiga no Asaas, cancela para recriar com juros
-    if (isOverdue && charge.asaasChargeId) {
+    // Se está vencida mas o QR já foi gerado HOJE, retorna o QR atual (já tem os juros do dia)
+    if (isOverdue && pixDate === todayStr && charge.pixCopyPaste && charge.pixQrCode) {
+      return res.status(200).json({ pixCopyPaste: charge.pixCopyPaste, pixQrCode: charge.pixQrCode });
+    }
+
+    // QR precisa ser (re)criado: cobrança nova OU vencida com QR de outro dia → cancela o antigo
+    if (charge.asaasChargeId) {
       try {
         await fetch(`https://api.asaas.com/v3/payments/${charge.asaasChargeId}`, {
           method: 'DELETE',
           headers: { 'access_token': apiKey }
         });
-      } catch (_) { /* ignora erro de cancelamento */ }
-      // Limpa o charge antigo do Firestore para forçar recriação
+      } catch (_) {}
       await db.collection('charges').doc(resolvedChargeId).update({
-        asaasChargeId: null,
-        pixCopyPaste: null,
-        pixQrCode: null
+        asaasChargeId: null, pixCopyPaste: null, pixQrCode: null, pixGeneratedDate: null
       });
     }
 
-    // Se não está vencida e tem asaasChargeId, tenta só buscar o QR
-    if (!isOverdue && charge.asaasChargeId) {
-      try {
-        const pix = await asaasGet(`/payments/${charge.asaasChargeId}/pixQrCode`, apiKey);
-        await db.collection('charges').doc(resolvedChargeId).update({
-          pixCopyPaste: pix.payload,
-          pixQrCode:    pix.encodedImage
-        });
-        return res.status(200).json({ pixCopyPaste: pix.payload, pixQrCode: pix.encodedImage });
-      } catch (_) { /* segue para criar nova cobrança */ }
-    }
-
-    // Cria ou reutiliza cliente no Asaas
+    // Se não está vencida e tem asaasChargeId (cancelado acima não entra aqui), fallback
+    // — cria cliente e segue normalmente
     const customerId = await findOrCreateCustomer(name, email, cpf, phone, apiKey);
 
-    // DueDate: usa sempre a data original da cobrança para que o Asaas calcule juros corretamente.
-    // Se a cobrança está vencida, passamos a data original (no passado) — o Asaas aceita e
-    // aplica multa + juros automáticos sobre os dias de atraso.
-    let dueDate;
-    if (chargeDueDate) {
-      dueDate = chargeDueDate.toISOString().slice(0, 10);
-    } else {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      dueDate = tomorrow.toISOString().slice(0, 10);
-    }
+    // DueDate para o Asaas: amanhã (cobrança nova com valor já corrigido embutido)
+    const tomorrow = new Date(nowBR); tomorrow.setDate(tomorrow.getDate() + 1);
+    const dueDate = tomorrow.toISOString().slice(0, 10);
 
-    const value = charge.totalAmount || charge.baseRent || 5;
+    const baseValue = charge.totalAmount || charge.baseRent || 5;
 
     // Configurações de atraso (lidas do Firestore ou padrão)
     const configData = (configSnap.exists ? configSnap.data() : {}) || {};
-    const finePercentage         = configData.finePercentage          ?? 2;
-    const interestRate           = configData.interestRate             ?? 1;
-    const monetaryCorrectionRate = configData.monetaryCorrectionRate   ?? 0.35;
+    const finePercentage         = configData.finePercentage          ?? 2;    // % multa única
+    const interestRate           = configData.interestRate             ?? 1;    // % a.m. juros mora
+    const monetaryCorrectionRate = configData.monetaryCorrectionRate   ?? 0.35; // % a.m. IPCA-E
     const cardFeePercentage      = configData.cardFeePercentage        ?? 2.99;
+
+    // Cálculo de acréscimos conforme Lei 8.245/91 (Lei do Inquilinato) e lei civil brasileira:
+    //   Multa: percentual único no primeiro dia de atraso
+    //   Juros de mora + correção: proporcional por dia (taxa mensal / 30)
+    let value = baseValue;
+    let description = `Aluguel ${chargeDueDate ? chargeDueDate.toISOString().slice(0,7) : dueDate.slice(0,7)}`;
+    if (isOverdue && daysOverdue > 0) {
+      const fineAmount     = baseValue * (finePercentage / 100);
+      const dailyRate      = (interestRate + monetaryCorrectionRate) / 100 / 30;
+      const interestAmount = baseValue * dailyRate * daysOverdue;
+      value = parseFloat((baseValue + fineAmount + interestAmount).toFixed(2));
+      description += ` (${daysOverdue}d atraso: multa ${finePercentage}% + juros ${(interestRate + monetaryCorrectionRate).toFixed(2)}%/mês)`;
+    }
 
     // Lê walletId master e percentual de comissão para split automático
     let splitEntry = null;
@@ -222,15 +226,14 @@ export default async function handler(req, res) {
       if (masterWalletId) splitEntry = { walletId: masterWalletId, percentualValor: commissionPct };
     } catch (_) {}
 
-    // Cria cobrança PIX no Asaas com configuração de juros/multa + split plataforma
+    // Cria cobrança no Asaas com valor já corrigido (sem fine/interest adicionais,
+    // pois já calculamos manualmente para controle diário exato)
     const paymentBody = {
       customer:    customerId,
       billingType: 'PIX',
       value,
       dueDate,
-      description: `Aluguel ${dueDate.slice(0, 7)}`,
-      fine:     { value: finePercentage },
-      interest: { value: parseFloat((interestRate + monetaryCorrectionRate).toFixed(4)) }
+      description
     };
     if (splitEntry) paymentBody.split = [splitEntry];
 
@@ -239,11 +242,13 @@ export default async function handler(req, res) {
     // Busca QR Code
     const pix = await asaasGet(`/payments/${asaasCharge.id}/pixQrCode`, apiKey);
 
-    // Salva no Firestore
+    // Salva no Firestore com a data de geração para controle de renovação diária
     await db.collection('charges').doc(resolvedChargeId).update({
-      asaasChargeId: asaasCharge.id,
-      pixCopyPaste:  pix.payload,
-      pixQrCode:     pix.encodedImage
+      asaasChargeId:    asaasCharge.id,
+      pixCopyPaste:     pix.payload,
+      pixQrCode:        pix.encodedImage,
+      pixGeneratedDate: todayStr,       // YYYY-MM-DD — renova após meia-noite
+      pixTotalValue:    value           // valor exato cobrado (base + multa + juros)
     });
 
     return res.status(200).json({
