@@ -621,6 +621,15 @@ async function verifyOtp() {
   $('btn-verify').disabled=false; $('btn-verify').textContent='Entrar';
 }
 
+// Monta endereço do lead na ordem: Logradouro, Nº, Complemento, Bairro, Cidade/UF
+function buildLeadAddr(l) {
+  const p = l.property || {};
+  const parts = [p.street, p.number, p.complement, p.neighborhood].filter(Boolean);
+  const cityUf = [p.city, p.state].filter(Boolean).join('/');
+  if (cityUf) parts.push(cityUf);
+  return parts.length ? parts.join(', ') : (l.propertyAddress || 'Imóvel não informado');
+}
+
 // ── Leads ─────────────────────────────────────────────
 async function loadLeads(uid) {
   const list = $('leads-list');
@@ -653,7 +662,7 @@ async function loadLeads(uid) {
         <div class="lead-top">
           <div>
             <div class="lead-name">${l.tenantName||'—'}</div>
-            <div class="lead-prop">${l.propertyAddress||'Imóvel não informado'}</div>
+            <div class="lead-prop">${buildLeadAddr(l)}</div>
           </div>
           <span class="lead-pill ${pillClass}">${pillLabel}</span>
         </div>
