@@ -2550,18 +2550,31 @@
                 where('contractId', '==', c.id),
                 where('status', 'in', ['pending', 'overdue'])
               ));
+              // 1. Atualiza valor e limpa QR antigo em todas as cobranças
               for (const ch of chSnap.docs) {
                 await updateDoc(ch.ref, {
                   baseRent: rent,
-                  totalAmount: rent, // será recalculado com juros na próxima geração
+                  totalAmount: rent,
                   pixCopyPaste: '',
                   pixQrCode: '',
                   pixGeneratedDate: '',
+                  asaasChargeId: '',
                   cardChargeId: '',
                   updatedAt: serverTimestamp()
                 });
               }
-              showToast('Aluguel atualizado. PIX e cartão serão gerados com o novo valor.', 'success');
+              // 2. Regenera QR imediatamente para cada cobrança — salva no Firestore
+              //    O listener em tempo real do app do inquilino recebe na hora
+              const regenPromises = chSnap.docs.map(ch =>
+                fetch('/api/locarpay-pix', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ tenantId: editingTenantId, chargeId: ch.id })
+                }).catch(() => {}) // falha silenciosa — inquilino verá na próxima abertura
+              );
+              showToast('Atualizando QR Code com novo valor...', 'info');
+              await Promise.all(regenPromises);
+              showToast('Aluguel e QR Code atualizados com sucesso!', 'success');
             } catch (e2) { console.warn('Charges update:', e2.message); }
           }
         }
