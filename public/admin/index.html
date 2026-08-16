@@ -142,7 +142,7 @@
   }
 
   window.setTab = function setTab(tab) {
-    ['tab-tenants','tab-owners','tab-overdue','tab-licenses','tab-config','tab-leads','tab-plano','tab-brokers'].forEach(t => {
+    ['tab-tenants','tab-owners','tab-overdue','tab-licenses','tab-config','tab-leads','tab-plano','tab-brokers','tab-chamados'].forEach(t => {
       $(t)?.classList.remove('active');
       const panel = $(t.replace('tab-', 'panel-'));
       if (panel) panel.style.display = 'none';
@@ -258,8 +258,43 @@
       ]);
     }
 
-    tenants   = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     contracts = contractsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Carrega também os user docs vinculados via contrato mas sem ownerId (registros antigos)
+    const fetchedIds = new Set(usersSnap.docs.map(d => d.id));
+    const extraTenantIds = [...new Set(contracts.map(c => c.tenantId).filter(id => id && !fetchedIds.has(id)))];
+    const extraUsers = [];
+    for (let i = 0; i < extraTenantIds.length; i += 30) {
+      try {
+        const sl = extraTenantIds.slice(i, i + 30);
+        const snap2 = await getDocs(query(collection(db, 'users'), where('__name__', 'in', sl)));
+        snap2.docs.forEach(d => extraUsers.push({ id: d.id, ...d.data() }));
+      } catch (_) {}
+    }
+    // Deduplicar inquilinos por email — mantém o que tem contrato ativo, depois qualquer contrato, depois o mais recente
+    const allTenants = [...usersSnap.docs.map(d => ({ id: d.id, ...d.data() })), ...extraUsers];
+    const tenantByEmail = new Map();
+    // Agrupa todos os docs por email para mescla
+    const tenantGroupByEmail = new Map();
+    allTenants.forEach(t => {
+      const email = (t.email || '').toLowerCase();
+      if (!email) return;
+      if (!tenantGroupByEmail.has(email)) tenantGroupByEmail.set(email, []);
+      tenantGroupByEmail.get(email).push(t);
+    });
+    tenantGroupByEmail.forEach((group, email) => {
+      // Escolhe o principal: com contrato ativo > com qualquer contrato > mais recente
+      const withActive = group.filter(t => contracts.some(c => c.tenantId === t.id && c.active));
+      const withAny    = group.filter(t => contracts.some(c => c.tenantId === t.id));
+      let primary = (withActive[0] || withAny[0] || group[0]);
+      // Mescla docs de todos os duplicados no principal
+      const mergedDocs = {};
+      group.forEach(t => Object.assign(mergedDocs, t.docs || {}));
+      primary = { ...primary, docs: mergedDocs };
+      tenantByEmail.set(email, primary);
+    });
+    // Inquilinos sem email (edge case)
+    allTenants.filter(t => !t.email).forEach(t => tenantByEmail.set(t.id, t));
+    tenants = Array.from(tenantByEmail.values());
     renderTenants();
     renderMetrics();
     renderPlanBar();
@@ -369,8 +404,18 @@
   }
 
   async function openDocsModal(tenant) {
-    const snap = await getDoc(doc(db, 'users', tenant.id));
-    const docs = snap.data()?.docs || {};
+    // Busca docs do principal + todos os duplicados pelo email para garantir merge completo
+    const docs = { ...(tenant.docs || {}) };
+    try {
+      const snap = await getDoc(doc(db, 'users', tenant.id));
+      Object.assign(docs, snap.data()?.docs || {});
+    } catch (_) {}
+    if (tenant.email) {
+      try {
+        const dupSnap = await getDocs(query(collection(db, 'users'), where('email', '==', tenant.email)));
+        dupSnap.docs.forEach(d => Object.assign(docs, d.data()?.docs || {}));
+      } catch (_) {}
+    }
     $('docs-modal-name').textContent = tenant.name || tenant.email;
     const grid = $('docs-grid');
     grid.innerHTML = '';
@@ -1053,7 +1098,7 @@
     }
     const name = lead?.tenant?.name || 'Inquilino';
     const prop  = lead?.property
-      ? [lead.property.street, lead.property.number, lead.property.city].filter(Boolean).join(', ')
+      ? [lead.property.street, lead.property.number, lead.property.neighborhood, lead.property.city].filter(Boolean).join(', ')
       : (lead?.propertyDescription || '');
     el.innerHTML = `
       <div style="display:flex;align-items:flex-start;gap:12px">
@@ -1091,12 +1136,18 @@
     const tbody = $('leads-tbody');
     if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="empty">Carregando...</td></tr>';
     if (leadsListUnsubscribe) leadsListUnsubscribe();
+    // Pré-carrega nomes completos dos corretores para exibição
+    let brokerNameMap = {};
+    getDocs(query(collection(db, 'brokers'), where('ownerId', '==', currentOwnerId)))
+      .then(bs => { bs.docs.forEach(b => { const d = b.data(); if (d.email) brokerNameMap[d.email.toLowerCase()] = d.name || ''; }); renderLeads(); })
+      .catch(() => {});
     leadsListUnsubscribe = onSnapshot(
       query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId), limit(100)),
       snap => {
         leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         leads.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         renderLeads();
+        window._brokerNameMap = brokerNameMap;
         // Notifica se algum lead mudou para bothSigned=true
         snap.docChanges().forEach(change => {
           if (change.type === 'modified' && change.doc.data().bothSigned && !change.oldIndex < 0) {
@@ -1132,7 +1183,7 @@
       const [col, lbl] = statusCfg[l.status] || statusCfg.pending;
       const [cCol, cLbl] = l.contractStatus ? (contractStatusCfg[l.contractStatus] || [col, lbl]) : [col, lbl];
       const prop = l.property
-        ? [l.property.street, l.property.number, l.property.city].filter(Boolean).join(', ')
+        ? [l.property.street, l.property.number, l.property.neighborhood, l.property.city].filter(Boolean).join(', ')
         : (l.propertyDescription || '—');
       const rent = l.property?.rentValue ? `R$ ${l.property.rentValue}` : '';
       const cs = l.contractStatus || '';
@@ -1155,7 +1206,7 @@
       return `<tr>
         <td><strong>${esc(l.tenant?.name)||'—'}</strong><br><span style="font-size:11px;color:#888">${esc(l.tenant?.email)||''}</span><br><span style="font-size:11px;color:#666">${esc(l.tenant?.cpf)||''}</span></td>
         <td><span style="font-size:12px">${esc(prop)}</span>${rent ? `<br><span style="color:#4CAF50;font-size:12px;font-weight:600">${esc(rent)}/mês</span>` : ''}</td>
-        <td>${esc(l.brokerName||l.brokerEmail||'—')}</td>
+        <td>${esc((brokerNameMap[(l.brokerEmail||'').toLowerCase()])||l.brokerName||l.brokerEmail||'—')}</td>
         <td>${statusLine}<br><span style="font-size:11px;color:#666">${(l.docs||[]).length} doc(s)</span></td>
         <td style="white-space:nowrap">${btns}</td>
       </tr>`;
@@ -1418,7 +1469,7 @@
     $('approve-lead-name').textContent = l.tenant?.name || '—';
     $('approve-lead-email').textContent = l.tenant?.email || '—';
     const propAddr = l.property
-      ? [l.property.street, l.property.number, l.property.city, l.property.state].filter(Boolean).join(', ')
+      ? [l.property.street, l.property.number, l.property.neighborhood, l.property.city, l.property.state].filter(Boolean).join(', ')
       : (l.propertyDescription || '');
     $('approve-lead-prop').textContent = (l.propertyCode || l.property?.code || '') + (propAddr ? ' — ' + propAddr : '');
     $('modal-approve-lead').style.display = 'flex';
@@ -2427,11 +2478,34 @@
           const newCode = $('et-prop-code').value.trim().toUpperCase();
           const codeConflict = newCode && contracts.some(x => x.ownerId === currentOwnerId && x.id !== c.id && (x.propertyCode || '').toUpperCase() === newCode);
           if (codeConflict) { showToast(`Código "${newCode}" já está em uso`, 'error'); return; }
+          const rentChanged = rent !== c.baseRent;
           await updateDoc(doc(db, 'contracts', c.id), { baseRent: rent, dueDay: due, propertyDescription: $('et-property').value.trim(), propertyCode: newCode });
+          // Se aluguel mudou: atualiza cobranças pendentes e invalida PIX/cartão
+          if (rentChanged) {
+            try {
+              const chSnap = await getDocs(query(
+                collection(db, 'charges'),
+                where('contractId', '==', c.id),
+                where('status', 'in', ['pending', 'overdue'])
+              ));
+              for (const ch of chSnap.docs) {
+                await updateDoc(ch.ref, {
+                  baseRent: rent,
+                  totalAmount: rent, // será recalculado com juros na próxima geração
+                  pixCopyPaste: '',
+                  pixQrCode: '',
+                  pixGeneratedDate: '',
+                  cardChargeId: '',
+                  updatedAt: serverTimestamp()
+                });
+              }
+              showToast('Aluguel atualizado. PIX e cartão serão gerados com o novo valor.', 'success');
+            } catch (e2) { console.warn('Charges update:', e2.message); }
+          }
         }
       }
       $('modal-edit-tenant').style.display = 'none';
-      showToast('Inquilino atualizado.', 'success');
+      if (!c || parseBRL($('et-rent').value) === c?.baseRent) showToast('Inquilino atualizado.', 'success');
       await loadTenants();
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     finally { $('et-save').disabled = false; $('et-save').textContent = 'Salvar'; }
@@ -2544,7 +2618,7 @@
       const contract  = contracts.find(c => c.tenantId === t.id);
       const rent      = contract ? fmt.format(contract.baseRent || 0) : '—';
       const propCode  = contract?.propertyCode ? `<span style="font-size:10px;font-weight:700;background:#1a2e1a;color:#4CAF50;border:1px solid #2e4a2e;border-radius:4px;padding:1px 6px;margin-right:4px;letter-spacing:.05em">${esc(contract.propertyCode)}</span>` : '';
-      const property  = propCode + esc(contract?.propertyDescription || (contract ? '—' : '—'));
+      const property  = propCode + esc(contract?.propertyAddress || contract?.propertyDescription || (contract ? '—' : '—'));
       const digital   = contract?.requiresDigitalContract;
       const status    = !contract
         ? '<span class="badge inactive">Sem contrato</span>'
@@ -3441,6 +3515,294 @@
   $('tab-leads').addEventListener('click',   () => { setTab('leads'); loadLeads(); });
   $('tab-brokers').addEventListener('click', () => { setTab('brokers'); loadBrokersTab(); });
   $('tab-plano').addEventListener('click',   () => { setTab('plano'); renderPlanoTab?.(); });
+  $('tab-chamados').addEventListener('click', () => { setTab('chamados'); $('chamados-badge').style.display='none'; });
+
+  // ── Chamados de Manutenção ────────────────────────────────────────────────
+  let _chamadosUnsubscribe = null;
+
+  function startChamadosListener(ownerId) {
+    if (_chamadosUnsubscribe) _chamadosUnsubscribe();
+    const db = getFirestore();
+    // Sem orderBy composto para evitar exigir índice Firestore; ordenamos no JS
+    const q = query(
+      collection(db, 'maintenance'),
+      where('ownerId', '==', ownerId)
+    );
+    let firstLoad = true;
+    const _lastMsgAt = {};
+    _chamadosUnsubscribe = onSnapshot(q, snap => {
+      const rows = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      renderChamados(rows);
+
+      if (!firstLoad) {
+        snap.docChanges().forEach(change => {
+          const c = change.doc.data();
+          const id = change.doc.id;
+          // Novo chamado aberto
+          if (change.type === 'added') {
+            showChamadoToast(id, c);
+          }
+          // Nova mensagem do inquilino (lastMessageSender == 'tenant')
+          if ((change.type === 'added' || change.type === 'modified') && c.lastMessageSender === 'tenant') {
+            const msgAt = c.lastMessageAt?.seconds || 0;
+            if (msgAt > (_lastMsgAt[id] || 0)) {
+              _lastMsgAt[id] = msgAt;
+              // Só notifica se não estiver na aba chamados
+              const onChamadosTab = $('panel-chamados')?.style.display !== 'none';
+              if (!onChamadosTab) {
+                showChatMsgToast(id, c);
+              }
+            }
+          }
+        });
+      } else {
+        // Inicializa timestamps para não notificar mensagens antigas
+        snap.docs.forEach(d => {
+          const c = d.data();
+          _lastMsgAt[d.id] = c.lastMessageAt?.seconds || 0;
+        });
+      }
+      firstLoad = false;
+    });
+  }
+
+  function playChatSound() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // Som suave tipo "ding" (diferente do beep dos chamados)
+      [523, 659].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.15);
+        gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + i * 0.15 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.4);
+        osc.start(ctx.currentTime + i * 0.15);
+        osc.stop(ctx.currentTime + i * 0.15 + 0.4);
+      });
+    } catch (_) {}
+  }
+
+  function showChatMsgToast(chamadoId, c) {
+    playChatSound();
+    const shortId = chamadoId.slice(-6).toUpperCase();
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      position:fixed;top:20px;right:20px;z-index:9999;
+      background:#1a1d2e;border:1px solid #1565c0;border-radius:12px;
+      padding:14px 18px;min-width:260px;max-width:340px;
+      box-shadow:0 8px 32px rgba(0,0,0,.6);
+      animation:slideIn .3s ease;
+    `;
+    toast.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div style="font-size:22px">💬</div>
+        <div style="flex:1">
+          <div style="font-weight:700;color:#e0e0e0;font-size:14px">Nova mensagem</div>
+          <div style="color:#90caf9;font-size:12px;margin-top:2px">${c.tenantName || c.tenantEmail || 'Inquilino'} · #${shortId}</div>
+          <div style="color:#b0b3c6;font-size:12px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px">${c.lastMessage || ''}</div>
+        </div>
+        <button onclick="this.closest('[data-toast]').remove()" style="background:none;border:none;color:#888;cursor:pointer;font-size:18px;padding:0;line-height:1">×</button>
+      </div>
+      <div style="margin-top:10px">
+        <button class="btn-sm" onclick="setTab('chamados');this.closest('[data-toast]').remove()" style="width:100%;text-align:center;background:#1565c0">Ver chamado</button>
+      </div>
+    `;
+    toast.setAttribute('data-toast','1');
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 8000);
+  }
+
+  function renderChamados(rows) {
+    const tbody = $('chamados-tbody');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">Nenhum chamado aberto</td></tr>';
+      return;
+    }
+
+    // Badge no tab
+    const abertos = rows.filter(r => r.status === 'open').length;
+    const badge = $('chamados-badge');
+    if (abertos > 0) {
+      badge.textContent = abertos;
+      badge.style.display = 'inline';
+    } else {
+      badge.style.display = 'none';
+    }
+
+    tbody.innerHTML = rows.map((c, i) => {
+      const dt = c.createdAt?.toDate ? c.createdAt.toDate() : new Date((c.createdAt?.seconds||0)*1000);
+      const dtStr = dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+      const statusColor = c.status === 'open' ? '#ef5350' : c.status === 'in_progress' ? '#ffb74d' : '#4caf50';
+      const statusLabel = c.status === 'open' ? 'Aberto' : c.status === 'in_progress' ? 'Em andamento' : 'Resolvido';
+      const shortId = c.id.slice(-6).toUpperCase();
+      return `<tr>
+        <td style="font-family:monospace;font-size:12px;color:#888">#${shortId}</td>
+        <td>${c.tenantName || c.tenantEmail || '—'}</td>
+        <td style="font-size:12px;color:#aaa">${c.propertyAddress || '—'}</td>
+        <td>${c.category || '—'}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(c.description||'').replace(/"/g,'&quot;')}">${c.description || '—'}</td>
+        <td style="font-size:12px;color:#888">${dtStr}</td>
+        <td><span style="background:${statusColor}22;color:${statusColor};border-radius:8px;padding:2px 10px;font-size:12px;font-weight:600">${statusLabel}</span></td>
+        <td style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          ${c.status !== 'resolved' ? `<button class="btn-sm" onclick="updateChamadoStatus('${c.id}','${c.status === 'open' ? 'in_progress' : 'resolved'}')">
+            ${c.status === 'open' ? 'Iniciar' : 'Resolver'}
+          </button>` : '<span style="color:#4caf50;font-size:12px">✓ Resolvido</span>'}
+          <button class="btn-sm" style="background:#1565c0" onclick="toggleChamadoChat('${c.id}')">💬 Chat</button>
+          <button class="btn-sm" style="background:#b71c1c" onclick="removeChamado('${c.id}')">🗑️</button>
+        </td>
+      </tr>
+      <tr id="chat-row-${c.id}" style="display:none">
+        <td colspan="8" style="padding:0">
+          <div style="background:#12152a;border-top:1px solid #2a2d3e;padding:16px">
+            <div id="chat-msgs-${c.id}" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px;min-height:60px">
+              <span style="color:#555;font-size:13px;text-align:center">Carregando mensagens...</span>
+            </div>
+            <div style="display:flex;gap:8px">
+              <input id="chat-input-${c.id}" type="text" placeholder="Mensagem para o inquilino..."
+                style="flex:1;background:#1e2030;border:1px solid #3a3d52;color:#e0e0e0;border-radius:8px;padding:8px 12px;font-size:13px;outline:none"
+                onkeydown="if(event.key==='Enter')sendChamadoMsg('${c.id}','${(c.tenantName||c.tenantEmail||'').replace(/'/g,"\\'")}')">
+              <button class="btn-sm" style="background:#1565c0;padding:8px 16px" onclick="sendChamadoMsg('${c.id}','${(c.tenantName||c.tenantEmail||'').replace(/'/g,"\\'")}')">Enviar</button>
+            </div>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Listeners de chat ativos por chamadoId
+  const _chatListeners = {};
+
+  window.toggleChamadoChat = function(chamadoId) {
+    const row = document.getElementById(`chat-row-${chamadoId}`);
+    if (!row) return;
+    const visible = row.style.display !== 'none';
+    row.style.display = visible ? 'none' : 'table-row';
+    if (!visible && !_chatListeners[chamadoId]) {
+      startChatListener(chamadoId);
+    }
+  };
+
+  function startChatListener(chamadoId) {
+    const db = getFirestore();
+    const msgsRef = collection(db, `maintenance/${chamadoId}/messages`);
+    const q = query(msgsRef, orderBy('createdAt', 'asc'));
+    _chatListeners[chamadoId] = onSnapshot(q, snap => {
+      renderChatMsgs(chamadoId, snap.docs.map(d => ({id:d.id,...d.data()})));
+    });
+  }
+
+  function renderChatMsgs(chamadoId, msgs) {
+    const el = document.getElementById(`chat-msgs-${chamadoId}`);
+    if (!el) return;
+    if (!msgs.length) {
+      el.innerHTML = '<span style="color:#555;font-size:13px;text-align:center">Nenhuma mensagem ainda.</span>';
+      return;
+    }
+    el.innerHTML = msgs.map(m => {
+      const isOwner = m.sender === 'owner';
+      const dt = m.createdAt?.toDate ? m.createdAt.toDate() : new Date((m.createdAt?.seconds||0)*1000);
+      const time = dt.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+      return `<div style="display:flex;flex-direction:column;align-items:${isOwner?'flex-end':'flex-start'}">
+        <div style="background:${isOwner?'#1565c0':'#2a2d3e'};color:#fff;border-radius:${isOwner?'12px 12px 0 12px':'12px 12px 12px 0'};padding:8px 12px;max-width:70%;font-size:13px">
+          ${m.text}
+        </div>
+        <span style="font-size:10px;color:#555;margin-top:2px">${m.senderName||''} · ${time}</span>
+      </div>`;
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  window.sendChamadoMsg = async function(chamadoId, tenantName) {
+    const input = document.getElementById(`chat-input-${chamadoId}`);
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    const db = getFirestore();
+    const ownerName = currentOwnerData?.companyName || currentOwnerData?.name || 'Imobiliária';
+    await addDoc(collection(db, `maintenance/${chamadoId}/messages`), {
+      text,
+      sender: 'owner',
+      senderName: ownerName,
+      createdAt: serverTimestamp()
+    });
+    // Atualiza campo no doc pai para o app detectar nova mensagem
+    await updateDoc(doc(db, 'maintenance', chamadoId), {
+      lastMessage: text,
+      lastMessageAt: serverTimestamp(),
+      lastMessageSender: 'owner',
+      lastMessageName: ownerName
+    });
+  };
+
+  window.updateChamadoStatus = async function(id, newStatus) {
+    const db = getFirestore();
+    await updateDoc(doc(db, 'maintenance', id), { status: newStatus });
+  };
+
+  window.removeChamado = async function(id) {
+    if (!confirm('Remover este chamado? Esta ação não pode ser desfeita.')) return;
+    const db = getFirestore();
+    await deleteDoc(doc(db, 'maintenance', id));
+  };
+
+  function showChamadoToast(id, c) {
+    const shortId = id.slice(-6).toUpperCase();
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      position:fixed;top:20px;right:20px;z-index:9999;
+      background:#1a1d2e;border:1px solid #ef5350;border-radius:12px;
+      padding:16px 20px;min-width:280px;max-width:360px;
+      box-shadow:0 8px 32px rgba(0,0,0,.6);
+      animation:slideIn .3s ease;
+    `;
+    toast.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <div style="font-size:24px">🔧</div>
+        <div style="flex:1">
+          <div style="font-weight:700;color:#fff;font-size:14px;margin-bottom:4px">Novo chamado #${shortId}</div>
+          <div style="color:#aaa;font-size:13px;margin-bottom:2px"><b style="color:#e0e0e0">${c.tenantName || c.tenantEmail || 'Inquilino'}</b></div>
+          <div style="color:#888;font-size:12px">${c.category || ''} — ${(c.description||'').slice(0,60)}${(c.description||'').length>60?'…':''}</div>
+        </div>
+        <button onclick="this.closest('div[data-toast]').remove()" style="background:none;border:none;color:#888;cursor:pointer;font-size:18px;padding:0;line-height:1">×</button>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <button class="btn-sm" onclick="setTab('chamados');this.closest('[data-toast]').remove()" style="flex:1;text-align:center">Ver chamado</button>
+      </div>
+    `;
+    toast.setAttribute('data-toast','1');
+    document.body.appendChild(toast);
+
+    // Badge no tab
+    const badge = $('chamados-badge');
+    badge.textContent = (parseInt(badge.textContent)||0) + 1;
+    badge.style.display = 'inline';
+
+    // Som de notificação (beep simples via AudioContext)
+    try {
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 880; g.gain.setValueAtTime(0.3, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      o.start(); o.stop(ctx.currentTime + 0.4);
+    } catch(_) {}
+
+    setTimeout(() => toast.remove(), 8000);
+  }
+
+  // CSS da animação do toast
+  if (!document.getElementById('toast-style')) {
+    const st = document.createElement('style');
+    st.id = 'toast-style';
+    st.textContent = `@keyframes slideIn { from { transform:translateX(120%);opacity:0 } to { transform:translateX(0);opacity:1 } }`;
+    document.head.appendChild(st);
+  }
 
   // ── Gestão de Licenças (acesso admin no app) ──────────────────────────────
 
@@ -3611,6 +3973,7 @@
       $('tab-leads').style.display    = 'block';
     }
     startLeadsBadge();
+    if (currentOwnerId) startChamadosListener(currentOwnerId);
 
     showSection('dashboard-section');
     renderPlanBanner();
@@ -3828,6 +4191,7 @@
     <div class="tab" id="tab-licenses" style="display:none">🔑 Licenças</div>
     <div class="tab" id="tab-config" style="display:none">⚙ Configurações</div>
     <div class="tab" id="tab-plano" style="display:none">💳 Meu Plano</div>
+    <div class="tab" id="tab-chamados">🔧 Chamados <span id="chamados-badge" style="display:none;background:#ef5350;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px">0</span></div>
   </div>
 
   <!-- Painel: Inquilinos -->
@@ -4117,6 +4481,21 @@
         <li style="color:#aaa;font-size:13px">✅ Comprovante anual para o inquilino</li>
       </ul>
     </div>
+  </div>
+
+  <!-- Painel: Chamados de manutenção -->
+  <div class="panel" id="panel-chamados" style="display:none">
+    <div class="section-header">
+      <h2>🔧 Chamados de Manutenção</h2>
+    </div>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Inquilino</th><th>Imóvel</th><th>Categoria</th><th>Descrição</th><th>Aberto em</th><th>Status</th><th>Ações</th></tr>
+      </thead>
+      <tbody id="chamados-tbody">
+        <tr><td colspan="8" class="empty">Carregando...</td></tr>
+      </tbody>
+    </table>
   </div>
 
   <!-- Painel: Imobiliárias (só master) -->
