@@ -26,6 +26,19 @@ const APP_BASE_URL  = process.env.APP_BASE_URL || 'https://ilocarpay.com.br';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// Monta endereço completo na ordem correta: Logradouro, Nº, Complemento, Bairro, Cidade/UF
+function buildAddr(p = {}) {
+  const parts = [
+    p.street || p.logradouro,
+    p.number  || p.numero,
+    p.complement || p.complemento,
+    p.neighborhood || p.bairro,
+  ].filter(Boolean);
+  const cityUf = [p.city || p.cidade, p.state || p.estado].filter(Boolean).join('/');
+  if (cityUf) parts.push(cityUf);
+  return parts.join(', ');
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function assinafyReq(method, path, body, apiKey) {
@@ -469,9 +482,7 @@ async function handleApproveLead(db, body) {
   // Cria contrato — usa contractData do modal quando fornecido; fallback para lead.property
   const cd  = contractData || {};
   const lp  = lead.property || {};
-  const propAddr = cd.propertyAddress
-    || [lp.street, lp.number, lp.complement, lp.neighborhood, lp.city, lp.state].filter(Boolean).join(', ')
-    || lead.propertyDescription || '';
+  const propAddr = cd.propertyAddress || buildAddr(lp) || lead.propertyDescription || '';
 
   // Usa dados do proprietário: override do modal > lead.landlord > fallback owner
   const landlordSrc   = landlordOverride?.name ? landlordOverride : (lead.landlord || {});
@@ -1285,7 +1296,7 @@ async function handleCronRetryAssinafy(db) {
       const t = lead.tenant || {};
       const p = lead.property || {};
       const landlord = lead.landlord || {};
-      const propAddr = [p.street, p.number, p.complement, p.neighborhood, p.city, p.state].filter(Boolean).join(', ');
+      const propAddr = buildAddr(p);
       await createAssinafyContract(db, contractId, {
         contractId,
         ownerName:       landlord.name       || c.landlordName    || '',
@@ -1424,7 +1435,7 @@ async function handleCronRetryAssinafy(db) {
       const t = lead.tenant || {};
       const p = lead.property || {};
       const landlord = lead.landlord || {};
-      const propAddr = [p.street, p.number, p.complement, p.neighborhood, p.city, p.state].filter(Boolean).join(', ');
+      const propAddr = buildAddr(p);
       const assinafyResult = await createAssinafyContract(db, contractId, {
         contractId,
         ownerName:       landlord.name || c.landlordName || '',
