@@ -141,21 +141,44 @@ export default async function handler(req, res) {
       }
     }
 
-    // Se já tem PIX salvo, retorna direto
-    if (charge.pixCopyPaste && charge.pixQrCode) {
+    const name  = user.name  || user.email?.split('@')[0] || 'Inquilino';
+    const email = user.email || '';
+    const cpf   = user.cpf   || '';
+    const phone = user.phone || '';
+
+    // Verifica se a cobrança está vencida
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const chargeDueDate = charge.dueDate?.seconds
+      ? new Date(charge.dueDate.seconds * 1000)
+      : null;
+    const isOverdue = chargeDueDate && chargeDueDate < today;
+
+    // Se não está vencida e já tem PIX salvo, retorna direto
+    if (!isOverdue && charge.pixCopyPaste && charge.pixQrCode) {
       return res.status(200).json({
         pixCopyPaste: charge.pixCopyPaste,
         pixQrCode:    charge.pixQrCode
       });
     }
 
-    const name  = user.name  || user.email?.split('@')[0] || 'Inquilino';
-    const email = user.email || '';
-    const cpf   = user.cpf   || '';
-    const phone = user.phone || '';
+    // Se está vencida e tem cobrança antiga no Asaas, cancela para recriar com juros
+    if (isOverdue && charge.asaasChargeId) {
+      try {
+        await fetch(`https://api.asaas.com/v3/payments/${charge.asaasChargeId}`, {
+          method: 'DELETE',
+          headers: { 'access_token': apiKey }
+        });
+      } catch (_) { /* ignora erro de cancelamento */ }
+      // Limpa o charge antigo do Firestore para forçar recriação
+      await db.collection('charges').doc(resolvedChargeId).update({
+        asaasChargeId: null,
+        pixCopyPaste: null,
+        pixQrCode: null
+      });
+    }
 
-    // Se já tem asaasChargeId, tenta só buscar o QR
-    if (charge.asaasChargeId) {
+    // Se não está vencida e tem asaasChargeId, tenta só buscar o QR
+    if (!isOverdue && charge.asaasChargeId) {
       try {
         const pix = await asaasGet(`/payments/${charge.asaasChargeId}/pixQrCode`, apiKey);
         await db.collection('charges').doc(resolvedChargeId).update({
@@ -169,18 +192,12 @@ export default async function handler(req, res) {
     // Cria ou reutiliza cliente no Asaas
     const customerId = await findOrCreateCustomer(name, email, cpf, phone, apiKey);
 
-    // DueDate: usa a data da cobrança, mas garante que seja >= amanhã se já venceu
+    // DueDate: usa sempre a data original da cobrança para que o Asaas calcule juros corretamente.
+    // Se a cobrança está vencida, passamos a data original (no passado) — o Asaas aceita e
+    // aplica multa + juros automáticos sobre os dias de atraso.
     let dueDate;
-    if (charge.dueDate?.seconds) {
-      const d = new Date(charge.dueDate.seconds * 1000);
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      if (d < today) {
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        dueDate = tomorrow.toISOString().slice(0, 10);
-      } else {
-        dueDate = d.toISOString().slice(0, 10);
-      }
+    if (chargeDueDate) {
+      dueDate = chargeDueDate.toISOString().slice(0, 10);
     } else {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
