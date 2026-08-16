@@ -259,6 +259,30 @@
     }
 
     contracts = contractsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Carrega leads para suprir bairro em contratos antigos (criados antes dos campos individuais)
+    let leadNeighborhoodMap = {}; // leadId → { neighborhood, street, number, city, state }
+    try {
+      const leadsQ = isMaster && !currentOwnerId
+        ? getDocs(collection(db, 'leads'))
+        : getDocs(query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId)));
+      (await leadsQ).docs.forEach(d => {
+        const lp = d.data().property || {};
+        leadNeighborhoodMap[d.id] = lp;
+      });
+    } catch (_) {}
+    // Injeta bairro e campos individuais nos contratos que não têm (criados via approve-lead antigo)
+    contracts.forEach(c => {
+      if (!c.propertyBairro && c.leadId && leadNeighborhoodMap[c.leadId]) {
+        const lp = leadNeighborhoodMap[c.leadId];
+        c.propertyLogradouro = c.propertyLogradouro || lp.street       || '';
+        c.propertyNumero     = c.propertyNumero     || lp.number       || '';
+        c.propertyBairro     = c.propertyBairro     || lp.neighborhood || '';
+        c.propertyCidade     = c.propertyCidade     || lp.city         || '';
+        c.propertyEstado     = c.propertyEstado     || lp.state        || '';
+      }
+    });
+
     // Carrega também os user docs vinculados via contrato mas sem ownerId (registros antigos)
     const fetchedIds = new Set(usersSnap.docs.map(d => d.id));
     const extraTenantIds = [...new Set(contracts.map(c => c.tenantId).filter(id => id && !fetchedIds.has(id)))];
@@ -2618,7 +2642,18 @@
       const contract  = contracts.find(c => c.tenantId === t.id);
       const rent      = contract ? fmt.format(contract.baseRent || 0) : '—';
       const propCode  = contract?.propertyCode ? `<span style="font-size:10px;font-weight:700;background:#1a2e1a;color:#4CAF50;border:1px solid #2e4a2e;border-radius:4px;padding:1px 6px;margin-right:4px;letter-spacing:.05em">${esc(contract.propertyCode)}</span>` : '';
-      const property  = propCode + esc(contract?.propertyAddress || contract?.propertyDescription || (contract ? '—' : '—'));
+      const property  = propCode + esc((() => {
+        if (!contract) return '—';
+        if (contract.propertyLogradouro) {
+          let a = contract.propertyLogradouro;
+          if (contract.propertyNumero) a += `, ${contract.propertyNumero}`;
+          if (contract.propertyBairro) a += `, ${contract.propertyBairro}`;
+          if (contract.propertyCidade) a += `, ${contract.propertyCidade}`;
+          if (contract.propertyEstado) a += `/${contract.propertyEstado}`;
+          return a;
+        }
+        return contract.propertyAddress || contract.propertyDescription || '—';
+      })());
       const digital   = contract?.requiresDigitalContract;
       const status    = !contract
         ? '<span class="badge inactive">Sem contrato</span>'
