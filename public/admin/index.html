@@ -1422,7 +1422,9 @@
       : (l.propertyDescription || '');
     $('approve-lead-prop').textContent = (l.propertyCode || l.property?.code || '') + (propAddr ? ' — ' + propAddr : '');
     $('modal-approve-lead').style.display = 'flex';
-    $('approve-rent').value = l.property?.rentValue || '';
+    // Converte "500.00" (formato americano salvo pelo app) para "R$ 500,00" (BRL) para que parseBRL funcione corretamente
+    const _rv = parseFloat(l.property?.rentValue || '0');
+    $('approve-rent').value = _rv ? 'R$ ' + _rv.toFixed(2).replace('.', ',').replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.') : '';
     $('approve-due-day').value = l.property?.dueDay || '10';
     const startVal = l.property?.startDate
       ? l.property.startDate.split('/').reverse().join('-')
