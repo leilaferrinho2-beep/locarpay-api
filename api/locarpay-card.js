@@ -850,6 +850,140 @@ async function handleGenerateCharges(db, body) {
   return { ok: true, created };
 }
 
+// ── AUTO-GENERATE UPCOMING CHARGES ───────────────────────────────────────────
+// Roda diariamente: para cada contrato ativo, verifica se hoje está dentro de
+// `daysBeforeDue` dias do próximo vencimento. Se sim, cria a cobrança se ainda
+// não existir. Configurável por owner via campo `daysBeforeDue` (padrão: 5).
+async function handleAutoGenerateUpcoming(db, { ownerId, ownerData = {} }) {
+  const daysBeforeDue = typeof ownerData.daysBeforeDue === 'number' ? ownerData.daysBeforeDue : 5;
+
+  const contractsSnap = await db.collection('contracts')
+    .where('ownerId', '==', ownerId)
+    .where('active', '==', true)
+    .get();
+
+  if (contractsSnap.empty) return { created: 0 };
+
+  const now   = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // meia-noite local
+
+  let created = 0;
+  const newCharges = [];
+  const batch = db.batch();
+
+  await Promise.all(contractsSnap.docs.map(async contractDoc => {
+    const contract = contractDoc.data();
+    const { tenantId, tenantEmail, baseRent, dueDay = 10, id: contractId, propertyDescription = '' } = contract;
+    if (!tenantId || !baseRent) return;
+
+    // Próximo vencimento: este mês ou próximo, dependendo de onde estamos
+    let dYear  = today.getFullYear();
+    let dMonth = today.getMonth(); // 0-indexed
+
+    let dueDate = new Date(dYear, dMonth, dueDay);
+    // Ajusta meses curtos (ex: 31 de fevereiro → último dia do mês)
+    if (dueDate.getMonth() !== dMonth) dueDate = new Date(dYear, dMonth + 1, 0);
+
+    // Se vencimento deste mês já passou, avança para o próximo
+    if (dueDate < today) {
+      dMonth += 1;
+      dueDate = new Date(dYear, dMonth, dueDay);
+      if (dueDate.getMonth() !== ((dMonth) % 12)) dueDate = new Date(dYear, dMonth + 1, 0);
+    }
+
+    // Só gera se estamos dentro da janela de daysBeforeDue
+    const diffDays = Math.ceil((dueDate - today) / 86400000);
+    if (diffDays > daysBeforeDue) return;
+
+    const monthStr  = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`;
+    const dueSecs   = Math.floor(dueDate.getTime() / 1000);
+
+    // Deduplicação: já existe cobrança para este contrato neste mês?
+    const existing = await db.collection('charges')
+      .where('contractId', '==', contractId)
+      .where('monthRef',   '==', monthStr)
+      .limit(1).get();
+    if (!existing.empty) return;
+
+    const chargeRef = db.collection('charges').doc();
+    batch.set(chargeRef, {
+      id:                  chargeRef.id,
+      contractId,
+      tenantId,
+      tenantEmail:         tenantEmail || '',
+      dueDate:             { seconds: dueSecs, nanoseconds: 0 },
+      baseRent,
+      extras:              [],
+      totalAmount:         baseRent,
+      status:              'pending',
+      asaasChargeId:       '',
+      pixCopyPaste:        '',
+      pixQrCode:           '',
+      ownerId,
+      monthRef:            monthStr,
+      propertyDescription: propertyDescription || '',
+      generatedAt:         new Date()
+    });
+    newCharges.push({ tenantEmail: tenantEmail || '', baseRent, dueDate, monthStr });
+    created++;
+  }));
+
+  if (created > 0) {
+    await batch.commit();
+    const fmt         = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.titan.email', port: 587, secure: false,
+      auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
+    });
+    await Promise.all(newCharges.map(async ({ tenantEmail, baseRent, dueDate, monthStr }) => {
+      if (!tenantEmail) return;
+      const dueFmt = dueDate.toLocaleDateString('pt-BR');
+      try {
+        await transporter.sendMail({
+          from:    'iLocarPay <denis@dlftech.com.br>',
+          to:      tenantEmail,
+          subject: `Nova cobrança de aluguel — ${fmt.format(baseRent)}`,
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#fff">
+              <div style="background:#1B5E20;padding:20px 28px;border-radius:12px 12px 0 0">
+                <span style="color:#fff;font-weight:800;font-size:20px">iLocarPay</span>
+              </div>
+              <div style="padding:28px 28px 8px">
+                <p style="color:#888;font-size:13px;margin:0 0 6px">NOVA COBRANÇA — ${monthStr}</p>
+                <h2 style="color:#1a1a1a;margin:0 0 20px;font-size:24px">${fmt.format(baseRent)}</h2>
+                <div style="background:#f8f8f8;border-radius:10px;padding:18px 20px;margin-bottom:24px">
+                  <table style="width:100%;border-collapse:collapse">
+                    <tr>
+                      <td style="color:#777;font-size:14px;padding:4px 0">Referência</td>
+                      <td style="font-weight:600;color:#1a1a1a;text-align:right;font-size:14px">${monthStr}</td>
+                    </tr>
+                    <tr>
+                      <td style="color:#777;font-size:14px;padding:4px 0">Vencimento</td>
+                      <td style="font-weight:600;color:#c62828;text-align:right;font-size:14px">${dueFmt}</td>
+                    </tr>
+                    <tr>
+                      <td style="color:#777;font-size:14px;padding:4px 0">Valor</td>
+                      <td style="font-weight:700;color:#1B5E20;text-align:right;font-size:15px">${fmt.format(baseRent)}</td>
+                    </tr>
+                  </table>
+                </div>
+                <div style="text-align:center;margin-bottom:24px">
+                  <p style="color:#444;font-size:14px;margin-bottom:12px">Abra o app iLocarPay para gerar o QR Code PIX e pagar em segundos.</p>
+                  <span style="display:inline-block;background:#1B5E20;color:#fff;font-weight:700;font-size:15px;padding:12px 32px;border-radius:8px">Pagar via iLocarPay</span>
+                </div>
+                <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+                <p style="color:#bbb;font-size:11px;text-align:center">Pague até ${dueFmt} para evitar multas e juros. Mensagem automática do iLocarPay.</p>
+              </div>
+            </div>
+          `
+        });
+      } catch (_) {}
+    }));
+  }
+
+  return { created };
+}
+
 // ── MARK OVERDUE ─────────────────────────────────────────────────────────────
 // Marca como 'overdue' cobranças pendentes com vencimento no passado
 async function handleMarkOverdue(db, body) {
@@ -1539,13 +1673,13 @@ async function handleCronDaily(db, req) {
       await handleAnnualRentAlert(db, { ownerId });
     } catch (e) { results.errors.push(`${ownerId}/rent-alert: ${e.message}`); }
 
-    if (isFirstOfMonth) {
-      try {
-        // 4. Gera cobranças do mês corrente (monthOffset=0)
-        const gc = await handleGenerateCharges(db, { ownerId, monthOffset: 0 });
-        results.charges += gc.created || 0;
-      } catch (e) { results.errors.push(`${ownerId}/generate: ${e.message}`); }
+    try {
+      // 4. Gera cobranças N dias antes do vencimento (por contrato, todo dia)
+      const gc = await handleAutoGenerateUpcoming(db, { ownerId, ownerData: ownerDoc.data() });
+      results.charges += gc.created || 0;
+    } catch (e) { results.errors.push(`${ownerId}/generate: ${e.message}`); }
 
+    if (isFirstOfMonth) {
       try {
         // 5. Envia relatório do mês anterior
         const prev = new Date();
