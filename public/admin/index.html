@@ -1191,17 +1191,20 @@
   };
 
   function loadLeads() {
-    if (!currentOwnerId) return;
     const tbody = $('leads-tbody');
     if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="empty">Carregando...</td></tr>';
     if (leadsListUnsubscribe) leadsListUnsubscribe();
     // Pré-carrega nomes completos dos corretores para exibição
     let brokerNameMap = {};
-    getDocs(query(collection(db, 'brokers'), where('ownerId', '==', currentOwnerId)))
-      .then(bs => { bs.docs.forEach(b => { const d = b.data(); if (d.email) brokerNameMap[d.email.toLowerCase()] = d.name || ''; }); renderLeads(); })
-      .catch(() => {});
+    const brokersQ = currentOwnerId
+      ? getDocs(query(collection(db, 'brokers'), where('ownerId', '==', currentOwnerId)))
+      : getDocs(collection(db, 'brokers'));
+    brokersQ.then(bs => { bs.docs.forEach(b => { const d = b.data(); if (d.email) brokerNameMap[d.email.toLowerCase()] = d.name || ''; }); renderLeads(); }).catch(() => {});
+    const leadsQ = currentOwnerId
+      ? query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId), limit(100))
+      : query(collection(db, 'leads'), limit(100));
     leadsListUnsubscribe = onSnapshot(
-      query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId), limit(100)),
+      leadsQ,
       snap => {
         leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         leads.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
@@ -4030,7 +4033,7 @@
 
     // ── Data de hoje
     const dateEl = $('dash-date');
-    if (dateEl) dateEl.textContent = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    if (dateEl) { const s = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }); dateEl.textContent = s.charAt(0).toUpperCase() + s.slice(1); }
 
     // ── Últimos imóveis locados (contratos ativos, mais recentes primeiro)
     const rcEl = $('dash-recent-contracts');
