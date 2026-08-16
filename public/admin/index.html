@@ -3610,13 +3610,13 @@
   $('otp-code-input').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-verify-otp').click(); });
 
   $('tab-overview').addEventListener('click', () => { setTab('overview'); });
-  $('tab-tenants').addEventListener('click', () => { setTab('tenants'); loadTenants(); });
-  $('tab-owners').addEventListener('click',  () => { setTab('owners');  loadOwners(); });
-  $('tab-overdue').addEventListener('click', () => { setTab('overdue'); loadOverdue(); });
-  $('tab-licenses').addEventListener('click',() => { setTab('licenses'); loadLicenses(); });
-  $('tab-config').addEventListener('click',  () => { setTab('config'); loadBrokers(); loadConfigTab(); });
-  $('tab-leads').addEventListener('click',   () => { setTab('leads'); loadLeads(); });
-  $('tab-brokers').addEventListener('click', () => { setTab('brokers'); loadBrokersTab(); });
+  $('tab-tenants').addEventListener('click', () => { setTab('tenants');  setTimeout(loadTenants,    0); });
+  $('tab-owners').addEventListener('click',  () => { setTab('owners');   setTimeout(loadOwners,     0); });
+  $('tab-overdue').addEventListener('click', () => { setTab('overdue');  setTimeout(loadOverdue,    0); });
+  $('tab-licenses').addEventListener('click',() => { setTab('licenses'); setTimeout(loadLicenses,   0); });
+  $('tab-config').addEventListener('click',  () => { setTab('config');   setTimeout(() => { loadBrokers(); loadConfigTab(); }, 0); });
+  $('tab-leads').addEventListener('click',   () => { setTab('leads');    setTimeout(loadLeads,      0); });
+  $('tab-brokers').addEventListener('click', () => { setTab('brokers');  setTimeout(loadBrokersTab, 0); });
   $('tab-plano').addEventListener('click',   () => { setTab('plano'); renderPlanoTab?.(); });
   $('tab-chamados').addEventListener('click', () => { setTab('chamados'); $('chamados-badge').style.display='none'; });
 
