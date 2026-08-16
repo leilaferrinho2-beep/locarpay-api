@@ -191,9 +191,18 @@ export default async function handler(req, res) {
     // — cria cliente e segue normalmente
     const customerId = await findOrCreateCustomer(name, email, cpf, phone, apiKey);
 
-    // DueDate para o Asaas: amanhã (cobrança nova com valor já corrigido embutido)
-    const tomorrow = new Date(nowBR); tomorrow.setDate(tomorrow.getDate() + 1);
-    const dueDate = tomorrow.toISOString().slice(0, 10);
+    // DueDate para o Asaas:
+    //  - Se vencido: hoje (valor já inclui multa+juros calculados manualmente; Asaas aceita hoje)
+    //  - Se no prazo: data original da cobrança
+    let dueDate;
+    if (isOverdue) {
+      dueDate = todayStr;
+    } else if (chargeDueDate) {
+      dueDate = chargeDueDate.toISOString().slice(0, 10);
+    } else {
+      const tomorrow = new Date(nowBR); tomorrow.setDate(tomorrow.getDate() + 1);
+      dueDate = tomorrow.toISOString().slice(0, 10);
+    }
 
     const baseValue = charge.totalAmount || charge.baseRent || 5;
 
