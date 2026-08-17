@@ -1300,8 +1300,8 @@
     }
 
     const fmtRow = (label, val) => val ? `
-      <tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;white-space:nowrap">${label}</td>
-          <td style="color:#e0e0e0;font-size:13px;padding:4px 0">${esc(val)}</td></tr>` : '';
+      <tr><td style="color:#888;font-size:12px;padding:4px 12px 4px 0;white-space:nowrap;width:160px;min-width:160px;vertical-align:top">${label}</td>
+          <td style="color:#e0e0e0;font-size:13px;padding:4px 0;vertical-align:top">${esc(val)}</td></tr>` : '';
 
     const section = (title, rows) => rows ? `
       <div style="margin-bottom:16px">
