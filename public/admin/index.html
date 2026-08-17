@@ -2748,6 +2748,7 @@
         <td style="white-space:nowrap">
           <button class="btn-sm" onclick="openEditTenant('${t.id}')">Editar</button>
           <button class="btn-sm btn-sm-alt" onclick="openExtras('${t.id}')">+Extra</button>
+          <button class="btn-sm btn-sm-alt" onclick="openAvulsa('${t.id}','${(t.name||'').replace(/'/g,"\\'")}')" style="color:#FFD54F;border-color:#FFD54F">+Avulsa</button>
           <button class="btn-sm" onclick="openHistory('${t.id}')">Histórico</button>
           ${(()=>{ if (!currentOwnerData?.creditAnalysisEnabled) return '';
             const ca = t.creditAnalysis; const s = ca?.status||'pending';
@@ -3058,6 +3059,56 @@
       }
     }, { danger: true, okText: 'Encerrar' });
   }
+
+  // ── Cobrança avulsa ───────────────────────────────────────────
+  let _avulsaTenantId = null;
+  window.openAvulsa = function(tenantId, tenantName) {
+    _avulsaTenantId = tenantId;
+    $('avulsa-tenant-name').textContent = tenantName || tenantId;
+    $('av-desc').value  = '';
+    $('av-value').value = '';
+    $('av-due').value   = new Date().toISOString().slice(0,10);
+    $('av-error').textContent = '';
+    $('modal-avulsa').style.display = 'flex';
+  };
+
+  window.saveAvulsa = async function() {
+    const desc  = $('av-desc').value.trim();
+    const value = parseBRL($('av-value').value);
+    const due   = $('av-due').value;
+    if (!desc) { $('av-error').textContent = 'Informe a descrição.'; return; }
+    if (!value || value <= 0) { $('av-error').textContent = 'Informe um valor válido.'; return; }
+    if (!due) { $('av-error').textContent = 'Informe o vencimento.'; return; }
+    const btn = $('av-save');
+    btn.disabled = true; btn.textContent = 'Gerando...';
+    try {
+      const contract = contracts.find(c => c.tenantId === _avulsaTenantId);
+      const dueDate  = new Date(due + 'T12:00:00');
+      const chargeRef = doc(collection(db, 'charges'));
+      await setDoc(chargeRef, {
+        id:          chargeRef.id,
+        tenantId:    _avulsaTenantId,
+        contractId:  contract?.id || '',
+        ownerId:     currentOwnerId,
+        description: desc,
+        baseRent:    value,
+        extras:      [],
+        totalAmount: value,
+        dueDate:     dueDate,
+        status:      'pending',
+        asaasChargeId: '',
+        pixCopyPaste:  '',
+        pixQrCode:     '',
+        createdAt:   new Date()
+      });
+      $('modal-avulsa').style.display = 'none';
+      showToast('Cobrança avulsa gerada com sucesso!', 'success');
+    } catch(e) {
+      $('av-error').textContent = 'Erro: ' + e.message;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Gerar cobrança';
+    }
+  };
 
   // ── Cobranças extras ──────────────────────────────────────────
   let extrasForTenant = null;
@@ -5402,6 +5453,31 @@
       <button class="btn-outline" id="history-close">Fechar</button>
     </div>
     <div id="history-list" style="overflow-x:auto"></div>
+  </div>
+</div>
+
+<!-- Modal: Cobrança Avulsa -->
+<div id="modal-avulsa" class="modal-overlay">
+  <div class="modal-box" style="max-width:420px">
+    <h3>Cobrança Avulsa — <span id="avulsa-tenant-name"></span></h3>
+    <p style="font-size:12px;color:#666;margin-bottom:16px">Gera uma nova cobrança independente para o inquilino.</p>
+    <div style="margin-bottom:14px">
+      <label>Descrição</label>
+      <input id="av-desc" type="text" placeholder="Ex: Multa, Reparo, Taxa…">
+    </div>
+    <div style="margin-bottom:14px">
+      <label>Valor (R$)</label>
+      <input id="av-value" type="text" inputmode="numeric" placeholder="R$ 0,00" oninput="maskBRL(this)">
+    </div>
+    <div style="margin-bottom:14px">
+      <label>Vencimento</label>
+      <input id="av-due" type="date">
+    </div>
+    <div id="av-error" style="color:#ef5350;font-size:13px;margin-bottom:10px"></div>
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="$('modal-avulsa').style.display='none'">Cancelar</button>
+      <button class="btn" id="av-save" onclick="saveAvulsa()">Gerar cobrança</button>
+    </div>
   </div>
 </div>
 
