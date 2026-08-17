@@ -1199,7 +1199,7 @@
     const brokersQ = currentOwnerId
       ? getDocs(query(collection(db, 'brokers'), where('ownerId', '==', currentOwnerId)))
       : getDocs(collection(db, 'brokers'));
-    brokersQ.then(bs => { bs.docs.forEach(b => { const d = b.data(); if (d.email) brokerNameMap[d.email.toLowerCase()] = d.name || ''; }); renderLeads(); }).catch(() => {});
+    brokersQ.then(bs => { bs.docs.forEach(b => { const d = b.data(); if (d.email) brokerNameMap[d.email.toLowerCase()] = d.name || ''; }); window._brokerNameMap = brokerNameMap; renderLeads(); }).catch(() => {});
     const leadsQ = currentOwnerId
       ? query(collection(db, 'leads'), where('ownerId', '==', currentOwnerId), limit(100))
       : query(collection(db, 'leads'), limit(100));
@@ -1224,6 +1224,7 @@
       }
     );
   }
+  window.loadLeads = loadLeads;
 
   function renderLeads() {
     const tbody = $('leads-tbody');
@@ -1268,7 +1269,7 @@
       return `<tr>
         <td><strong>${esc(l.tenant?.name)||'—'}</strong><br><span style="font-size:11px;color:#888">${esc(l.tenant?.email)||''}</span><br><span style="font-size:11px;color:#666">${esc(l.tenant?.cpf)||''}</span></td>
         <td><span style="font-size:12px">${esc(prop)}</span>${rent ? `<br><span style="color:#4CAF50;font-size:12px;font-weight:600">${esc(rent)}/mês</span>` : ''}</td>
-        <td>${esc((brokerNameMap[(l.brokerEmail||'').toLowerCase()])||l.brokerName||l.brokerEmail||'—')}</td>
+        <td>${esc(((window._brokerNameMap||{})[(l.brokerEmail||'').toLowerCase()])||l.brokerName||l.brokerEmail||'—')}</td>
         <td>${statusLine}<br><span style="font-size:11px;color:#666">${(l.docs||[]).length} doc(s)</span></td>
         <td style="white-space:nowrap">${btns}</td>
       </tr>`;
