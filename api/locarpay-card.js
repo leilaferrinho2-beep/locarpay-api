@@ -2223,6 +2223,13 @@ export default async function handler(req, res) {
 
     // Webhook Asaas sem step (evento direto da subconta)
     if (!step && req.body?.event && req.body?.payment) {
+      const webhookToken = process.env.ASAAS_WEBHOOK_TOKEN;
+      if (webhookToken) {
+        const sentToken = req.headers['asaas-access-token'];
+        if (sentToken !== webhookToken) {
+          return res.status(401).json({ error: 'Webhook token inválido' });
+        }
+      }
       return res.status(200).json(await handleAsaasPaymentWebhook(db, req.body));
     }
 
