@@ -141,6 +141,28 @@ export default async function handler(req, res) {
       }
     }
 
+    // Se já está pago no Firestore, retorna imediatamente
+    if (charge.status === 'paid') {
+      return res.status(200).json({ paid: true });
+    }
+
+    // Se tem asaasChargeId, verifica status no Asaas antes de tentar criar novo
+    if (charge.asaasChargeId) {
+      try {
+        const statusRes = await fetch(`https://api.asaas.com/v3/payments/${charge.asaasChargeId}`, {
+          headers: { 'access_token': apiKey }
+        });
+        if (statusRes.ok) {
+          const asaasData = await statusRes.json();
+          if (asaasData.status === 'RECEIVED' || asaasData.status === 'CONFIRMED') {
+            // Pago no Asaas mas não no Firestore (webhook falhou): sincroniza agora
+            await db.collection('charges').doc(resolvedChargeId).update({ status: 'paid' });
+            return res.status(200).json({ paid: true });
+          }
+        }
+      } catch (_) {}
+    }
+
     const name  = user.name  || user.email?.split('@')[0] || 'Inquilino';
     const email = user.email || '';
     const cpf   = user.cpf   || '';
@@ -204,7 +226,7 @@ export default async function handler(req, res) {
       dueDate = tomorrow.toISOString().slice(0, 10);
     }
 
-    const baseValue = charge.totalAmount || charge.baseRent || 5;
+    const baseValue = charge.baseRent || charge.totalAmount || 5;
 
     // Configurações de atraso (lidas do Firestore ou padrão)
     const configData = (configSnap.exists ? configSnap.data() : {}) || {};
@@ -213,9 +235,22 @@ export default async function handler(req, res) {
     const monetaryCorrectionRate = configData.monetaryCorrectionRate   ?? 0.35; // % a.m. IPCA-E
     const cardFeePercentage      = configData.cardFeePercentage        ?? 2.99;
 
-    // Valor base — não embutimos multa/juros no valor para não exceder limite do Asaas.
-    // O Asaas aplica fine/interest automaticamente via PIX dinâmico ao receber o pagamento.
-    const value = baseValue;
+    // Para cobranças vencidas: calcula multa+juros manualmente e embute no valor.
+    // O Asaas recebe dueDate=hoje, então fine/interest params só ativariam amanhã —
+    // embutindo no valor garantimos o total correto imediatamente.
+    let value;
+    let paymentFine     = null;
+    let paymentInterest = null;
+    if (isOverdue) {
+      const fineAmount     = baseValue * finePercentage / 100;
+      const dailyRate      = (interestRate + monetaryCorrectionRate) / 100 / 30;
+      const interestAmount = baseValue * dailyRate * daysOverdue;
+      value = Math.round((baseValue + fineAmount + interestAmount) * 100) / 100;
+    } else {
+      value           = baseValue;
+      paymentFine     = { value: finePercentage };
+      paymentInterest = { value: parseFloat((interestRate + monetaryCorrectionRate).toFixed(4)) };
+    }
     const description = `Aluguel ${chargeDueDate ? chargeDueDate.toISOString().slice(0,7) : dueDate.slice(0,7)}`;
 
     // Lê walletId master e percentual de comissão para split automático
@@ -236,9 +271,9 @@ export default async function handler(req, res) {
       value,
       dueDate,
       description,
-      fine:     { value: finePercentage },
-      interest: { value: parseFloat((interestRate + monetaryCorrectionRate).toFixed(4)) }
     };
+    if (paymentFine)     paymentBody.fine     = paymentFine;
+    if (paymentInterest) paymentBody.interest = paymentInterest;
     if (splitEntry) paymentBody.split = [splitEntry];
 
     const asaasCharge = await asaasPost('/payments', paymentBody, apiKey);
