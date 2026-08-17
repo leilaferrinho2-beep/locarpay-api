@@ -882,7 +882,7 @@ async function handleGenerateCharges(db, body) {
       const dueFmt = dueDate.toLocaleDateString('pt-BR');
       try {
         await transporter.sendMail({
-          from:    'iiLocarPay <denis@dlftech.com.br>',
+          from:    'iLocarPay <denis@dlftech.com.br>',
           to:      tenantEmail,
           subject: `Nova cobrança de aluguel — ${fmt.format(baseRent)}`,
           html: `
@@ -1138,7 +1138,7 @@ async function handleMarkOverdue(db, body) {
       const total = base + multa + juros;
       try {
         await transporter.sendMail({
-          from: 'iiLocarPay <denis@dlftech.com.br>',
+          from: 'iLocarPay <denis@dlftech.com.br>',
           to: email,
           subject: `⚠️ Cobrança vencida — regularize agora`,
           html: `
@@ -1562,7 +1562,7 @@ async function handleMonthlyReport(db, body) {
   });
 
   await transporter.sendMail({
-    from: 'iiLocarPay <denis@dlftech.com.br>',
+    from: 'iLocarPay <denis@dlftech.com.br>',
     to: owner.email,
     subject: `Relatório de ${monthName} — iiLocarPay`,
     html: `
@@ -1665,7 +1665,7 @@ async function handleAnnualRentAlert(db, body) {
     if (daysIn > 5) continue;
 
     await transporter.sendMail({
-      from: 'iiLocarPay <denis@dlftech.com.br>',
+      from: 'iLocarPay <denis@dlftech.com.br>',
       to: owner.email,
       subject: `📅 Reajuste anual do contrato — ${c.propertyDescription || 'Imóvel'}`,
       html: `
@@ -1839,7 +1839,7 @@ async function handleNotifyContractExpiry(db, body) {
     // Email ao owner
     if (owner.email) {
       await transporter.sendMail({
-        from: 'iiLocarPay <denis@dlftech.com.br>',
+        from: 'iLocarPay <denis@dlftech.com.br>',
         to: owner.email,
         subject: `⚠️ Contrato vence em ${daysLeft} dia${daysLeft !== 1 ? 's' : ''} — ${tenantName}`,
         html: `
