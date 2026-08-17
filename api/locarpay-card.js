@@ -612,6 +612,66 @@ async function handleAcceptTerms(db, body, req) {
   return { ok: true, version: CURRENT_TERMS_VERSION };
 }
 
+// ── CHECK CONTRACT STATUS (polling do app do corretor) ───────────────────────
+async function handleCheckContractStatus(db, body) {
+  const { contractId } = body;
+  if (!contractId) return { ok: false, error: 'contractId obrigatório' };
+
+  const contractRef  = db.collection('contracts').doc(contractId);
+  const contractSnap = await contractRef.get();
+  if (!contractSnap.exists) return { ok: false, error: 'contrato não encontrado' };
+
+  const c = contractSnap.data();
+  const assinafyDocId = c.assinafyDocumentId;
+  if (!assinafyDocId) return { ok: true, contractStatus: c.contractStatus || null, skipped: 'sem documentId Assinafy' };
+
+  // Consulta status atual diretamente na Assinafy
+  const configSnap = await db.collection('config').doc('assinafy').get();
+  const apiKey = configSnap.data()?.apiKey;
+  if (!apiKey) return { ok: true, contractStatus: c.contractStatus || null, skipped: 'sem apiKey' };
+
+  const r = await fetch(`https://api.assinafy.com.br/v1/documents/${assinafyDocId}`, {
+    headers: { 'X-Api-Key': apiKey, 'Accept': 'application/json' }
+  });
+  if (!r.ok) return { ok: true, contractStatus: c.contractStatus || null };
+
+  const doc = await r.json();
+  const signers = doc?.data?.assignment?.signers || doc?.data?.assignments?.[0]?.signers || [];
+
+  const ownerSigned  = signers.some(s => s.step === 1 && s.status === 'signed');
+  const tenantSigned = signers.some(s => s.step === 2 && s.status === 'signed');
+  const allSigned    = ownerSigned && tenantSigned;
+
+  let newStatus = c.contractStatus;
+  const updates = {};
+
+  if (allSigned && c.contractStatus !== 'CONTRATO_ASSINADO') {
+    newStatus = 'CONTRATO_ASSINADO';
+    updates.contractStatus = newStatus;
+    updates.bothSigned     = true;
+    updates.ownerSigned    = true;
+  } else if (ownerSigned && !tenantSigned && c.contractStatus === 'AGUARDANDO_PROPRIETARIO') {
+    newStatus = 'AGUARDANDO_INQUILINO';
+    updates.contractStatus = newStatus;
+    updates.ownerSigned    = true;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    updates.updatedAt = new Date();
+    await contractRef.update(updates);
+
+    // Propaga ao lead vinculado
+    const leadSnap = c.leadId
+      ? await db.collection('leads').doc(c.leadId).get()
+      : (await db.collection('leads').where('contractId', '==', contractId).limit(1).get()).docs[0];
+    if (leadSnap?.exists) await leadSnap.ref.update({ contractStatus: newStatus, updatedAt: new Date() });
+
+    console.log(`[check-contract-status] ${contractId} atualizado → ${newStatus}`);
+  }
+
+  return { ok: true, contractStatus: newStatus };
+}
+
 // ── SYNC STATUS ──────────────────────────────────────────────────────────────
 async function handleSyncStatus(db, body) {
   const ownerId = body?.ownerId || await getDefaultOwnerId(db);
@@ -2222,7 +2282,8 @@ export default async function handler(req, res) {
     if (step === 'sync-status')    return res.status(200).json(await handleSyncStatus(db, req.body));
     if (step === 'sync-customers') return res.status(200).json(await handleSyncCustomers(db, req.body));
     if (step === 'check-terms')    return res.status(200).json(await handleCheckTerms(db, req.body));
-    if (step === 'accept-terms')   return res.status(200).json(await handleAcceptTerms(db, req.body, req));
+    if (step === 'accept-terms')        return res.status(200).json(await handleAcceptTerms(db, req.body, req));
+    if (step === 'check-contract-status') return res.status(200).json(await handleCheckContractStatus(db, req.body));
     if (step === 'mark-overdue')      return res.status(200).json(await handleMarkOverdue(db, req.body));
     if (step === 'send-push')         return res.status(200).json(await handleSendPush(db, req.body));
     if (step === 'generate-charges')  return res.status(200).json(await handleGenerateCharges(db, req.body));
