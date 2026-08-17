@@ -73,7 +73,7 @@ export default async function handler(req, res) {
     initFirebase();
     const db = getFirestore();
 
-    const { tenantId, chargeId } = req.body || {};
+    const { tenantId, chargeId, checkOnly } = req.body || {};
     if (!tenantId) return res.status(400).json({ error: 'tenantId obrigatório' });
 
     // Lê dados do Firestore
@@ -161,6 +161,11 @@ export default async function handler(req, res) {
           }
         }
       } catch (_) {}
+    }
+
+    // checkOnly=true: só verificou status, não precisa gerar novo QR
+    if (checkOnly) {
+      return res.status(200).json({ paid: false, status: charge.status });
     }
 
     const name  = user.name  || user.email?.split('@')[0] || 'Inquilino';
