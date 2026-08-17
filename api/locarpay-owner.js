@@ -778,6 +778,16 @@ export default async function handler(req, res) {
     if (step === 'setup-webhook')          return res.status(200).json(await handleSetupWebhook(db, body));
     if (step === 'setup-payment-webhook')  return res.status(200).json(await handleSetupPaymentWebhook(db, body));
     if (step === 'delete-tenant')  return res.status(200).json(await handleDeleteTenant(db, body, req));
+
+    // Temporário: atualiza config/app com nova versão do APK
+    if (step === 'set-app-version') {
+      const secret = process.env.CRON_SECRET;
+      if (!secret || body.secret !== secret) return res.status(401).json({ error: 'Unauthorized' });
+      const { versionCode, versionName, url } = body;
+      await db.collection('config').doc('app').set({ versionCode, versionName, url }, { merge: true });
+      return res.status(200).json({ ok: true, versionCode, versionName, url });
+    }
+
     return res.status(400).json({ error: 'step invalido' });
 
   } catch (e) {
