@@ -24,7 +24,7 @@ async function enviarEmail(email, otp) {
   });
 
   await transporter.sendMail({
-    from: 'LocarPay <denis@dlftech.com.br>',
+    from: 'iLocarPay <denis@dlftech.com.br>',
     to: email,
     subject: 'Seu código de acesso ao LocarPay',
     html: `

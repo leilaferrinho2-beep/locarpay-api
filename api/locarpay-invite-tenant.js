@@ -15,7 +15,7 @@ async function enviarConvite({ email, tenantName, ownerName, propertyDescription
   });
 
   await transporter.sendMail({
-    from: 'LocarPay <denis@dlftech.com.br>',
+    from: 'iLocarPay <denis@dlftech.com.br>',
     to: email,
     subject: 'Você foi cadastrado no LocarPay',
     html: `
