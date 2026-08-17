@@ -617,14 +617,7 @@ async function handleApproveLead(db, body) {
   const propAddrWa = [lead.property?.street, lead.property?.number, lead.property?.city].filter(Boolean).join(', ') || lead.propertyDescription || 'imóvel';
 
   await Promise.allSettled([
-    // PDF ao proprietário
-    landlordEmail ? (async () => {
-      try {
-        const pdfData = await generateContractPdf(contractPdfParams);
-        await sendContractEmail({ landlordName, landlordEmail, tenantName: lead.tenant.name, tenantEmail, propAddr, pdfData });
-        console.log('[approve-lead] PDF enviado ao proprietário:', landlordEmail);
-      } catch (e) { console.warn('[approve-lead] contract email error:', e.message); }
-    })() : Promise.resolve(),
+    Promise.resolve(), // PDF separado removido — proprietário recebe link de assinatura via Assinafy
 
     // E-mail boas-vindas ao inquilino
     (async () => {
@@ -871,13 +864,7 @@ async function handleGenerateContract(db, body) {
   }
 
   // Envia PDF do contrato por e-mail ao proprietário (sempre, independente da Assinafy)
-  if (landlordEmail) {
-    try {
-      const pdfData = await generateContractPdf(contractPdfData);
-      const propAddr = c.propertyAddress || c.address || c.propertyCode || '';
-      await sendContractEmail({ landlordName, landlordEmail, tenantName, tenantEmail: c.tenantEmail, propAddr, pdfData });
-    } catch (e) { console.warn('[generate-contract] contract email error:', e.message); }
-  }
+  // E-mail com PDF em anexo removido — proprietário recebe link de assinatura via Assinafy
 
   // Salva phones no contrato para o webhook usar depois
   await db.collection('contracts').doc(contractId).update({
