@@ -715,10 +715,10 @@ async function handleDeleteTenant(db, body, req) {
   const userSnap = await db.collection('users').doc(tenantId).get();
   if (!userSnap.exists) throw Object.assign(new Error('Inquilino não encontrado'), { status: 404 });
 
-  // Revoga sessão Firebase do inquilino
+  // Deleta conta Firebase Auth do inquilino (impede novo login)
   try {
     const fbUser = await getAuth().getUserByEmail(userSnap.data().email);
-    await getAuth().revokeRefreshTokens(fbUser.uid);
+    await getAuth().deleteUser(fbUser.uid);
   } catch (_) {}
 
   // Deleta cobranças, contratos, leads e usuário
