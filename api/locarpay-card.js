@@ -569,18 +569,11 @@ async function handleCheckTerms(db, body) {
   const snap = await db.collection('users').doc(tenantId).get();
   const data = snap.exists ? snap.data() : {};
   const alreadyAccepted = data.acceptedTermsVersion === CURRENT_TERMS_VERSION;
-  // Auto-aceita se ainda não aceitou (compatibilidade com versões antigas do app)
-  if (!alreadyAccepted && snap.exists) {
-    await db.collection('users').doc(tenantId).set({
-      acceptedTermsVersion: CURRENT_TERMS_VERSION,
-      termsAcceptedAt: new Date()
-    }, { merge: true });
-  }
   return {
-    accepted:        true,
+    accepted:        alreadyAccepted,
     currentVersion:  CURRENT_TERMS_VERSION,
-    acceptedVersion: CURRENT_TERMS_VERSION,
-    acceptedAt:      data.termsAcceptedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+    acceptedVersion: data.acceptedTermsVersion || null,
+    acceptedAt:      data.termsAcceptedAt?.toDate?.()?.toISOString() || null
   };
 }
 
