@@ -762,13 +762,29 @@ async function handleGenerateCharges(db, body) {
     const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
 
     // Verifica se já existe cobrança para este contrato neste mês
-    const existing = await db.collection('charges')
+    // Primeiro tenta por monthRef (cobranças novas); fallback por dueDate para cobranças antigas
+    const existingByMonth = await db.collection('charges')
       .where('contractId', '==', contractId)
       .where('monthRef', '==', monthStr)
       .limit(1)
       .get();
+    if (!existingByMonth.empty) return; // já existe
 
-    if (!existing.empty) return; // já existe
+    // Fallback: checa cobranças sem monthRef dentro do mês alvo (evita duplicatas de dados antigos)
+    const monthStart = Math.floor(new Date(year, month, 1).getTime() / 1000);
+    const monthEnd   = Math.floor(new Date(year, month + 1, 0, 23, 59, 59).getTime() / 1000);
+    const existingByDate = await db.collection('charges')
+      .where('contractId', '==', contractId)
+      .where('dueDate', '>=', { seconds: monthStart, nanoseconds: 0 })
+      .where('dueDate', '<=', { seconds: monthEnd,   nanoseconds: 0 })
+      .limit(1)
+      .get();
+    if (!existingByDate.empty) {
+      // Migra: adiciona monthRef à cobrança existente para evitar checagem futura por data
+      const doc = existingByDate.docs[0];
+      if (!doc.data().monthRef) await doc.ref.update({ monthRef: monthStr });
+      return;
+    }
 
     const chargeRef = db.collection('charges').doc();
     batch.set(chargeRef, {
