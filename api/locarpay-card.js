@@ -246,15 +246,22 @@ async function handleInit(db, body, apiKey) {
 }
 
 // Cancela ou estorna a micro-cobrança — tenta cancel (pending) e depois refund (confirmed)
-async function cancelOrRefundMicro(asaasPaymentId, apiKey) {
+async function cancelOrRefundMicro(asaasPaymentId, apiKey, value) {
+  if (!asaasPaymentId) return; // sem ID, nada a fazer
+  let cancelErr, refundErr;
   try {
     await asaasReq('POST', `/payments/${asaasPaymentId}/cancel`, {}, apiKey);
-    return;
-  } catch (_) {}
-  // Se cancel falhou (pagamento já foi capturado), tenta refund
+    return; // sucesso no cancel
+  } catch (e) { cancelErr = e?.message || String(e); }
+  // Se cancel falhou (pagamento já capturado), tenta refund completo
   try {
-    await asaasReq('POST', `/payments/${asaasPaymentId}/refund`, {}, apiKey);
-  } catch (_) {}
+    const body = value ? { value } : {};
+    await asaasReq('POST', `/payments/${asaasPaymentId}/refund`, body, apiKey);
+  } catch (e) {
+    refundErr = e?.message || String(e);
+    console.error(`[micro-refund] cancel="${cancelErr}" refund="${refundErr}" id=${asaasPaymentId}`);
+    // não lança — a cobrança principal não deve ser bloqueada por falha de estorno
+  }
 }
 
 // ── VERIFY AMOUNT ─────────────────────────────────────────────────────────────
@@ -278,7 +285,7 @@ async function handleVerifyAmount(db, body, req) {
   const verApiKey  = await getAsaasKey(db, ownerId);
 
   if (new Date() > ver.expiresAt.toDate()) {
-    await cancelOrRefundMicro(ver.asaasPaymentId, verApiKey);
+    await cancelOrRefundMicro(ver.microPaymentId, verApiKey, ver.microAmount);
     throw Object.assign(new Error('Verificação expirada. Recadastre o cartão.'), { status: 400 });
   }
 
@@ -288,14 +295,14 @@ async function handleVerifyAmount(db, body, req) {
 
   if (!match) {
     // Valor errado → estorna a micro-cobrança e bloqueia
-    await cancelOrRefundMicro(ver.microPaymentId, verApiKey);
+    await cancelOrRefundMicro(ver.microPaymentId, verApiKey, ver.microAmount);
     await verRef.update({ verifyAttempts: (ver.verifyAttempts || 0) + 1, blocked: true });
     throw Object.assign(new Error('Valor incorreto. A micro-cobrança foi estornada. Recadastre o cartão.'), { status: 422 });
   }
 
   // Valor correto → estorna a micro-cobrança e libera para o confirm cobrar o valor real
   await Promise.all([
-    cancelOrRefundMicro(ver.microPaymentId, verApiKey),
+    cancelOrRefundMicro(ver.microPaymentId, verApiKey, ver.microAmount),
     verRef.update({ verifyAttempts: (ver.verifyAttempts || 0) + 1, amountVerified: true })
   ]);
 
