@@ -2749,6 +2749,7 @@
           <button class="btn-sm" onclick="openEditTenant('${t.id}')">Editar</button>
           <button class="btn-sm btn-sm-alt" onclick="openExtras('${t.id}')">+Extra</button>
           <button class="btn-sm btn-sm-alt" onclick="openAvulsa('${t.id}','${(t.name||'').replace(/'/g,"\\'")}')" style="color:#FFD54F;border-color:#FFD54F">+Avulsa</button>
+          <button class="btn-sm btn-sm-alt" onclick="openAviso('${t.id}','${(t.name||'').replace(/'/g,"\\'")}')" style="color:#80DEEA;border-color:#80DEEA">📢 Aviso</button>
           <button class="btn-sm" onclick="openHistory('${t.id}')">Histórico</button>
           ${(()=>{ if (!currentOwnerData?.creditAnalysisEnabled) return '';
             const ca = t.creditAnalysis; const s = ca?.status||'pending';
@@ -3899,12 +3900,68 @@
       createdAt: serverTimestamp()
     });
     // Atualiza campo no doc pai para o app detectar nova mensagem
-    await updateDoc(doc(db, 'maintenance', chamadoId), {
+    const chamadoRef = doc(db, 'maintenance', chamadoId);
+    const chamadoSnap = await getDoc(chamadoRef);
+    const tenantId = chamadoSnap.data()?.tenantId;
+    await updateDoc(chamadoRef, {
       lastMessage: text,
       lastMessageAt: serverTimestamp(),
       lastMessageSender: 'owner',
       lastMessageName: ownerName
     });
+    // Push FCM para o inquilino
+    if (tenantId) {
+      fetch('/api/locarpay-owner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step: 'send-notification',
+          recipientType: 'tenant',
+          tenantId,
+          chamadoId,
+          title: `💬 Nova mensagem de ${ownerName}`,
+          body: text.slice(0, 100),
+          type: 'chamado'
+        })
+      }).catch(() => {});
+    }
+  };
+
+  // ── Enviar Aviso manual para inquilino ────────────────────────
+  let _avisoTenantId = null;
+  window.openAviso = function(tenantId, tenantName) {
+    _avisoTenantId = tenantId;
+    document.getElementById('aviso-tenant-name').textContent = tenantName;
+    document.getElementById('aviso-title').value = '';
+    document.getElementById('aviso-body').value = '';
+    document.getElementById('modal-aviso').style.display = 'flex';
+  };
+
+  window.saveAviso = async function() {
+    const title = document.getElementById('aviso-title').value.trim();
+    const body  = document.getElementById('aviso-body').value.trim();
+    if (!title || !body) { showToast('Preencha título e mensagem.', 'error'); return; }
+    const btn = document.getElementById('btn-save-aviso');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    try {
+      const r = await fetch('/api/locarpay-owner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step: 'send-notification',
+          recipientType: 'tenant',
+          tenantId: _avisoTenantId,
+          title,
+          body,
+          type: 'aviso'
+        })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Erro');
+      showToast('Aviso enviado com sucesso!', 'success');
+      document.getElementById('modal-aviso').style.display = 'none';
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Enviar'; }
   };
 
   window.updateChamadoStatus = async function(id, newStatus) {
@@ -5477,6 +5534,27 @@
     <div class="modal-actions">
       <button class="btn-outline" onclick="$('modal-avulsa').style.display='none'">Cancelar</button>
       <button class="btn" id="av-save" onclick="saveAvulsa()">Gerar cobrança</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Enviar Aviso -->
+<div id="modal-aviso" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="max-width:420px">
+    <h3>📢 Enviar Aviso — <span id="aviso-tenant-name"></span></h3>
+    <p style="font-size:12px;color:#888;margin-bottom:16px">O inquilino receberá uma notificação push no app.</p>
+    <div style="margin-bottom:14px">
+      <label>Título</label>
+      <input id="aviso-title" type="text" placeholder="Ex: Documentos pendentes, Visita agendada…" maxlength="60">
+    </div>
+    <div style="margin-bottom:14px">
+      <label>Mensagem</label>
+      <textarea id="aviso-body" rows="4" placeholder="Escreva o aviso aqui…" maxlength="200"
+        style="width:100%;background:#1e2030;border:1px solid #3a3d52;color:#e0e0e0;border-radius:8px;padding:10px;font-size:13px;resize:vertical;outline:none"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="document.getElementById('modal-aviso').style.display='none'">Cancelar</button>
+      <button class="btn" id="btn-save-aviso" onclick="saveAviso()" style="background:#80DEEA;color:#000">Enviar</button>
     </div>
   </div>
 </div>

@@ -7,6 +7,7 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, Timestamp }       from 'firebase-admin/firestore';
 import { getAuth }                        from 'firebase-admin/auth';
+import { getMessaging }                   from 'firebase-admin/messaging';
 import nodemailer                         from 'nodemailer';
 
 const PLANS = {
@@ -740,6 +741,47 @@ async function handleDeleteTenant(db, body, req) {
   return { ok: true };
 }
 
+// ── SEND NOTIFICATION ────────────────────────────────────────────────────────
+// Envia push FCM para um inquilino (recipientType=tenant) ou para o owner (recipientType=owner)
+// body: { recipientType, tenantId?, ownerId?, chamadoId?, title, body, type }
+async function handleSendNotification(db, body) {
+  const { recipientType, tenantId, ownerId, chamadoId, title, body: msgBody, type } = body;
+  if (!title || !msgBody) throw Object.assign(new Error('title e body obrigatórios'), { status: 400 });
+
+  let token = null;
+
+  if (recipientType === 'tenant' && tenantId) {
+    const snap = await db.collection('users').doc(tenantId).get();
+    token = snap.data()?.fcmToken || null;
+  } else if (recipientType === 'owner' && ownerId) {
+    const ownerSnap = await db.collection('owners').doc(ownerId).get();
+    token = ownerSnap.data()?.fcmToken || null;
+    if (!token) {
+      // fallback: admin na coleção users com mesmo ownerId
+      const userSnap = await db.collection('users')
+        .where('ownerId', '==', ownerId)
+        .where('role', '==', 'admin')
+        .limit(1).get();
+      token = userSnap.docs[0]?.data()?.fcmToken || null;
+    }
+  }
+
+  if (!token) return { ok: false, reason: 'FCM token não encontrado' };
+
+  const channelId = type === 'chamado' ? 'locarpay_chamado' : 'locarpay_aviso';
+  const data = { type: type || 'aviso' };
+  if (chamadoId) data.chamadoId = chamadoId;
+
+  await getMessaging().send({
+    token,
+    notification: { title, body: msgBody },
+    data,
+    android: { priority: 'high', notification: { channelId } }
+  });
+
+  return { ok: true };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -780,7 +822,8 @@ export default async function handler(req, res) {
     if (step === 'notify-trial')   return res.status(200).json(await handleNotifyTrial(db, body));
     if (step === 'setup-webhook')          return res.status(200).json(await handleSetupWebhook(db, body));
     if (step === 'setup-payment-webhook')  return res.status(200).json(await handleSetupPaymentWebhook(db, body));
-    if (step === 'delete-tenant')  return res.status(200).json(await handleDeleteTenant(db, body, req));
+    if (step === 'delete-tenant')        return res.status(200).json(await handleDeleteTenant(db, body, req));
+    if (step === 'send-notification')    return res.status(200).json(await handleSendNotification(db, body));
 
     return res.status(400).json({ error: 'step invalido' });
 
