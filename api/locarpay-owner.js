@@ -745,7 +745,7 @@ async function handleDeleteTenant(db, body, req) {
 // Envia push FCM para um inquilino (recipientType=tenant) ou para o owner (recipientType=owner)
 // body: { recipientType, tenantId?, ownerId?, chamadoId?, title, body, type }
 async function handleSendNotification(db, body) {
-  const { recipientType, tenantId, ownerId, chamadoId, title, body: msgBody, type } = body;
+  const { recipientType, tenantId, ownerId, brokerId, chamadoId, chatId, title, body: msgBody, type } = body;
   if (!title || !msgBody) throw Object.assign(new Error('title e body obrigatórios'), { status: 400 });
 
   let token = null;
@@ -757,20 +757,23 @@ async function handleSendNotification(db, body) {
     const ownerSnap = await db.collection('owners').doc(ownerId).get();
     token = ownerSnap.data()?.fcmToken || null;
     if (!token) {
-      // fallback: admin na coleção users com mesmo ownerId
       const userSnap = await db.collection('users')
-        .where('ownerId', '==', ownerId)
-        .where('role', '==', 'admin')
-        .limit(1).get();
+        .where('ownerId', '==', ownerId).where('role', '==', 'admin').limit(1).get();
       token = userSnap.docs[0]?.data()?.fcmToken || null;
     }
+  } else if (recipientType === 'broker' && brokerId) {
+    const brokerSnap = await db.collection('brokers').doc(brokerId).get();
+    token = brokerSnap.data()?.fcmToken || null;
   }
 
   if (!token) return { ok: false, reason: 'FCM token não encontrado' };
 
-  const channelId = type === 'chamado' ? 'locarpay_chamado' : 'locarpay_aviso';
+  const channelId = type === 'chamado' ? 'locarpay_chamado'
+    : type === 'broker_chat' ? 'locarpay_chamado'
+    : 'locarpay_aviso';
   const data = { type: type || 'aviso' };
   if (chamadoId) data.chamadoId = chamadoId;
+  if (chatId) data.chatId = chatId;
 
   await getMessaging().send({
     token,
