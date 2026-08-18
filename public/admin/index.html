@@ -3698,10 +3698,33 @@
     );
     let firstLoad = true;
     const _lastMsgAt = {};
-    _chamadosUnsubscribe = onSnapshot(q, snap => {
+    _chamadosUnsubscribe = onSnapshot(q, async snap => {
       const rows = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      // Resolve nome real para chamados cujo tenantName é um e-mail
+      await Promise.all(rows.map(async c => {
+        if (c.tenantId && (!c.tenantName || c.tenantName.includes('@'))) {
+          try {
+            const snap = await getDoc(doc(db, 'users', c.tenantId));
+            const n = snap.data()?.name;
+            if (n && !n.includes('@')) {
+              c.tenantName = n;
+              // Corrige no Firestore para não repetir a resolução
+              updateDoc(doc(db, 'maintenance', c.id), { tenantName: n }).catch(() => {});
+              return;
+            }
+            // Fallback: contrato
+            const cSnap = await getDocs(query(collection(db, 'contracts'),
+              where('tenantId', '==', c.tenantId), limit(1)));
+            const cn = cSnap.docs[0]?.data()?.tenantName;
+            if (cn && !cn.includes('@')) {
+              c.tenantName = cn;
+              updateDoc(doc(db, 'maintenance', c.id), { tenantName: cn }).catch(() => {});
+            }
+          } catch (_) {}
+        }
+      }));
       renderChamados(rows);
 
       if (!firstLoad) {
