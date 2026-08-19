@@ -7,7 +7,7 @@ const db = admin.firestore();
   await db.collection('config').doc('app').set({
     versionCode: 248,
     versionName: '5.28',
-    url: 'https://www.ilocarpay.com.br/download/locarpay-v86.apk'
+    url: 'https://storage.googleapis.com/transgu-web-6d50f.firebasestorage.app/download/locarpay-v86.apk'
   });
   console.log('config/app atualizado: 248 / 5.28 (locarpayapp)');
   process.exit(0);
