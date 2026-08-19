@@ -341,8 +341,9 @@ async function handleUpdateBroker(db, body) {
   if (phone         !== undefined) updates.phone         = phone;
   if (active        !== undefined) updates.active        = active;
   if (creci         !== undefined) updates.creci         = creci;
-  if (commissionPct !== undefined) updates.commissionPct = parseFloat(commissionPct) || 0;
-  if (commission    !== undefined) updates.commission    = parseFloat(commission) || 0;
+  // Normaliza: ambos os campos escrevem em commissionPct (campo canônico lido pelo app)
+  if (commissionPct !== undefined) { const v = parseFloat(commissionPct) || 0; updates.commissionPct = v; updates.commission = v; }
+  if (commission    !== undefined && commissionPct === undefined) { const v = parseFloat(commission) || 0; updates.commissionPct = v; updates.commission = v; }
   if (!Object.keys(updates).length) throw Object.assign(new Error('Nenhum campo para atualizar'), { status: 400 });
   await db.collection('brokers').doc(brokerId).update(updates);
   await db.collection('users').doc(brokerId).update({ name: updates.name ?? '', phone: updates.phone ?? '' }).catch(() => {});
