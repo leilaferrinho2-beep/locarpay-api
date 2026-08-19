@@ -4079,23 +4079,74 @@
   let _bcdUnreadListener = null;
 
   // Listener global de mensagens não lidas de corretores
+  // Rastreia unreadOwner anterior por brokerId para detectar mensagens NOVAS
+  const _bcdPrevUnread = {};
+  let _bcdListenerInit = false;
+
+  function _showChatNotification(brokerName, lastMessage, brokerId) {
+    const id = 'chat-notif-' + Date.now();
+    const el = document.createElement('div');
+    el.id = id;
+    el.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:99999;
+      background:#1a2a3a;border:1px solid #2196F3;border-radius:14px;
+      padding:14px 18px 14px 16px;min-width:280px;max-width:340px;
+      box-shadow:0 8px 32px rgba(0,0,0,.55);cursor:pointer;
+      display:flex;align-items:flex-start;gap:12px;
+      animation:slideInNotif .3s ease`;
+    el.innerHTML = `
+      <div style="font-size:26px;flex-shrink:0">💬</div>
+      <div style="flex:1;overflow:hidden">
+        <div style="font-size:13px;font-weight:700;color:#90caf9;margin-bottom:2px">Nova mensagem de corretor</div>
+        <div style="font-size:12px;font-weight:600;color:#e0e0e0;margin-bottom:3px">${_esc(brokerName)}</div>
+        <div style="font-size:12px;color:#aaa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(lastMessage)}</div>
+      </div>
+      <button onclick="document.getElementById('${id}').remove()" style="background:none;border:none;color:#555;font-size:18px;cursor:pointer;flex-shrink:0;padding:0;margin-top:-2px">×</button>`;
+    el.addEventListener('click', e => {
+      if (e.target.tagName === 'BUTTON') return;
+      el.remove();
+      goTab('brokers', loadBrokersTab);
+      setTimeout(() => openBrokerChat(brokerId, brokerName), 400);
+    });
+    document.body.appendChild(el);
+    // Som de notificação (beep suave via AudioContext)
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = 880; gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.start(); osc.stop(ctx.currentTime + 0.4);
+    } catch (_) {}
+    // Auto-remove após 8s
+    setTimeout(() => { if (document.getElementById(id)) document.getElementById(id).remove(); }, 8000);
+  }
+
   function startBrokerChatUnreadListener() {
     if (_bcdUnreadListener) { _bcdUnreadListener(); _bcdUnreadListener = null; }
     if (!currentOwnerId) return;
     const db = getFirestore();
     const q = query(collection(db, 'brokerChats'), where('ownerId', '==', currentOwnerId));
+    _bcdListenerInit = false;
     _bcdUnreadListener = onSnapshot(q, snap => {
       let total = 0;
       snap.docs.forEach(d => {
-        const unread = d.data().unreadOwner || 0;
-        const brokerId = d.data().brokerId || '';
+        const data = d.data();
+        const unread = data.unreadOwner || 0;
+        const brokerId = data.brokerId || '';
+        const brokerName = data.brokerName || 'Corretor';
+        const lastMsg = data.lastMessage || '';
+        // Detecta mensagem NOVA (não mostra na primeira carga, só em mudanças)
+        if (_bcdListenerInit) {
+          const prev = _bcdPrevUnread[brokerId] ?? 0;
+          if (unread > prev && data.lastSender === 'broker') {
+            _showChatNotification(brokerName, lastMsg, brokerId);
+          }
+        }
+        _bcdPrevUnread[brokerId] = unread;
         // Badge por corretor
         ['chat-unread-', 'chat-unread2-'].forEach(prefix => {
           const el = document.getElementById(prefix + brokerId);
-          if (el) {
-            el.textContent = unread > 0 ? unread : '';
-            el.style.display = unread > 0 ? 'inline' : 'none';
-          }
+          if (el) { el.textContent = unread > 0 ? unread : ''; el.style.display = unread > 0 ? 'inline' : 'none'; }
         });
         // Destaca botão quando tem não lidos
         ['chat-btn-', 'chat-btn2-'].forEach(prefix => {
@@ -4104,12 +4155,10 @@
         });
         total += unread;
       });
+      _bcdListenerInit = true;
       // Badge no nav
       const badge = document.getElementById('brokers-chat-badge');
-      if (badge) {
-        badge.textContent = total > 0 ? total : '';
-        badge.style.display = total > 0 ? 'inline' : 'none';
-      }
+      if (badge) { badge.textContent = total > 0 ? total : ''; badge.style.display = total > 0 ? 'inline' : 'none'; }
     });
   }
 
@@ -4673,6 +4722,7 @@
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(6px); align-items: center; justify-content: center; z-index: 300; }
   @keyframes slideInRight { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
   @keyframes modalIn { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  @keyframes slideInNotif { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   .modal-box { background: var(--s2); border: 1px solid var(--border); border-radius: 18px; padding: 32px; width: 500px; max-width: 95vw; max-height: 90vh; overflow-y: auto; animation: modalIn .2s ease; }
   .modal-box h3 { font-size: 18px; font-weight: 700; margin-bottom: 22px; letter-spacing: -0.3px; }
   .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 28px; }
