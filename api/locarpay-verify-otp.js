@@ -97,7 +97,7 @@ export default async function handler(req, res) {
     const mappedRole = (userRole === 'broker' || userRole === 'corretor') ? 'corretor' : userRole;
     const role = isAdmin ? 'admin' : mappedRole;
 
-    // ownerId: para owners é o próprio doc ID; para tenants busca no users
+    // ownerId: para owners é o próprio doc ID; para corretores está em brokers; para tenants em users
     let ownerId = null;
     if (ownerDoc) {
       ownerId = ownerDoc.id;
@@ -108,6 +108,11 @@ export default async function handler(req, res) {
         if (!ownerId) {
           const q = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get();
           if (!q.empty) ownerId = q.docs[0].data().ownerId || null;
+        }
+        // Corretores: ownerId está na coleção brokers (não em users)
+        if (!ownerId) {
+          const bq = await db.collection('brokers').where('email', '==', email.toLowerCase()).limit(1).get();
+          if (!bq.empty) ownerId = bq.docs[0].data().ownerId || null;
         }
       } catch (_) {}
     }
