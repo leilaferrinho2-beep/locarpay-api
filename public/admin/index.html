@@ -4182,6 +4182,13 @@
     setTimeout(() => document.getElementById('bcd-input')?.focus(), 80);
   };
 
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      const drawer = document.getElementById('broker-chat-drawer');
+      if (drawer && drawer.classList.contains('open')) window.closeBrokerChat();
+    }
+  });
+
   window.closeBrokerChat = function() {
     document.getElementById('broker-chat-drawer').classList.remove('open');
     document.getElementById('broker-chat-overlay').classList.remove('open');
