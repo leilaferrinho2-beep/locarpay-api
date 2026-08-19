@@ -4201,12 +4201,80 @@
       const dt = m.createdAt?.toDate ? m.createdAt.toDate() : new Date((m.createdAt?.seconds||0)*1000);
       const time = dt.toLocaleDateString('pt-BR', {day:'2-digit',month:'short'}) + ' ' +
                    dt.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+      const bg  = isOwner ? '#1565c0' : '#252840';
+      const rad = isOwner ? '14px 14px 4px 14px' : '14px 14px 14px 4px';
+
+      let contentHtml = '';
+      if (m.fileUrl) {
+        const isImg = m.fileType && m.fileType.startsWith('image/');
+        if (isImg) {
+          contentHtml = `<a href="${_esc(m.fileUrl)}" target="_blank" rel="noopener">
+            <img src="${_esc(m.fileUrl)}" alt="${_esc(m.fileName||'imagem')}"
+              style="max-width:220px;max-height:200px;border-radius:8px;display:block;cursor:zoom-in" loading="lazy">
+          </a>`;
+        } else {
+          contentHtml = `<a href="${_esc(m.fileUrl)}" target="_blank" rel="noopener"
+            style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(0,0,0,.25);border-radius:8px;text-decoration:none;color:#90caf9;min-width:160px">
+            <span style="font-size:22px">📄</span>
+            <span style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(m.fileName||'Arquivo PDF')}</span>
+          </a>`;
+        }
+        if (m.text) contentHtml += `<p style="margin:6px 0 0;font-size:13px;color:#fff;line-height:1.45;word-break:break-word">${_esc(m.text)}</p>`;
+      } else {
+        contentHtml = `<span style="font-size:13px;line-height:1.45;word-break:break-word">${_esc(m.text)}</span>`;
+      }
+
       return `<div style="display:flex;flex-direction:column;align-items:${isOwner?'flex-end':'flex-start'}">
-        <div style="background:${isOwner?'#1565c0':'#252840'};color:#fff;border-radius:${isOwner?'14px 14px 4px 14px':'14px 14px 14px 4px'};padding:10px 14px;max-width:80%;font-size:13px;line-height:1.45;word-break:break-word">${_esc(m.text)}</div>
+        <div style="background:${bg};color:#fff;border-radius:${rad};padding:${m.fileUrl?'8px':'10px 14px'};max-width:80%">${contentHtml}</div>
         <span style="font-size:10px;color:#555;margin-top:3px">${_esc(m.senderName||'')} · ${time}</span>
       </div>`;
     }).join('');
     el.scrollTop = el.scrollHeight;
+  }
+
+  // ── Upload de arquivo no chat ──────────────────────────────────────────────
+  let _bcdPendingFile = null; // { file, name, type }
+
+  window.bcdFileSelected = function(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    const isImg = file.type.startsWith('image/');
+    const isPdf = file.type === 'application/pdf';
+    if (!isImg && !isPdf) { alert('Apenas imagens (JPG/PNG) ou PDF são aceitos.'); input.value = ''; return; }
+    if (file.size > 20 * 1024 * 1024) { alert('Arquivo muito grande. Máximo 20 MB.'); input.value = ''; return; }
+    _bcdPendingFile = { file, name: file.name, type: file.type };
+    document.getElementById('bcd-file-icon').textContent = isImg ? '🖼️' : '📄';
+    document.getElementById('bcd-file-name').textContent = file.name;
+    document.getElementById('bcd-file-preview').style.display = 'block';
+    input.value = '';
+  };
+
+  window.bcdClearFile = function() {
+    _bcdPendingFile = null;
+    document.getElementById('bcd-file-preview').style.display = 'none';
+  };
+
+  async function bcdUploadFile(file, fileName, fileType) {
+    const bar = document.getElementById('bcd-upload-bar');
+    const fill = document.getElementById('bcd-upload-fill');
+    bar.style.display = 'block'; fill.style.width = '10%';
+    // 1. Obter URL assinada
+    const urlResp = await fetch('/api/locarpay-broker', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step: 'get-chat-upload-url', ownerId: currentOwnerId,
+        chatId: _bcdChatId, fileName, contentType: fileType })
+    });
+    if (!urlResp.ok) throw new Error('Falha ao obter URL de upload');
+    const { uploadUrl, publicUrl } = await urlResp.json();
+    fill.style.width = '40%';
+    // 2. PUT direto no GCS
+    const putResp = await fetch(uploadUrl, {
+      method: 'PUT', headers: { 'Content-Type': fileType }, body: file
+    });
+    if (!putResp.ok) throw new Error('Falha ao enviar arquivo');
+    fill.style.width = '100%';
+    setTimeout(() => { bar.style.display = 'none'; fill.style.width = '0%'; }, 400);
+    return publicUrl;
   }
 
   window.bcdSendMsg = async function() {
@@ -4214,19 +4282,28 @@
     const input = document.getElementById('bcd-input');
     const sendBtn = document.getElementById('bcd-send');
     const text = input.value.trim();
-    if (!text) return;
+    if (!text && !_bcdPendingFile) return;
+    const pendingFile = _bcdPendingFile;
     input.value = ''; input.style.height = 'auto';
     sendBtn.disabled = true; sendBtn.textContent = '…';
+    bcdClearFile();
     const db = getFirestore();
     const ownerName = currentOwnerData?.companyName || currentOwnerData?.name || 'Imobiliária';
     const now = serverTimestamp();
     try {
-      await addDoc(collection(db, `brokerChats/${_bcdChatId}/messages`), {
-        text, sender: 'owner', senderName: ownerName, createdAt: now
-      });
+      let fileUrl = null, fileType = null, fileName = null;
+      if (pendingFile) {
+        fileUrl  = await bcdUploadFile(pendingFile.file, pendingFile.name, pendingFile.type);
+        fileType = pendingFile.type;
+        fileName = pendingFile.name;
+      }
+      const msgData = { text: text || '', sender: 'owner', senderName: ownerName, createdAt: now };
+      if (fileUrl) { msgData.fileUrl = fileUrl; msgData.fileType = fileType; msgData.fileName = fileName; }
+      await addDoc(collection(db, `brokerChats/${_bcdChatId}/messages`), msgData);
+      const lastMsg = fileUrl ? (fileName || 'Arquivo') : text;
       await setDoc(doc(db, 'brokerChats', _bcdChatId), {
         ownerId: currentOwnerId, brokerId: _bcdBrokerId,
-        ownerName, lastMessage: text, lastMessageAt: now, lastSender: 'owner',
+        ownerName, lastMessage: lastMsg, lastMessageAt: now, lastSender: 'owner',
         unreadBroker: increment(1), unreadOwner: 0
       }, { merge: true });
       // Push FCM para o corretor
@@ -4235,10 +4312,10 @@
         body: JSON.stringify({
           step: 'send-notification', recipientType: 'broker', brokerId: _bcdBrokerId,
           chatId: _bcdChatId, title: `💬 ${ownerName}`,
-          body: text.slice(0, 100), type: 'broker_chat'
+          body: lastMsg.slice(0, 100), type: 'broker_chat'
         })
       }).catch(() => {});
-    } catch (_) {}
+    } catch (e) { alert('Falha ao enviar: ' + e.message); }
     sendBtn.disabled = false; sendBtn.textContent = 'Enviar';
     input.focus();
   };
@@ -5924,7 +6001,23 @@
       Nenhuma mensagem ainda
     </div>
   </div>
+  <!-- Preview de arquivo antes de enviar -->
+  <div id="bcd-file-preview" style="display:none;padding:8px 12px;background:#1a1d2e;border-top:1px solid #1e2138">
+    <div style="display:flex;align-items:center;gap:8px;background:#0d1017;border:1px solid #2a2d3e;border-radius:8px;padding:8px 10px">
+      <span id="bcd-file-icon" style="font-size:18px">📎</span>
+      <span id="bcd-file-name" style="flex:1;font-size:12px;color:#90caf9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <button onclick="bcdClearFile()" style="background:none;border:none;color:#555;cursor:pointer;font-size:16px;padding:0">×</button>
+    </div>
+    <div id="bcd-upload-bar" style="display:none;margin-top:6px;height:3px;background:#1e2138;border-radius:2px;overflow:hidden">
+      <div id="bcd-upload-fill" style="height:100%;background:#1565c0;width:0%;transition:width .2s"></div>
+    </div>
+  </div>
   <div class="bcd-input-row">
+    <input type="file" id="bcd-file-input" accept="image/*,application/pdf" style="display:none" onchange="bcdFileSelected(this)">
+    <button id="bcd-attach" onclick="document.getElementById('bcd-file-input').click()"
+      title="Anexar arquivo (PDF ou imagem)"
+      style="background:#1a2540;border:1px solid #2a2d3e;color:#90caf9;border-radius:10px;width:38px;height:38px;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:border-color .15s"
+      onmouseover="this.style.borderColor='#1565c0'" onmouseout="this.style.borderColor='#2a2d3e'">📎</button>
     <textarea id="bcd-input" rows="1" placeholder="Mensagem para o corretor… (Enter envia)"
       oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'"
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();bcdSendMsg()}"></textarea>

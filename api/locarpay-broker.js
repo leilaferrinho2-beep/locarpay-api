@@ -1104,6 +1104,26 @@ async function handleGetSignedReadUrl(body) {
   }
 }
 
+async function handleGetChatUploadUrl(body, bucket) {
+  const { ownerId, chatId, fileName, contentType } = body;
+  if (!ownerId || !fileName) throw Object.assign(new Error('ownerId e fileName obrigatórios'), { status: 400 });
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safeChatId = (chatId || ownerId).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const path = `chat/${safeChatId}/${Date.now()}_${safeName}`;
+  const storage = getStorage();
+  const bucketName = bucket || 'transgu-web-6d50f.firebasestorage.app';
+  const file = storage.bucket(bucketName).file(path);
+  try {
+    const signedOpts = { action: 'write', expires: Date.now() + 30 * 60 * 1000, version: 'v4' };
+    if (contentType) signedOpts.contentType = contentType;
+    const [signedUrl] = await file.getSignedUrl(signedOpts);
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${path}`;
+    return { ok: true, uploadUrl: signedUrl, publicUrl, path };
+  } catch (e) {
+    throw Object.assign(new Error('Erro ao gerar URL de upload: ' + e.message), { status: 500 });
+  }
+}
+
 async function handleGetUploadUrl(body, bucket) {
   const { ownerId, fileName, contentType } = body;
   if (!ownerId || !fileName) throw Object.assign(new Error('ownerId e fileName obrigatórios'), { status: 400 });
@@ -1370,7 +1390,8 @@ async function handleCronRetryAssinafy(db) {
     else if (step === 'cron-retry-assinafy')   result = await handleCronRetryAssinafy(db);
     else if (step === 'reject-lead')       result = await handleRejectLead(db, req.body);
     else if (step === 'remove-lead')       result = await handleRemoveLead(db, req.body);
-    else if (step === 'get-upload-url')    result = await handleGetUploadUrl(req.body, req._storageBucket);
+    else if (step === 'get-upload-url')      result = await handleGetUploadUrl(req.body, req._storageBucket);
+    else if (step === 'get-chat-upload-url') result = await handleGetChatUploadUrl(req.body, req._storageBucket);
     else if (step === 'upload-doc')        result = await handleUploadDoc(db, req.body);
     else if (step === 'get-signed-url')    result = await handleGetSignedReadUrl(req.body, req._storageBucket);
     else if (step === 'test-email') {
