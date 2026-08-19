@@ -5,6 +5,7 @@ import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { rateLimit, sanitizeString, isValidEmail, getClientIp } from './_security.js';
 
 function initAdmin() {
   if (getApps().length > 0) return;
@@ -53,10 +54,16 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { email } = req.body || {};
+  const email = sanitizeString(req.body?.email || '', 254);
   if (!email) return res.status(400).json({ error: 'Email obrigatório' });
+  if (!isValidEmail(email)) return res.status(400).json({ error: 'Email inválido' });
 
+  const ip = getClientIp(req);
   try {
+    // Máx 3 envios de OTP por IP por minuto, 5 por email por 10 minutos
+    await rateLimit(`send-otp:ip:${ip}`,       { maxRequests: 3, windowSeconds: 60  });
+    await rateLimit(`send-otp:email:${email}`,  { maxRequests: 5, windowSeconds: 600 });
+
     initAdmin();
     const db = getFirestore();
 
@@ -102,6 +109,10 @@ export default async function handler(req, res) {
     await enviarEmail(email.trim(), otp);
     return res.status(200).json({ ok: true });
   } catch (e) {
+    if (e.status === 429) {
+      res.setHeader('Retry-After', String(e.retryAfter || 60));
+      return res.status(429).json({ error: e.message });
+    }
     console.error(e);
     return res.status(500).json({ error: 'Erro ao enviar código' });
   }

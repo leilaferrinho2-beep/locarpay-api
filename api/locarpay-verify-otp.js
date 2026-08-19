@@ -4,6 +4,7 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { rateLimit, rateLimitReset, sanitizeString, isValidEmail, getClientIp } from './_security.js';
 
 function initAdmin() {
   if (getApps().length > 0) return;
@@ -24,10 +25,17 @@ export default async function handler(req, res) {
     return handleGoogleLogin(req, res, bearerToken);
   }
 
-  const { email, otp } = req.body || {};
+  const email = sanitizeString(req.body?.email || '', 254).toLowerCase();
+  const otp   = sanitizeString(req.body?.otp   || '', 10);
   if (!email || !otp) return res.status(400).json({ error: 'Email e código obrigatórios' });
+  if (!isValidEmail(email)) return res.status(400).json({ error: 'Email inválido' });
 
+  const ip = getClientIp(req);
   try {
+    // Rate limit: máx 5 tentativas por IP por minuto, e 10 por email por 5 minutos
+    await rateLimit(`otp:ip:${ip}`,    { maxRequests: 5,  windowSeconds: 60  });
+    await rateLimit(`otp:email:${email}`, { maxRequests: 10, windowSeconds: 300 });
+
     initAdmin();
     const db = getFirestore();
     const auth = getAuth();
@@ -119,8 +127,15 @@ export default async function handler(req, res) {
 
     await auth.setCustomUserClaims(uid, { role, ownerId });
     const customToken = await auth.createCustomToken(uid, { role, ownerId });
+    // Login bem-sucedido: reseta contadores de rate limit
+    await rateLimitReset(`otp:ip:${ip}`);
+    await rateLimitReset(`otp:email:${email}`);
     return res.status(200).json({ ok: true, customToken, role, ownerId });
   } catch (e) {
+    if (e.status === 429) {
+      res.setHeader('Retry-After', String(e.retryAfter || 60));
+      return res.status(429).json({ error: e.message });
+    }
     console.error(e);
     return res.status(500).json({ error: 'Erro ao verificar código' });
   }

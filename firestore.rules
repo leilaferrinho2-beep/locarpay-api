@@ -168,6 +168,11 @@ service cloud.firestore {
       }
     }
 
+    // ── _rateLimits (uso interno da API — Admin SDK bypassa regras) ───────────
+    match /_rateLimits/{docId} {
+      allow read, write: if false;
+    }
+
     // ── default: nega tudo nao declarado ─────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
