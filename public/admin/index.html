@@ -1776,9 +1776,9 @@
                 style="background:#1a2a3a;border:1px solid #2a4a6a;color:#64B5F6;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;margin-right:6px">
                 ✏️ Editar
               </button>
-              <button onclick="openBrokerChat('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}')"
+              <button id="chat-btn-${b.id}" onclick="openBrokerChat('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}')"
                 style="background:#1a2540;border:1px solid #1565c055;color:#90caf9;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;margin-right:6px">
-                💬 Chat
+                💬 Chat <span id="chat-unread-${b.id}" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;font-weight:700"></span>
               </button>
               <button onclick="deleteBroker('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}')"
                 style="background:#2a1a1a;border:1px solid #5a2a2a;color:#ef5350;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
@@ -1936,10 +1936,10 @@
                 onchange="saveBrokerCommission('${b.id}', this.value)"
                 onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
               <span style="font-size:12px;color:#888">%</span>
-              <button onclick="openBrokerChat('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}')"
+              <button id="chat-btn2-${b.id}" onclick="openBrokerChat('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}')"
                 style="margin-left:auto;display:flex;align-items:center;gap:6px;padding:7px 16px;background:#1a2a3a;border:1px solid #2196F3;color:#64B5F6;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer"
                 onmouseover="this.style.background='#1e3048'" onmouseout="this.style.background='#1a2a3a'">
-                💬 Chat
+                💬 Chat <span id="chat-unread2-${b.id}" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;font-weight:700"></span>
               </button>
             </div>
           </div>`;
@@ -4076,6 +4076,42 @@
   let _bcdBrokerId = null;
   let _bcdChatId   = null;
   let _bcdListener = null;
+  let _bcdUnreadListener = null;
+
+  // Listener global de mensagens não lidas de corretores
+  function startBrokerChatUnreadListener() {
+    if (_bcdUnreadListener) { _bcdUnreadListener(); _bcdUnreadListener = null; }
+    if (!currentOwnerId) return;
+    const db = getFirestore();
+    const q = query(collection(db, 'brokerChats'), where('ownerId', '==', currentOwnerId));
+    _bcdUnreadListener = onSnapshot(q, snap => {
+      let total = 0;
+      snap.docs.forEach(d => {
+        const unread = d.data().unreadOwner || 0;
+        const brokerId = d.data().brokerId || '';
+        // Badge por corretor
+        ['chat-unread-', 'chat-unread2-'].forEach(prefix => {
+          const el = document.getElementById(prefix + brokerId);
+          if (el) {
+            el.textContent = unread > 0 ? unread : '';
+            el.style.display = unread > 0 ? 'inline' : 'none';
+          }
+        });
+        // Destaca botão quando tem não lidos
+        ['chat-btn-', 'chat-btn2-'].forEach(prefix => {
+          const btn = document.getElementById(prefix + brokerId);
+          if (btn) btn.style.borderColor = unread > 0 ? '#ef4444' : (prefix === 'chat-btn-' ? '#1565c055' : '#2196F3');
+        });
+        total += unread;
+      });
+      // Badge no nav
+      const badge = document.getElementById('brokers-chat-badge');
+      if (badge) {
+        badge.textContent = total > 0 ? total : '';
+        badge.style.display = total > 0 ? 'inline' : 'none';
+      }
+    });
+  }
 
   window.openBrokerChat = function(brokerId, brokerName) {
     _bcdBrokerId = brokerId;
@@ -4464,6 +4500,7 @@
     }
     startLeadsBadge();
     if (currentOwnerId) startChamadosListener(currentOwnerId);
+    startBrokerChatUnreadListener();
 
     showSection('dashboard-section');
     renderPlanBanner();
@@ -4798,7 +4835,7 @@
     <div class="tab active" id="tab-overview"><span class="tab-icon">◈</span> Visão Geral</div>
     <div class="tab" id="tab-tenants"><span class="tab-icon">👤</span> Inquilinos</div>
     <div class="tab" id="tab-leads" style="display:none"><span class="tab-icon">📋</span> Leads</div>
-    <div class="tab" id="tab-brokers" style="display:none"><span class="tab-icon">🤝</span> Corretores</div>
+    <div class="tab" id="tab-brokers" style="display:none"><span class="tab-icon">🤝</span> Corretores <span id="brokers-chat-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:auto">0</span></div>
     <div class="tab" id="tab-overdue"><span class="tab-icon">⚠</span> Inadimplentes</div>
     <div class="tab" id="tab-chamados"><span class="tab-icon">🔧</span> Chamados <span id="chamados-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:auto">0</span></div>
     <div class="sidebar-sep"></div>
