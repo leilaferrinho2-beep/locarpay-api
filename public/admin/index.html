@@ -1929,13 +1929,18 @@
                 <tbody>${histHtml}</tbody>
               </table>
             </div>
-            <div style="margin-top:12px;display:flex;align-items:center;gap:8px">
+            <div style="margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
               <span style="font-size:12px;color:#888">% comissão deste corretor:</span>
               <input type="number" min="0" max="100" step="0.5" value="${commPct}"
                 style="width:70px;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:5px 8px;border-radius:7px;font-size:13px;outline:none"
                 onchange="saveBrokerCommission('${b.id}', this.value)"
                 onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
               <span style="font-size:12px;color:#888">%</span>
+              <button onclick="openBrokerChat('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}')"
+                style="margin-left:auto;display:flex;align-items:center;gap:6px;padding:7px 16px;background:#1a2a3a;border:1px solid #2196F3;color:#64B5F6;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer"
+                onmouseover="this.style.background='#1e3048'" onmouseout="this.style.background='#1a2a3a'">
+                💬 Chat
+              </button>
             </div>
           </div>`;
       });

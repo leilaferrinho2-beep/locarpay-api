@@ -26,7 +26,12 @@ service cloud.firestore {
       allow read:   if isAuth() && (request.auth.uid == userId || isMaster() || isActiveTenant());
       allow create: if isAuth();
       allow update: if isAuth() && (
-        resource.data.get('email', '') == myEmail() || isMaster()
+        resource.data.get('email', '') == myEmail() ||
+        isMaster() ||
+        // Owner pode atualizar dados dos seus inquilinos
+        (resource.data.get('ownerId', '') != '' &&
+         exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
+         get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail())
       );
       // Qualquer owner autenticado pode suspender/deletar (para o delete funcionar no app)
       allow delete: if isAuth();
@@ -53,7 +58,19 @@ service cloud.firestore {
       allow read:   if isMaster() || (isAuth() && isActiveTenant());
       allow create: if isAuth() && isActiveTenant();
       allow update: if isAuth() && (
-        resource.data.get('tenantEmail', '') == myEmail() || isMaster()
+        resource.data.get('tenantEmail', '') == myEmail() ||
+        isMaster() ||
+        // Owner via ownerId gravado na cobrança
+        (resource.data.get('ownerId', '') != '' &&
+         exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
+         get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail()) ||
+        // Cobranças sem ownerId (dados antigos): verifica via tenantId → users.ownerId → owner.email
+        (resource.data.get('ownerId', '') == '' &&
+         resource.data.get('tenantId', '') != '' &&
+         exists(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))) &&
+         get(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))).data.get('ownerId','') != '' &&
+         exists(/databases/$(database)/documents/owners/$(get(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))).data.get('ownerId',''))) &&
+         get(/databases/$(database)/documents/owners/$(get(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))).data.get('ownerId',''))).data.get('email','') == myEmail())
       );
       allow delete: if isAuth();
     }
@@ -72,8 +89,13 @@ service cloud.firestore {
     }
 
     // ── config ───────────────────────────────────────────────────────────────
+    match /config/app {
+      allow read: if true;  // versão do app é pública — qualquer usuário autenticado ou não
+      allow write: if isMaster();
+    }
     match /config/{docId} {
-      allow read, write: if false;
+      allow read:  if isMaster();
+      allow write: if isMaster();
     }
 
     // ── licenses (legado) ────────────────────────────────────────────────────
@@ -91,7 +113,18 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
           get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail())
       );
-      allow write: if isMaster();
+      // Corretor pode atualizar seu proprio doc (fcmToken, perfil)
+      allow update: if isAuth() && resource.data.get('email','') == myEmail();
+      allow create, delete: if isMaster();
+    }
+
+    // ── brokerChats (chat imobiliária ↔ corretor) ─────────────────────────────
+    match /brokerChats/{chatId} {
+      allow read, write: if isAuth();
+      match /messages/{msgId} {
+        allow read, create: if isAuth();
+        allow update, delete: if false;
+      }
     }
 
     // ── leads ─────────────────────────────────────────────────────────────────
@@ -110,6 +143,29 @@ service cloud.firestore {
           get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail()
       );
       allow delete: if isMaster();
+    }
+
+    // ── maintenance (chamados) ────────────────────────────────────────────────
+    match /maintenance/{chamadoId} {
+      allow read:   if isAuth();
+      allow create: if isAuth() && isActiveTenant();
+      allow update: if isAuth() && (
+        isMaster() ||
+        exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
+          get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail()
+      );
+      allow delete: if isAuth() && (
+        isMaster() ||
+        exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
+          get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail()
+      );
+
+      // Mensagens do chamado (chat inquilino ↔ imobiliária)
+      match /messages/{msgId} {
+        allow read:   if isAuth();
+        allow create: if isAuth();
+        allow update, delete: if false;
+      }
     }
 
     // ── default: nega tudo nao declarado ─────────────────────────────────────
