@@ -4265,13 +4265,19 @@
         chatId: _bcdChatId, fileName, contentType: fileType })
     });
     if (!urlResp.ok) throw new Error('Falha ao obter URL de upload');
-    const { uploadUrl, publicUrl } = await urlResp.json();
+    const { uploadUrl, publicUrl, path: uploadPath } = await urlResp.json();
     fill.style.width = '40%';
     // 2. PUT direto no GCS
     const putResp = await fetch(uploadUrl, {
       method: 'PUT', headers: { 'Content-Type': fileType }, body: file
     });
     if (!putResp.ok) throw new Error('Falha ao enviar arquivo');
+    fill.style.width = '80%';
+    // 3. Tornar público no servidor
+    await fetch('/api/locarpay-broker', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step: 'confirm-chat-upload', path: uploadPath })
+    });
     fill.style.width = '100%';
     setTimeout(() => { bar.style.display = 'none'; fill.style.width = '0%'; }, 400);
     return publicUrl;

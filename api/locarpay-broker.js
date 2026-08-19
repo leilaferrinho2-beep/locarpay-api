@@ -1124,6 +1124,16 @@ async function handleGetChatUploadUrl(body, bucket) {
   }
 }
 
+async function handleConfirmChatUpload(body, bucket) {
+  const { path } = body;
+  if (!path) throw Object.assign(new Error('path obrigatório'), { status: 400 });
+  const bucketName = bucket || 'transgu-web-6d50f.firebasestorage.app';
+  const file = getStorage().bucket(bucketName).file(path);
+  await file.makePublic();
+  const publicUrl = `https://storage.googleapis.com/${bucketName}/${path}`;
+  return { ok: true, publicUrl };
+}
+
 async function handleGetUploadUrl(body, bucket) {
   const { ownerId, fileName, contentType } = body;
   if (!ownerId || !fileName) throw Object.assign(new Error('ownerId e fileName obrigatórios'), { status: 400 });
@@ -1391,7 +1401,8 @@ async function handleCronRetryAssinafy(db) {
     else if (step === 'reject-lead')       result = await handleRejectLead(db, req.body);
     else if (step === 'remove-lead')       result = await handleRemoveLead(db, req.body);
     else if (step === 'get-upload-url')      result = await handleGetUploadUrl(req.body, req._storageBucket);
-    else if (step === 'get-chat-upload-url') result = await handleGetChatUploadUrl(req.body, req._storageBucket);
+    else if (step === 'get-chat-upload-url')    result = await handleGetChatUploadUrl(req.body, req._storageBucket);
+    else if (step === 'confirm-chat-upload')    result = await handleConfirmChatUpload(req.body, req._storageBucket);
     else if (step === 'upload-doc')        result = await handleUploadDoc(db, req.body);
     else if (step === 'get-signed-url')    result = await handleGetSignedReadUrl(req.body, req._storageBucket);
     else if (step === 'test-email') {
