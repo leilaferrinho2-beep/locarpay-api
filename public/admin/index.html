@@ -5986,7 +5986,13 @@
     </div>
     <div style="margin-bottom:14px">
       <label>Vencimento</label>
-      <input id="av-due" type="date">
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="av-due" type="date" style="flex:1">
+        <button type="button" onclick="document.getElementById('av-due').showPicker()"
+          style="background:#1565c0;border:none;border-radius:8px;padding:0 14px;height:42px;cursor:pointer;color:#fff;font-size:18px;flex-shrink:0" title="Abrir calendário">
+          📅
+        </button>
+      </div>
     </div>
     <div id="av-error" style="color:#ef5350;font-size:13px;margin-bottom:10px"></div>
     <div class="modal-actions">
