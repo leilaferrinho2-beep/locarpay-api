@@ -156,14 +156,18 @@ async function deleteTenant(db, tenantId) {
     // Pode nao ter conta Firebase Auth — continua a exclusao
   }
 
-  // 4. Deleta cobranças, contratos e usuario
-  const [charges, contracts] = await Promise.all([
+  // 4. Deleta cobranças, contratos, leads e comissões do corretor
+  const [charges, contracts, leads, commissions] = await Promise.all([
     db.collection('charges').where('tenantId', '==', tenantId).get(),
     db.collection('contracts').where('tenantId', '==', tenantId).get(),
+    db.collection('leads').where('tenantId', '==', tenantId).get(),
+    db.collection('commissions').where('tenantId', '==', tenantId).get(),
   ]);
   const batch = db.batch();
   charges.docs.forEach(d => batch.delete(d.ref));
   contracts.docs.forEach(d => batch.delete(d.ref));
+  leads.docs.forEach(d => batch.delete(d.ref));
+  commissions.docs.forEach(d => batch.delete(d.ref));
   batch.delete(userRef);
   await batch.commit();
 
