@@ -59,12 +59,12 @@ export default async function handler(req, res) {
   if (!isValidEmail(email)) return res.status(400).json({ error: 'Email inválido' });
 
   const ip = getClientIp(req);
+  initAdmin(); // deve ser chamado antes do rateLimit que usa getFirestore()
   try {
     // Máx 3 envios de OTP por IP por minuto, 5 por email por 10 minutos
     await rateLimit(`send-otp:ip:${ip}`,       { maxRequests: 3, windowSeconds: 60  });
     await rateLimit(`send-otp:email:${email}`,  { maxRequests: 5, windowSeconds: 600 });
 
-    initAdmin();
     const db = getFirestore();
 
     const emailNorm = email.trim().toLowerCase();
