@@ -217,15 +217,31 @@
       <input id="email" type="email" placeholder="contato@suaimobiliaria.com.br" autocomplete="email" required>
     </div>
 
-    <div class="field-row">
-      <div class="field">
-        <label for="phone">Telefone / WhatsApp</label>
-        <input id="phone" type="tel" placeholder="(11) 99999-9999" autocomplete="tel">
-      </div>
-      <div class="field">
-        <label for="cpfcnpj">CNPJ / CPF <span class="optional-label">opcional</span></label>
-        <input id="cpfcnpj" type="text" placeholder="00.000.000/0001-00">
-      </div>
+    <div class="field">
+      <label for="cpfcnpj">CPF ou CNPJ <span style="color:#ef9a9a;font-size:11px">obrigatório para pagamentos</span></label>
+      <input id="cpfcnpj" type="text" placeholder="000.000.000-00 ou 00.000.000/0001-00" autocomplete="off" inputmode="numeric" oninput="onCpfCnpjInput(this)">
+    </div>
+
+    <!-- Aparece só para CPF -->
+    <div class="field" id="field-birthdate" style="display:none">
+      <label for="birthdate">Data de nascimento</label>
+      <input id="birthdate" type="date" max="2010-01-01">
+    </div>
+
+    <!-- Aparece só para CNPJ -->
+    <div class="field" id="field-companytype" style="display:none">
+      <label for="companytype">Tipo de empresa</label>
+      <select id="companytype" style="width:100%;padding:12px 14px;background:#1a1d2e;border:1px solid #2a2d3e;border-radius:10px;color:#e0e0e0;font-size:14px">
+        <option value="MEI">MEI — Microempreendedor Individual</option>
+        <option value="LIMITED" selected>Ltda — Sociedade Limitada</option>
+        <option value="INDIVIDUAL">Empresário Individual</option>
+        <option value="ASSOCIATION">Associação</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="phone">WhatsApp <span class="optional-label">opcional</span></label>
+      <input id="phone" type="tel" placeholder="(11) 99999-9999" autocomplete="tel">
     </div>
 
     <button class="btn-submit" id="btn-submit" onclick="submitForm()">Criar conta grátis →</button>
@@ -308,9 +324,16 @@
     const cpfcnpj = document.getElementById('cpfcnpj').value.trim();
     const btn     = document.getElementById('btn-submit');
 
-    if (!name)                      { showError('Informe o nome da imobiliária.'); return; }
-    if (!email || !email.includes('@')) { showError('Informe um e-mail válido.'); return; }
-    if (!phone)                     { showError('Informe o telefone / WhatsApp.'); return; }
+    const cpfcnpjNum = cpfcnpj.replace(/\D/g, '');
+    if (!name)                           { showError('Informe o nome da imobiliária.'); return; }
+    if (!email || !email.includes('@'))  { showError('Informe um e-mail válido.'); return; }
+    if (cpfcnpjNum.length !== 11 && cpfcnpjNum.length !== 14) {
+      showError('Informe seu CPF (11 dígitos) ou CNPJ (14 dígitos) para ativar pagamentos.'); return;
+    }
+    const isCpf = cpfcnpjNum.length === 11;
+    const birthdate    = isCpf  ? document.getElementById('birthdate').value    : '';
+    const companytype  = !isCpf ? document.getElementById('companytype').value  : '';
+    if (isCpf && !birthdate) { showError('Informe sua data de nascimento.'); return; }
 
     btn.disabled = true;
     btn.textContent = 'Criando conta...';
@@ -323,8 +346,10 @@
         body: JSON.stringify({
           step: 'register',
           name, email,
-          phone:   phone   || undefined,
-          cpfCnpj: cpfcnpj || undefined,
+          phone:       phone       || undefined,
+          cpfCnpj:     cpfcnpj    || undefined,
+          birthDate:   birthdate   || undefined,
+          companyType: companytype || undefined,
           plan: 'trial'
         })
       });
@@ -358,6 +383,12 @@
     document.getElementById('form-card').style.display = 'none';
     document.getElementById('success-screen').classList.add('show');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function onCpfCnpjInput(el) {
+    const num = el.value.replace(/\D/g, '');
+    document.getElementById('field-birthdate').style.display  = num.length === 11 ? 'block' : 'none';
+    document.getElementById('field-companytype').style.display = num.length === 14 ? 'block' : 'none';
   }
 
   document.addEventListener('keydown', e => {
