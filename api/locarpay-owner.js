@@ -769,18 +769,21 @@ async function handleSendNotification(db, body) {
 
   if (!token) return { ok: false, reason: 'FCM token não encontrado' };
 
-  const channelId = type === 'chamado' ? 'locarpay_chamado'
+  const channelId = type === 'chamado'     ? 'locarpay_chamado'
     : type === 'broker_chat' ? 'locarpay_chamado'
     : 'locarpay_aviso';
-  const data = { type: type || 'aviso' };
+
+  // Data-only: sem campo "notification" → onMessageReceived sempre chamado,
+  // inclusive com app fechado, garantindo som + tela acesa + deep link correto.
+  const data = { type: type || 'aviso', title, body: msgBody };
   if (chamadoId) data.chamadoId = chamadoId;
-  if (chatId) data.chatId = chatId;
+  if (chatId)    data.chatId    = chatId;
+  if (brokerId)  data.brokerId  = brokerId;
 
   await getMessaging().send({
     token,
-    notification: { title, body: msgBody },
     data,
-    android: { priority: 'high', notification: { channelId } }
+    android: { priority: 'high', notification: { channelId, sound: 'default', notificationPriority: 'PRIORITY_HIGH' } }
   });
 
   return { ok: true };
