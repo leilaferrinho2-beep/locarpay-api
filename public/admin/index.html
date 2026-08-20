@@ -5974,7 +5974,7 @@
 <!-- Modal: Cobrança Avulsa -->
 <div id="modal-avulsa" class="modal-overlay">
   <div class="modal-box" style="max-width:420px;position:relative">
-    <button onclick="$('modal-avulsa').style.display='none'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#888;font-size:20px;cursor:pointer;line-height:1;padding:4px 8px" title="Fechar">✕</button>
+    <button type="button" onclick="document.getElementById('modal-avulsa').style.display='none'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#888;font-size:20px;cursor:pointer;line-height:1;padding:4px 8px" title="Fechar">✕</button>
     <h3>Cobrança Avulsa — <span id="avulsa-tenant-name"></span></h3>
     <p style="font-size:12px;color:#666;margin-bottom:16px">Gera uma nova cobrança independente para o inquilino.</p>
     <div style="margin-bottom:14px">
@@ -5997,7 +5997,7 @@
     </div>
     <div id="av-error" style="color:#ef5350;font-size:13px;margin-bottom:10px"></div>
     <div class="modal-actions">
-      <button class="btn-outline" onclick="$('modal-avulsa').style.display='none'">Cancelar</button>
+      <button class="btn-outline" type="button" onclick="document.getElementById('modal-avulsa').style.display='none'">Cancelar</button>
       <button class="btn" id="av-save" onclick="saveAvulsa()">Gerar cobrança</button>
     </div>
   </div>
