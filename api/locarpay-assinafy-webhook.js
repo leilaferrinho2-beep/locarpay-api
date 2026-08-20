@@ -275,33 +275,47 @@ export default async function handler(req, res) {
     const contractData = snap.docs[0].data();
     const updates = {};
 
+    // Busca o lead vinculado para atualizar contractStatus em tempo real
+    const leadSnap = contractData.leadId
+      ? await db.collection('leads').doc(contractData.leadId).get()
+      : (await db.collection('leads').where('contractId', '==', contractId).limit(1).get()).docs[0] || null;
+    const leadRef = leadSnap?.ref || null;
+
     if (isFullySigned(event)) {
-      updates.assinafyStatus = 'completed';
-      updates.ownerSigned    = true;
-      updates.signedAt       = FieldValue.serverTimestamp();
+      updates.assinafyStatus  = 'completed';
+      updates.ownerSigned     = true;
+      updates.bothSigned      = true;
+      updates.contractStatus  = 'CONTRATO_ASSINADO';
+      updates.signedAt        = FieldValue.serverTimestamp();
+      updates.updatedAt       = FieldValue.serverTimestamp();
       console.log(`[assinafy-webhook] contrato ${contractId} concluído — iniciando arquivamento`);
 
-      // Busca API key do Assinafy
+      // Propaga status ao lead (lido em tempo real pelo app do corretor)
+      if (leadRef) {
+        await leadRef.update({
+          contractStatus: 'CONTRATO_ASSINADO',
+          bothSigned:     true,
+          updatedAt:      FieldValue.serverTimestamp()
+        });
+      }
+
       const configSnap = await db.collection('config').doc('assinafy').get();
       const apiKey = configSnap.data()?.apiKey;
 
       if (apiKey) {
         const assignmentId = contractData.assinafyAssignmentId || null;
 
-        // 1. Coleta log de auditoria
         const auditTrail = await collectAuditTrail(apiKey, documentId, assignmentId);
         if (auditTrail.length > 0) {
           updates.auditTrail = auditTrail;
           console.log(`[assinafy-webhook] audit trail salvo: ${auditTrail.length} signatário(s)`);
         }
 
-        // 2. Arquiva PDF assinado no Firebase Storage
         const { storagePath, documentHash } = await archiveSignedPdf(apiKey, documentId, contractId);
         if (storagePath) updates.signedStoragePath = storagePath;
         if (documentHash) updates.documentHash = documentHash;
-        // Notifica todas as partes que o contrato está concluído
+
         const endereco   = contractData.address    || contractData.endereco || 'o imóvel';
-        const tenantName = contractData.tenantName || contractData.inquilinoNome || 'Inquilino';
         const msgConcluido = `🎉 *iLocarPay*: Contrato de locação do imóvel ${endereco} assinado por todas as partes! Acesse o app para visualizar o documento.`;
         await Promise.all([
           sendWhatsApp(contractData.landlordPhone, msgConcluido),
@@ -314,13 +328,7 @@ export default async function handler(req, res) {
 
     } else if (isSignerSignedDocument(event)) {
       const step = extractSignerStep(payload);
-      updates.ownerSigned = true;
-      if (step !== 1 && step !== null) {
-        updates.assinafyStatus = 'completed';
-        updates.signedAt = FieldValue.serverTimestamp();
-      }
 
-      // Salva evento parcial de auditoria a partir do payload do webhook
       const subject = payload?.subject || {};
       const signer  = (payload?.object?.assignment?.signers || []).find(s => s.id === subject.id) || {};
       const auditEvent = {
@@ -335,23 +343,46 @@ export default async function handler(req, res) {
         step:      signer.step       || step
       };
       updates.auditTrail = FieldValue.arrayUnion(auditEvent);
-      console.log(`[assinafy-webhook] signatário assinou contrato ${contractId} (step=${step})`);
+      updates.updatedAt  = FieldValue.serverTimestamp();
 
       const endereco = contractData.address || contractData.endereco || contractData.propertyAddress || 'o imóvel';
 
       if (step === 1) {
-        // Proprietário assinou (step 1) → avisa inquilino que está na vez dele
+        // Proprietário assinou → inquilino é o próximo (Assinafy envia o e-mail automaticamente por ser step 2)
+        updates.ownerSigned    = true;
+        updates.contractStatus = 'AGUARDANDO_INQUILINO';
+        if (leadRef) {
+          await leadRef.update({
+            contractStatus: 'AGUARDANDO_INQUILINO',
+            updatedAt:      FieldValue.serverTimestamp()
+          });
+        }
+        console.log(`[assinafy-webhook] proprietário assinou contrato ${contractId} → AGUARDANDO_INQUILINO`);
+
         const tenantName  = contractData.tenantName || contractData.inquilinoNome || 'Inquilino';
         const tenantEmail = contractData.tenantEmail || '';
         const msgInquilino = `Olá, ${tenantName}! 📝\n\nO proprietário assinou o contrato de locação do imóvel *${endereco}*. O contrato agora está no seu e-mail (${tenantEmail}) aguardando a sua assinatura digital.\n\nPor favor, verifique sua caixa de entrada e assine para concluir a locação.\n\n— iLocarPay`;
         await sendWhatsApp(contractData.tenantPhone || contractData.inquilinoPhone, msgInquilino);
+
       } else {
-        // Inquilino assinou (step 2) → avisa proprietário e corretor
+        // Inquilino assinou (step 2) — evento de conclusão vem separado via isFullySigned
+        updates.contractStatus = 'CONTRATO_ASSINADO';
+        updates.bothSigned     = true;
+        updates.signedAt       = FieldValue.serverTimestamp();
+        if (leadRef) {
+          await leadRef.update({
+            contractStatus: 'CONTRATO_ASSINADO',
+            bothSigned:     true,
+            updatedAt:      FieldValue.serverTimestamp()
+          });
+        }
+        console.log(`[assinafy-webhook] inquilino assinou contrato ${contractId} → CONTRATO_ASSINADO`);
+
         const tenantName = contractData.tenantName || contractData.inquilinoNome || 'O inquilino';
         const msg = `✅ *iLocarPay*: ${tenantName} assinou o contrato de locação do imóvel *${endereco}*. Acesse o app para verificar.`;
         await Promise.all([
           sendWhatsApp(contractData.landlordPhone, msg),
-          sendWhatsApp(contractData.brokerPhone   || contractData.corretorPhone, msg)
+          sendWhatsApp(contractData.brokerPhone || contractData.corretorPhone, msg)
         ]);
       }
 
