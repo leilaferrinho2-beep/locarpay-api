@@ -24,15 +24,22 @@ async function enviarConvite({ email, tenantName, ownerName, propertyDescription
         <p>Olá, <strong>${tenantName || 'inquilino'}</strong>!</p>
         <p>${ownerName ? `<strong>${ownerName}</strong> cadastrou você` : 'Você foi cadastrado'} como inquilino no aplicativo LocarPay.</p>
         ${propertyDescription ? `<p><strong>Imóvel:</strong> ${propertyDescription}</p>` : ''}
-        <p>Agora você pode acessar o app LocarPay para acompanhar cobranças, contratos e muito mais.</p>
+        <p>Agora você pode acessar o app iLocarPay para acompanhar cobranças, contratos e muito mais.</p>
+        <div style="text-align:center;margin:28px 0">
+          <a href="https://www.ilocarpay.com.br/download" style="background:#2E7D32;color:white;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:bold;text-decoration:none;display:inline-block">
+            📲 Baixar o app iLocarPay
+          </a>
+        </div>
         <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin:24px 0">
           <p style="margin:0;font-size:14px;color:#555">
             <strong>Como acessar:</strong><br>
-            Baixe o app LocarPay, informe este e-mail (<strong>${email}</strong>) e você receberá um código de acesso.
+            1. Baixe o app pelo botão acima<br>
+            2. Informe seu e-mail: <strong>${email}</strong><br>
+            3. Digite o código que chegará neste e-mail
           </p>
         </div>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-        <p style="color:#aaa;font-size:12px;text-align:center">Equipe LocarPay</p>
+        <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay</p>
       </div>
     `
   });
