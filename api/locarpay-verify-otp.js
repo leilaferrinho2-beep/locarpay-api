@@ -31,12 +31,12 @@ export default async function handler(req, res) {
   if (!isValidEmail(email)) return res.status(400).json({ error: 'Email inválido' });
 
   const ip = getClientIp(req);
+  initAdmin(); // deve ser chamado antes do rateLimit que usa getFirestore()
   try {
     // Rate limit: máx 5 tentativas por IP por minuto, e 10 por email por 5 minutos
     await rateLimit(`otp:ip:${ip}`,    { maxRequests: 5,  windowSeconds: 60  });
     await rateLimit(`otp:email:${email}`, { maxRequests: 10, windowSeconds: 300 });
 
-    initAdmin();
     const db = getFirestore();
     const auth = getAuth();
 
