@@ -5987,12 +5987,16 @@
     </div>
     <div style="margin-bottom:14px">
       <label>Vencimento</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input id="av-due" type="date" style="flex:1">
-        <button type="button" onclick="document.getElementById('av-due').showPicker()"
-          style="background:#1565c0;border:none;border-radius:8px;padding:0 14px;height:42px;cursor:pointer;color:#fff;font-size:18px;flex-shrink:0" title="Abrir calendário">
-          📅
-        </button>
+      <div style="position:relative" onclick="document.getElementById('av-due').showPicker()" title="Abrir calendário">
+        <input id="av-due" type="date"
+          style="width:100%;box-sizing:border-box;padding-right:42px;cursor:pointer">
+        <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;display:flex;align-items:center;opacity:.6">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="3"/>
+            <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+        </span>
       </div>
     </div>
     <div id="av-error" style="color:#ef5350;font-size:13px;margin-bottom:10px"></div>
