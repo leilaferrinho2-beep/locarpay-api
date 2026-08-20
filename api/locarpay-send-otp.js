@@ -113,7 +113,7 @@ export default async function handler(req, res) {
       res.setHeader('Retry-After', String(e.retryAfter || 60));
       return res.status(429).json({ error: e.message });
     }
-    console.error('[send-otp error]', e?.message, e?.code, e?.response);
-    return res.status(500).json({ error: 'Erro ao enviar código', detail: e?.message });
+    console.error('[send-otp error]', e?.message, e?.code);
+    return res.status(500).json({ error: 'Erro ao enviar código' });
   }
 }
