@@ -5,10 +5,10 @@ admin.initializeApp({ credential: admin.credential.cert(sa) });
 const db = admin.firestore();
 (async () => {
   await db.collection('config').doc('app').set({
-    versionCode: 254,
+    versionCode: 255,
     versionName: '5.34',
     url: 'https://storage.googleapis.com/transgu-web-6d50f.firebasestorage.app/download/locarpay-v92.apk'
   });
-  console.log('config/app atualizado: 254 / 5.34 (locarpayapp)');
+  console.log('config/app atualizado: 255 / 5.34 (locarpayapp)');
   process.exit(0);
 })();
