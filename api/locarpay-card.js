@@ -58,6 +58,95 @@ async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
   return c.id;
 }
 
+// ── PIX AUTO-CHARGE ──────────────────────────────────────────────────────────
+// Cria cobrança PIX no Asaas para uma charge do Firestore e salva QR code.
+// ownerCfg: { finePercentage, interestRate } — valores em % ao mês.
+async function createPixForCharge(db, chargeId, tenantId, amount, dueDate, apiKey, ownerCfg = {}) {
+  const tenantSnap = await db.collection('users').doc(tenantId).get();
+  if (!tenantSnap.exists) return;
+  const t = tenantSnap.data();
+  const customerId = await findOrCreateCustomer(t.name || t.email, t.email, t.cpf || t.document, t.phone, apiKey);
+
+  const dueDateStr = (() => {
+    const d = dueDate instanceof Date ? dueDate : new Date(dueDate.seconds * 1000);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  })();
+
+  const fineVal     = ownerCfg.finePercentage  ?? 2;
+  const interestVal = ownerCfg.interestRate     ?? 1;
+
+  const pixBody = {
+    customer:    customerId,
+    billingType: 'PIX',
+    value:       parseFloat(amount.toFixed(2)),
+    dueDate:     dueDateStr,
+    description: 'Aluguel iLocarPay',
+    fine:     { value: fineVal },
+    interest: { value: interestVal },
+  };
+
+  let res;
+  try {
+    res = await asaasReq('POST', '/payments', pixBody, apiKey);
+  } catch (e) {
+    console.error('[PIX] createPixForCharge error:', e.message);
+    return;
+  }
+
+  const pixQrRes = await asaasReq('GET', `/payments/${res.id}/pixQrCode`, null, apiKey).catch(() => null);
+
+  await db.collection('charges').doc(chargeId).update({
+    asaasChargeId: res.id,
+    pixQrCode:     pixQrRes?.encodedImage  || res.pixQrCode      || '',
+    pixCopyPaste:  pixQrRes?.payload       || res.pixCopyPaste   || '',
+    pixExpiresAt:  pixQrRes?.expirationDate ? new Date(pixQrRes.expirationDate) : null,
+  });
+}
+
+// Atualiza QR codes PIX de cobranças em atraso (roda no cron diário).
+// Para cada charge pending com pixQrCode e vencida, re-busca QR no Asaas.
+async function handleRefreshOverduePixQr(db, { ownerId }) {
+  const apiKey = await getAsaasKey(db, ownerId);
+  if (!apiKey) return { refreshed: 0 };
+
+  const ownerSnap = await db.collection('owners').doc(ownerId).get();
+  const ownerCfg  = ownerSnap.exists ? ownerSnap.data() : {};
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const todaySecs = Math.floor(today.getTime() / 1000);
+
+  const snap = await db.collection('charges')
+    .where('ownerId', '==', ownerId)
+    .where('status', '==', 'pending')
+    .get();
+
+  let refreshed = 0;
+  await Promise.all(snap.docs.map(async doc => {
+    const charge = doc.data();
+    if (!charge.asaasChargeId) return;
+    const dueSecs = charge.dueDate?.seconds ?? 0;
+    if (dueSecs >= todaySecs) return; // ainda não venceu
+
+    try {
+      const pixQrRes = await asaasReq('GET', `/payments/${charge.asaasChargeId}/pixQrCode`, null, apiKey);
+      await doc.ref.update({
+        pixQrCode:    pixQrRes.encodedImage  || charge.pixQrCode,
+        pixCopyPaste: pixQrRes.payload       || charge.pixCopyPaste,
+        pixExpiresAt: pixQrRes.expirationDate ? new Date(pixQrRes.expirationDate) : null,
+        pixRefreshedAt: new Date(),
+      });
+      refreshed++;
+    } catch (e) {
+      console.warn(`[PIX] refresh ${doc.id}:`, e.message);
+    }
+  }));
+
+  return { refreshed };
+}
+
 // ── INIT ────────────────────────────────────────────────────────────────────
 async function handleInit(db, body, apiKey) {
   const { tenantId, chargeId, card, savedCardId } = body;
@@ -865,12 +954,27 @@ async function handleGenerateCharges(db, body) {
       propertyDescription: propertyDescription || '',
       generatedAt:         new Date()
     });
-    newCharges.push({ tenantEmail: tenantEmail || '', baseRent, dueDate, monthStr });
+    newCharges.push({ chargeId: chargeRef.id, tenantId, tenantEmail: tenantEmail || '', baseRent, dueDate, monthStr });
     created++;
   }));
 
   if (created > 0) {
     await batch.commit();
+
+    // Busca config do owner para fine/interest do PIX
+    const ownerSnap2 = await db.collection('owners').doc(ownerId).get().catch(() => null);
+    const ownerCfg2  = ownerSnap2?.exists ? ownerSnap2.data() : {};
+    const apiKey2    = await getAsaasKey(db, ownerId).catch(() => null);
+
+    // Gera QR code PIX para cada nova cobrança (fire-and-forget)
+    if (apiKey2) {
+      Promise.all(newCharges.map(({ chargeId, tenantId: tid, baseRent: amt, dueDate: dd }) =>
+        createPixForCharge(db, chargeId, tid, amt, dd, apiKey2, ownerCfg2).catch(e =>
+          console.error('[PIX] handleGenerateCharges:', e.message)
+        )
+      ));
+    }
+
     // Notifica inquilinos por e-mail sobre a nova cobrança (fire-and-forget)
     const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const transporter = nodemailer.createTransport({
@@ -1000,12 +1104,23 @@ async function handleAutoGenerateUpcoming(db, { ownerId, ownerData = {} }) {
       propertyDescription: propertyDescription || '',
       generatedAt:         new Date()
     });
-    newCharges.push({ tenantEmail: tenantEmail || '', baseRent, dueDate, monthStr });
+    newCharges.push({ chargeId: chargeRef.id, tenantId, tenantEmail: tenantEmail || '', baseRent, dueDate, monthStr });
     created++;
   }));
 
   if (created > 0) {
     await batch.commit();
+
+    // Gera QR code PIX para cada nova cobrança (fire-and-forget)
+    const apiKeyPix = await getAsaasKey(db, ownerId).catch(() => null);
+    if (apiKeyPix) {
+      Promise.all(newCharges.map(({ chargeId, tenantId: tid, baseRent: amt, dueDate: dd }) =>
+        createPixForCharge(db, chargeId, tid, amt, dd, apiKeyPix, ownerData).catch(e =>
+          console.error('[PIX] handleAutoGenerateUpcoming:', e.message)
+        )
+      ));
+    }
+
     const fmt         = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const transporter = nodemailer.createTransport({
       host: 'smtp.titan.email', port: 587, secure: false,
@@ -1754,6 +1869,12 @@ async function handleCronDaily(db, req) {
       const gc = await handleAutoGenerateUpcoming(db, { ownerId, ownerData: ownerDoc.data() });
       results.charges += gc.created || 0;
     } catch (e) { results.errors.push(`${ownerId}/generate: ${e.message}`); }
+
+    try {
+      // 5. Atualiza QR code PIX de cobranças vencidas (novo valor com multa/juros via Asaas)
+      const pr = await handleRefreshOverduePixQr(db, { ownerId });
+      results.pixRefreshed = (results.pixRefreshed || 0) + (pr.refreshed || 0);
+    } catch (e) { results.errors.push(`${ownerId}/pix-refresh: ${e.message}`); }
 
     if (isFirstOfMonth) {
       try {
