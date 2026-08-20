@@ -773,15 +773,16 @@ async function handleSendNotification(db, body) {
     : type === 'broker_chat' ? 'locarpay_chamado'
     : 'locarpay_aviso';
 
-  // Data-only: sem campo "notification" → onMessageReceived sempre chamado,
-  // inclusive com app fechado, garantindo som + tela acesa + deep link correto.
-  const data = { type: type || 'aviso', title, body: msgBody };
+  // Envia notification + data: notification garante exibição em v5.33 (app fechado),
+  // data.title/body garante leitura correta em v5.34+ (onMessageReceived prefere data).
+  const data = { type: type || 'aviso', title: String(title), body: String(msgBody) };
   if (chamadoId) data.chamadoId = chamadoId;
   if (chatId)    data.chatId    = chatId;
   if (brokerId)  data.brokerId  = brokerId;
 
   await getMessaging().send({
     token,
+    notification: { title, body: msgBody },
     data,
     android: { priority: 'high', notification: { channelId, sound: 'default', notificationPriority: 'PRIORITY_HIGH' } }
   });
