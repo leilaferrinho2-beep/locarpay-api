@@ -1575,6 +1575,7 @@
 
   window.confirmApproveLead = async () => {
     const btn = $('approve-lead-btn');
+    const mode = document.querySelector('input[name="approve-mode"]:checked')?.value || 'assinafy';
     btn.disabled = true; btn.textContent = 'Aprovando...';
     try {
       const res = await fetch('/api/locarpay-broker', {
@@ -1582,6 +1583,7 @@
         body: JSON.stringify({
           step: 'approve-lead',
           leadId: approvingLeadId,
+          skipAssinafy: mode === 'direct',
           contractData: {
             baseRent:        parseBRL($('approve-rent').value),
             dueDay:          parseInt($('approve-due-day').value) || 10,
@@ -1600,7 +1602,10 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       $('modal-approve-lead').style.display = 'none';
-      showToast('Lead aprovado! Contrato enviado para assinatura.', 'success');
+      const msg = mode === 'direct'
+        ? 'Lead aprovado! Clique em Entregar Chaves para ativar o inquilino.'
+        : 'Lead aprovado! Contrato enviado para assinatura via Assinafy.';
+      showToast(msg, 'success');
       await loadLeads();
       await loadTenants();
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -5524,7 +5529,23 @@
       <input id="approve-landlord-phone" type="text" placeholder="(11) 99999-9999">
     </div>
 
-    <p style="font-size:12px;color:#555;margin-top:14px">Após a aprovação: o inquilino recebe e-mail de boas-vindas, o contrato é gerado e enviado para assinatura via Assinafy (imobiliária + inquilino). Após ambos assinarem, clique em <strong>Entregar Chaves</strong> para ativar o inquilino no app.</p>
+    <!-- Modo de aprovação -->
+    <div style="margin-top:16px;border:1px solid #2a2d3e;border-radius:10px;overflow:hidden">
+      <label id="approve-mode-assinafy-lbl" style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;cursor:pointer;border-bottom:1px solid #2a2d3e;background:#0f1117">
+        <input type="radio" name="approve-mode" value="assinafy" checked style="margin-top:3px;accent-color:#4CAF50">
+        <div>
+          <div style="font-weight:700;color:#4CAF50">✍️ Gerar contrato digital (Assinafy)</div>
+          <div style="font-size:12px;color:#888;margin-top:2px">PDF gerado e enviado para assinatura digital das duas partes. Após ambos assinarem, clique em Entregar Chaves.</div>
+        </div>
+      </label>
+      <label id="approve-mode-direct-lbl" style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;cursor:pointer;background:#0f1117">
+        <input type="radio" name="approve-mode" value="direct" style="margin-top:3px;accent-color:#FFB74D">
+        <div>
+          <div style="font-weight:700;color:#FFB74D">🚀 Aprovar sem assinatura digital</div>
+          <div style="font-size:12px;color:#888;margin-top:2px">Contrato salvo no sistema, mas sem envio ao Assinafy. Clique em Entregar Chaves manualmente quando quiser ativar o inquilino.</div>
+        </div>
+      </label>
+    </div>
 
     <div class="modal-actions">
       <button class="btn-outline" onclick="$('modal-approve-lead').style.display='none'">Cancelar</button>

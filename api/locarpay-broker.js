@@ -442,7 +442,7 @@ async function handleSubmitLead(db, body) {
 // ── APPROVE LEAD ──────────────────────────────────────────────────────────────
 
 async function handleApproveLead(db, body) {
-  const { leadId, contractData, landlordOverride } = body;
+  const { leadId, contractData, landlordOverride, skipAssinafy } = body;
   if (!leadId) throw Object.assign(new Error('leadId obrigatório'), { status: 400 });
 
   const leadRef  = db.collection('leads').doc(leadId);
@@ -550,6 +550,12 @@ async function handleApproveLead(db, body) {
   // Se override fornecido, salva no lead para uso futuro
   if (landlordOverride?.name) {
     await leadRef.update({ landlord: landlordOverride });
+  }
+
+  if (skipAssinafy) {
+    console.log('[approve-lead] skipAssinafy=true — contrato criado sem enviar ao Assinafy');
+    await leadRef.update({ status: 'approved', contractId, tenantId, approvedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    return { ok: true, contractId, assinafySkipped: true };
   }
 
   // Gera contrato no Assinafy — 1 tentativa (cron faz retentativas automáticas)
