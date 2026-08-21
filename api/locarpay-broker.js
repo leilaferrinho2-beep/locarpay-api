@@ -43,15 +43,21 @@ function buildAddr(p = {}) {
 
 async function assinafyReq(method, path, body, apiKey) {
   const isFormData = body instanceof FormData;
-  const r = await fetch(`${ASSINAFY_BASE}/${path}`, {
-    method,
-    headers: {
-      'X-Api-Key': apiKey,
-      'Accept': 'application/json',
-      ...(!isFormData ? { 'Content-Type': 'application/json' } : {})
-    },
-    ...(body ? { body: isFormData ? body : JSON.stringify(body) } : {})
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  let r;
+  try {
+    r = await fetch(`${ASSINAFY_BASE}/${path}`, {
+      method,
+      signal: controller.signal,
+      headers: {
+        'X-Api-Key': apiKey,
+        'Accept': 'application/json',
+        ...(!isFormData ? { 'Content-Type': 'application/json' } : {})
+      },
+      ...(body ? { body: isFormData ? body : JSON.stringify(body) } : {})
+    });
+  } finally { clearTimeout(timer); }
   const text = await r.text();
   let data;
   try { data = JSON.parse(text); } catch { data = text; }
@@ -535,7 +541,7 @@ async function handleApproveLead(db, body) {
     await leadRef.update({ landlord: landlordOverride });
   }
 
-  // Gera contrato no Assinafy — com 3 tentativas automáticas
+  // Gera contrato no Assinafy — 1 tentativa (cron faz retentativas automáticas)
   let assinafyResult = null;
   const assinafyPayload = {
     contractId,
@@ -554,34 +560,23 @@ async function handleApproveLead(db, body) {
     endDate:   cd.endDate   || lp.endDate   || '',
     deposit:   cd.deposit   || parseFloat(lp.deposit)    || 0
   };
-  let assinafyLastError = null;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      assinafyResult = await createAssinafyContract(db, contractId, assinafyPayload);
-      assinafyLastError = null;
-      console.log(`[assinafy] contrato enviado na tentativa ${attempt}`);
-      break;
-    } catch (e) {
-      assinafyLastError = e.message;
-      console.error(`[approve-lead] Assinafy tentativa ${attempt}/3 falhou:`, e.message);
-      if (attempt < 3) await sleep(3000 * attempt); // 3s, 6s
-    }
-  }
-  if (assinafyLastError) {
-    // Salva erro no contrato para visibilidade no painel
+  try {
+    assinafyResult = await createAssinafyContract(db, contractId, assinafyPayload);
+    console.log(`[approve-lead] contrato enviado ao Assinafy`);
+  } catch (e) {
+    console.error(`[approve-lead] Assinafy falhou:`, e.message);
     try {
       await db.collection('contracts').doc(contractId).update({
-        assinafyError:  assinafyLastError,
+        assinafyError:  e.message,
         assinafyStatus: 'error',
         updatedAt:      FieldValue.serverTimestamp()
       });
     } catch (_) {}
-    // Alerta WhatsApp ao admin
     try {
       const adminPhone = process.env.ADMIN_WHATSAPP || '5514996270111';
       await sendWhatsApp(adminPhone,
-        `⚠️ iLocarPay: falha ao enviar contrato ${contractId} ao Assinafy após 3 tentativas.\nErro: ${assinafyLastError}\nAcesse o painel e clique em "Reenviar ao Assinafy".`
-      );
+        `⚠️ iLocarPay: falha ao enviar contrato ${contractId} ao Assinafy.\nErro: ${e.message}\nAcesse o painel e clique em "Reenviar ao Assinafy".`
+      ).catch(() => {});
     } catch (_) {}
   }
 
