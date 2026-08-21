@@ -2535,6 +2535,14 @@
     $('et-due').value   = c?.dueDay    || 10;
     $('et-property').value  = c?.propertyDescription || '';
     $('et-prop-code').value = c?.propertyCode || '';
+    // Datas do contrato
+    const toDateInput = (ts) => {
+      if (!ts) return '';
+      const d = ts.toDate ? ts.toDate() : new Date(ts.seconds ? ts.seconds * 1000 : ts);
+      return d.toISOString().slice(0, 10);
+    };
+    $('et-contract-start').value = toDateInput(c?.startDate) || '';
+    $('et-contract-end').value   = toDateInput(c?.endDate)   || '';
     $('modal-edit-tenant').style.display = 'flex';
     $('et-name').focus();
   }
@@ -2556,7 +2564,12 @@
           const codeConflict = newCode && contracts.some(x => x.ownerId === currentOwnerId && x.id !== c.id && (x.propertyCode || '').toUpperCase() === newCode);
           if (codeConflict) { showToast(`Código "${newCode}" já está em uso`, 'error'); return; }
           const rentChanged = rent !== c.baseRent;
-          await updateDoc(doc(db, 'contracts', c.id), { baseRent: rent, dueDay: due, propertyDescription: $('et-property').value.trim(), propertyCode: newCode });
+          const contractEdits = { baseRent: rent, dueDay: due, propertyDescription: $('et-property').value.trim(), propertyCode: newCode };
+          const startVal = $('et-contract-start').value;
+          const endVal   = $('et-contract-end').value;
+          if (startVal) contractEdits.startDate = new Date(startVal + 'T12:00:00');
+          if (endVal)   contractEdits.endDate   = new Date(endVal   + 'T12:00:00');
+          await updateDoc(doc(db, 'contracts', c.id), contractEdits);
           // Se aluguel mudou: atualiza cobranças pendentes e invalida PIX/cartão
           if (rentChanged) {
             try {
@@ -5852,7 +5865,10 @@
 <!-- Modal: Editar Inquilino -->
 <div id="modal-edit-tenant" class="modal-overlay">
   <div class="modal-box">
-    <h3>Editar Inquilino</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h3 style="margin:0">Editar Inquilino</h3>
+      <button onclick="document.getElementById('modal-edit-tenant').style.display='none'" style="background:none;border:none;color:#888;font-size:22px;cursor:pointer;line-height:1;padding:4px 8px">&times;</button>
+    </div>
     <div class="row2">
       <div><label>Nome completo</label><input id="et-name" type="text"></div>
       <div><label>Telefone</label><input id="et-phone" type="text"></div>
@@ -5864,6 +5880,16 @@
     <div class="row2">
       <div><label>Dia do vencimento</label><input id="et-due" type="number" min="1" max="28"></div>
       <div><label>Imóvel</label><input id="et-property" type="text"></div>
+    </div>
+    <div class="row2">
+      <div>
+        <label>Início do contrato</label>
+        <input id="et-contract-start" type="date">
+      </div>
+      <div>
+        <label>Fim do contrato</label>
+        <input id="et-contract-end" type="date">
+      </div>
     </div>
     <div class="row2">
       <div>
