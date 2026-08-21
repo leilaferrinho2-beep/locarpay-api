@@ -13,7 +13,14 @@
       "mcp__08dbdfb4-c83a-4b64-a56d-051f5ac3ff8b__get_runtime_logs",
       "mcp__08dbdfb4-c83a-4b64-a56d-051f5ac3ff8b__web_fetch_vercel_url",
       "mcp__08dbdfb4-c83a-4b64-a56d-051f5ac3ff8b__list_teams",
-      "mcp__08dbdfb4-c83a-4b64-a56d-051f5ac3ff8b__get_project"
+      "mcp__08dbdfb4-c83a-4b64-a56d-051f5ac3ff8b__get_project",
+      "Bash(node *)",
+      "Bash(npx *)",
+      "Bash(Copy-Item *)",
+      "Bash(Write-Host *)",
+      "Bash(.\\gradlew *)",
+      "Bash(cd C:\\LocarPay*)",
+      "Bash(cd C:\\locarpay-api*)"
     ]
   }
 }

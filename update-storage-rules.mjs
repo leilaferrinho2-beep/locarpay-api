@@ -1,8 +1,8 @@
 import { readFileSync } from 'fs';
 import { GoogleAuth } from 'google-auth-library';
 
-const PROJECT = 'locarpayapp';
-const BUCKET  = 'locarpayapp.appspot.com';
+const PROJECT = 'transgu-web-6d50f';
+const BUCKET  = 'transgu-web-6d50f.firebasestorage.app';
 
 const NEW_RULES = `rules_version = '2';
 service firebase.storage {
@@ -27,10 +27,20 @@ service firebase.storage {
       allow read: if true;
       allow write: if false;
     }
+
+    match /chat/{chatId}/{fileName} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /download/{fileName} {
+      allow read: if true;
+      allow write: if false;
+    }
   }
 }`;
 
-const sa = JSON.parse(readFileSync('C:/Users/denis/Downloads/locarpayapp-firebase-adminsdk-fbsvc-e92d24aa50.json', 'utf8'));
+const sa = JSON.parse(readFileSync('C:/Users/denis/Downloads/transgu-web-6d50f-firebase-adminsdk-fbsvc-1ad5f843f0.json', 'utf8'));
 const auth = new GoogleAuth({
   credentials: sa,
   scopes: ['https://www.googleapis.com/auth/firebase', 'https://www.googleapis.com/auth/cloud-platform']

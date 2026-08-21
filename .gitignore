@@ -2,3 +2,5 @@
 .env*
 node_modules/
 public/download/*.apk
+.service-account.json
+.service-account.json

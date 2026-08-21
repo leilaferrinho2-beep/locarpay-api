@@ -4,6 +4,6 @@
     "indexes": "firestore.indexes.json"
   },
   "storage": [
-    { "bucket": "locarpayapp.appspot.com", "rules": "storage.rules" }
+    { "bucket": "transgu-web-6d50f.firebasestorage.app", "rules": "storage.rules" }
   ]
 }

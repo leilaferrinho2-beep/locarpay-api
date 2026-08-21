@@ -2,7 +2,7 @@ const admin = require('firebase-admin');
 const { readFileSync } = require('fs');
 
 const sa = JSON.parse(readFileSync('C:/Users/denis/Downloads/locarpayapp-firebase-adminsdk-fbsvc-e92d24aa50.json', 'utf8'));
-admin.initializeApp({ credential: admin.credential.cert(sa), storageBucket: 'locarpayapp.appspot.com' });
+admin.initializeApp({ credential: admin.credential.cert(sa), storageBucket: 'locarpayapp.firebasestorage.app' });
 
 const rulesContent = readFileSync('./storage.rules', 'utf8');
 
