@@ -784,25 +784,42 @@ async function createAssinafyContract(db, contractId, data) {
     } catch (e) { console.warn('[assinafy] owner sign email error:', e.message); }
   }
 
-  // Inquilino: envia aviso de que o proprietário assina primeiro; link chegará pela Assinafy após a assinatura
+  // Inquilino: avisa que o proprietário assina primeiro + link do app
   if (data.tenantEmail) {
     try {
-      const btnSection = tenantSignUrl
-        ? `<div style="text-align:center;margin:28px 0">
+      const signSection = tenantSignUrl
+        ? `<div style="text-align:center;margin:20px 0">
             <a href="${tenantSignUrl}" style="background:#4CAF50;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
               ✍️ Assinar contrato agora
             </a>
            </div>`
-        : `<p style="color:#444">O proprietário assina primeiro. Assim que ele concluir, você receberá o link de assinatura no seu e-mail automaticamente.</p>`;
+        : `<p style="color:#444;margin:12px 0">O proprietário assina primeiro. Assim que ele concluir, você receberá o link de assinatura no seu e-mail automaticamente.</p>`;
       await sendEmail(data.tenantEmail, '📋 Seu contrato foi gerado — iLocarPay', `
         <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
           <div style="background:#1a1a1a;padding:32px;text-align:center">
             <h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1>
+            <p style="color:#aaa;margin:6px 0 0;font-size:14px">Gestão inteligente de aluguéis</p>
           </div>
           <div style="padding:32px">
-            <p>Olá, <strong>${data.tenantName || 'Inquilino'}</strong>!</p>
-            <p>O contrato de locação do imóvel <strong>${data.propertyAddress || ''}</strong> foi gerado e aguarda assinatura das partes.</p>
-            ${btnSection}
+            <p style="font-size:16px">Olá, <strong>${data.tenantName || 'Inquilino'}</strong>! 🎉</p>
+            <p style="color:#444">O contrato de locação do imóvel <strong>${data.propertyAddress || ''}</strong> foi gerado com sucesso.</p>
+            ${signSection}
+            <hr style="border:none;border-top:1px solid #ddd;margin:24px 0">
+            <p style="font-weight:700;margin-bottom:8px">📱 Acompanhe tudo pelo app iLocarPay</p>
+            <p style="color:#444;font-size:14px;margin-bottom:16px">Baixe o app para acompanhar cobranças, contrato e enviar chamados de manutenção.</p>
+            <div style="text-align:center;margin:20px 0">
+              <a href="https://www.ilocarpay.com.br/download" style="background:#2E7D32;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
+                📲 Baixar app iLocarPay
+              </a>
+            </div>
+            <div style="background:#f0f7f0;border-radius:8px;padding:14px;font-size:13px;color:#444">
+              <strong>Como acessar:</strong><br>
+              1. Baixe o app pelo botão acima<br>
+              2. Informe seu e-mail: <strong>${data.tenantEmail}</strong><br>
+              3. Digite o código que chegará neste e-mail
+            </div>
+            <hr style="border:none;border-top:1px solid #ddd;margin:24px 0">
+            <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay • <a href="https://www.ilocarpay.com.br" style="color:#4CAF50">ilocarpay.com.br</a></p>
           </div>
         </div>
       `);
