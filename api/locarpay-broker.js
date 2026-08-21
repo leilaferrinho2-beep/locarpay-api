@@ -561,7 +561,11 @@ async function handleApproveLead(db, body) {
     deposit:   cd.deposit   || parseFloat(lp.deposit)    || 0
   };
   try {
-    assinafyResult = await createAssinafyContract(db, contractId, assinafyPayload);
+    // Timeout global de 30s para todo o fluxo Assinafy (cron retenta se falhar)
+    assinafyResult = await Promise.race([
+      createAssinafyContract(db, contractId, assinafyPayload),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Assinafy timeout 30s')), 30000))
+    ]);
     console.log(`[approve-lead] contrato enviado ao Assinafy`);
   } catch (e) {
     console.error(`[approve-lead] Assinafy falhou:`, e.message);
