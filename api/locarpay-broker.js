@@ -635,7 +635,7 @@ async function handleApproveLead(db, body) {
               ${propAddr ? `<div style="background:#f0f7f0;border-left:4px solid #4CAF50;padding:12px 16px;border-radius:4px;margin:16px 0"><strong>Imóvel:</strong> ${propAddr}</div>` : ''}
               <p style="color:#444">Você receberá o contrato por e-mail para assinar digitalmente. Acompanhe tudo pelo aplicativo:</p>
               <div style="text-align:center;margin:28px 0">
-                <a href="https://www.ilocarpay.com.br/download/locarpay-v188.apk"
+                <a href="https://www.ilocarpay.com.br/download"
                    style="background:#4CAF50;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
                   📱 Baixar app iLocarPay
                 </a>
