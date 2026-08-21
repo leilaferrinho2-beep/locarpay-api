@@ -347,8 +347,8 @@
 
   async function renderMetrics() {
     const totalTenants   = tenants.length;
-    const totalContracts = contracts.length;
-    const totalRent      = contracts.reduce((s, c) => s + (c.baseRent || 0), 0);
+    const totalContracts = contracts.filter(c => c.active).length;
+    const totalRent      = contracts.filter(c => c.active).reduce((s, c) => s + (c.baseRent || 0), 0);
     const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
     // Carrega cobranças (usa índice ownerId+status existente)
