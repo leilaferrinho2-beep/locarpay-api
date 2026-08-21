@@ -14,7 +14,7 @@ import { getFirestore, FieldValue }      from 'firebase-admin/firestore';
 import { getMessaging }                  from 'firebase-admin/messaging';
 import { getStorage }                    from 'firebase-admin/storage';
 import nodemailer                         from 'nodemailer';
-import PDFDocument                        from 'pdfkit';
+import { PDFDocument as PdfLib, rgb, StandardFonts } from 'pdf-lib';
 
 function initFirebase() {
   if (getApps().length) return;
@@ -65,85 +65,96 @@ async function assinafyReq(method, path, body, apiKey) {
   return data;
 }
 
-function generateContractPdf(data) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
-    const chunks = [];
-    doc.on('data', chunk => chunks.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
+async function generateContractPdf(data) {
+  const fmt = v => 'R$ ' + (parseFloat(v) || 0).toFixed(2).replace('.', ',').replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
+  const fmtDate = d => d ? String(d) : '—';
 
-    const fmt = v => (parseFloat(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    const fmtDate = d => d ? String(d) : '—';
+  const pdfDoc = await PdfLib.create();
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const font     = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-    doc.fontSize(16).font('Helvetica-Bold')
-       .text('CONTRATO DE LOCAÇÃO RESIDENCIAL', { align: 'center' });
-    doc.fontSize(10).font('Helvetica')
-       .text(`Emitido por iLocarPay — ${new Date().toLocaleDateString('pt-BR')}`, { align: 'center' });
-    doc.moveDown(1.5);
+  const addPage = () => {
+    const page = pdfDoc.addPage([595, 842]); // A4
+    return { page, y: 800 };
+  };
 
-    const section = (title) => {
-      doc.moveDown(0.5);
-      doc.fontSize(11).font('Helvetica-Bold').text(title);
-      doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
-      doc.moveDown(0.3);
-    };
+  let { page, y } = addPage();
+  const margin = 50;
+  const width  = 595 - margin * 2;
+  const lineH  = 14;
 
-    const field = (label, value) => {
-      doc.fontSize(10).font('Helvetica-Bold').text(`${label}: `, { continued: true })
-         .font('Helvetica').text(value || '—');
-    };
+  const write = (text, opts = {}) => {
+    const f    = opts.bold ? boldFont : font;
+    const size = opts.size || 10;
+    const x    = opts.x ?? margin;
+    if (y - size < 50) { ({ page, y } = addPage()); }
+    page.drawText(String(text || ''), { x, y: y - size, font: f, size, color: rgb(0, 0, 0), maxWidth: opts.width ?? width });
+    y -= (size + (opts.gap ?? 2));
+  };
 
-    section('1. DAS PARTES');
-    field('Locador / Proprietário', data.ownerName);
-    field('CPF/CNPJ do Locador', data.ownerCpf);
-    field('E-mail do Locador', data.ownerEmail);
-    doc.moveDown(0.3);
-    field('Locatário (Inquilino)', data.tenantName);
-    field('CPF do Locatário', data.tenantCpf);
-    field('E-mail do Locatário', data.tenantEmail);
-    field('Telefone do Locatário', data.tenantPhone);
+  const section = (title) => {
+    y -= 6;
+    write(title, { bold: true, size: 11 });
+    page.drawLine({ start: { x: margin, y }, end: { x: 595 - margin, y }, thickness: 0.5, color: rgb(0.4, 0.4, 0.4) });
+    y -= 4;
+  };
 
-    section('2. DO IMÓVEL');
-    field('Endereço', data.propertyAddress);
-    field('Código do Imóvel', data.propertyCode);
+  const field = (label, value) => write(`${label}: ${value || '—'}`);
 
-    section('3. DO PRAZO E VALOR');
-    field('Início da Locação', fmtDate(data.startDate));
-    field('Término da Locação', fmtDate(data.endDate));
-    field('Aluguel Mensal', fmt(data.baseRent));
-    field('Vencimento', `Todo dia ${data.dueDay || 10} de cada mês`);
-    if (data.deposit) field('Caução', fmt(data.deposit));
+  // Cabeçalho
+  write('CONTRATO DE LOCAÇÃO RESIDENCIAL', { bold: true, size: 16, gap: 4 });
+  write(`Emitido por iLocarPay — ${new Date().toLocaleDateString('pt-BR')}`, { size: 9, gap: 14 });
 
-    section('4. DAS OBRIGAÇÕES DO LOCATÁRIO');
-    doc.fontSize(10).font('Helvetica')
-       .text('O locatário se obriga a pagar pontualmente o aluguel na data convencionada, conservar o imóvel em bom estado, não efetuar obras ou modificações sem anuência prévia do locador, e restituir o imóvel no estado em que o recebeu ao término do contrato.', { align: 'justify' });
+  section('1. DAS PARTES');
+  field('Locador / Proprietário', data.ownerName);
+  field('CPF/CNPJ do Locador', data.ownerCpf);
+  field('E-mail do Locador', data.ownerEmail);
+  y -= 4;
+  field('Locatário (Inquilino)', data.tenantName);
+  field('CPF do Locatário', data.tenantCpf);
+  field('E-mail do Locatário', data.tenantEmail);
+  field('Telefone do Locatário', data.tenantPhone);
 
-    section('5. DAS OBRIGAÇÕES DO LOCADOR');
-    doc.fontSize(10).font('Helvetica')
-       .text('O locador se obriga a entregar o imóvel em condições de uso, manter a posse mansa e pacífica do imóvel durante a locação, e responder pelos vícios ou defeitos anteriores à locação.', { align: 'justify' });
+  section('2. DO IMÓVEL');
+  field('Endereço', data.propertyAddress);
+  field('Código do Imóvel', data.propertyCode);
 
-    section('6. DA RESCISÃO');
-    doc.fontSize(10).font('Helvetica')
-       .text('O contrato pode ser rescindido por qualquer das partes mediante notificação prévia de 30 dias. A rescisão sem justa causa pelo locatário antes do prazo implica multa proporcional ao período restante.', { align: 'justify' });
+  section('3. DO PRAZO E VALOR');
+  field('Início da Locação', fmtDate(data.startDate));
+  field('Término da Locação', fmtDate(data.endDate));
+  field('Aluguel Mensal', fmt(data.baseRent));
+  field('Vencimento', `Todo dia ${data.dueDay || 10} de cada mês`);
+  if (data.deposit) field('Caução', fmt(data.deposit));
 
-    section('7. DO FORO');
-    doc.fontSize(10).font('Helvetica')
-       .text('As partes elegem o foro da comarca do imóvel locado para dirimir quaisquer controvérsias oriundas deste contrato.', { align: 'justify' });
+  const clauses = [
+    ['4. DAS OBRIGAÇÕES DO LOCATÁRIO', 'O locatário se obriga a pagar pontualmente o aluguel na data convencionada, conservar o imóvel em bom estado, não efetuar obras ou modificações sem anuência prévia do locador, e restituir o imóvel no estado em que o recebeu ao término do contrato.'],
+    ['5. DAS OBRIGAÇÕES DO LOCADOR', 'O locador se obriga a entregar o imóvel em condições de uso, manter a posse mansa e pacífica do imóvel durante a locação, e responder pelos vícios ou defeitos anteriores à locação.'],
+    ['6. DA RESCISÃO', 'O contrato pode ser rescindido por qualquer das partes mediante notificação prévia de 30 dias. A rescisão sem justa causa pelo locatário antes do prazo implica multa proporcional ao período restante.'],
+    ['7. DO FORO', 'As partes elegem o foro da comarca do imóvel locado para dirimir quaisquer controvérsias oriundas deste contrato.'],
+  ];
+  for (const [title, text] of clauses) {
+    section(title);
+    // Quebra manual do texto em linhas de ~90 chars
+    const words = text.split(' ');
+    let line = '';
+    for (const w of words) {
+      if ((line + w).length > 88) { write(line.trim()); line = ''; }
+      line += w + ' ';
+    }
+    if (line.trim()) write(line.trim());
+  }
 
-    doc.moveDown(3);
-    const y = doc.y;
-    doc.fontSize(10).font('Helvetica')
-       .text('_________________________________', 50, y)
-       .text(data.ownerName || 'Locador / Proprietário', 50, doc.y, { width: 220 })
-       .text(data.ownerEmail || '', 50, doc.y, { width: 220 });
-    doc.fontSize(10).font('Helvetica')
-       .text('_________________________________', 315, y)
-       .text(data.tenantName || 'Locatário (Inquilino)', 315, doc.y, { width: 220 })
-       .text(data.tenantEmail || '', 315, doc.y, { width: 220 });
+  // Assinaturas
+  y -= 20;
+  write('_________________________________', { x: margin });
+  write(data.ownerName || 'Locador / Proprietário', { x: margin });
+  const sigY = y;
+  write('_________________________________', { x: 315 });
+  write(data.tenantName || 'Locatário (Inquilino)', { x: 315 });
+  y = Math.min(y, sigY);
 
-    doc.end();
-  });
+  const pdfBytes = await pdfDoc.save();
+  return Buffer.from(pdfBytes);
 }
 
 async function getAssinafyAccount(apiKey) {

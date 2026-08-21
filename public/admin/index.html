@@ -1257,6 +1257,7 @@
       const cs = l.contractStatus || '';
       const btns = l.status === 'pending' ? `
         <button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="viewLeadDetail('${l.id}')">🔍 Detalhes</button>
+        <button class="btn-sm" style="color:#FFB74D;border-color:#FFB74D;margin-left:4px" onclick="openEditLeadModal('${l.id}')">✏️ Editar</button>
         <button class="btn-sm" style="color:#4CAF50;border-color:#4CAF50;margin-left:4px" onclick="openApproveModal('${l.id}')">✅ Aprovar</button>
         <button class="btn-sm" style="color:#ef5350;border-color:#ef5350;margin-left:4px" onclick="rejectLead('${l.id}')">❌ Rejeitar</button>
       ` : l.status === 'approved' && l.contractId ? `
@@ -1604,6 +1605,52 @@
       await loadTenants();
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     finally { btn.disabled = false; btn.textContent = 'Aprovar e Gerar Contrato'; }
+  };
+
+  window.openEditLeadModal = (leadId) => {
+    const l = leads.find(x => x.id === leadId);
+    if (!l) return;
+    $('edit-lead-id').value = leadId;
+    $('el-tenant-name').value  = l.tenant?.name  || '';
+    $('el-tenant-email').value = l.tenant?.email || '';
+    $('el-tenant-cpf').value   = l.tenant?.cpf   || '';
+    $('el-tenant-phone').value = l.tenant?.phone || '';
+    $('el-prop-address').value = l.propertyDescription || (l.property ? [l.property.street,l.property.number,l.property.neighborhood,l.property.city].filter(Boolean).join(', ') : '');
+    $('el-rent-value').value   = l.property?.rentValue || '';
+    $('el-due-day').value      = l.property?.dueDay || '10';
+    $('el-landlord-name').value  = l.landlord?.name  || '';
+    $('el-landlord-email').value = l.landlord?.email || '';
+    $('el-landlord-cpf').value   = l.landlord?.cpf   || '';
+    $('el-landlord-phone').value = l.landlord?.phone || '';
+    $('modal-edit-lead').style.display = 'flex';
+  };
+
+  window.closeEditLeadModal = () => { $('modal-edit-lead').style.display = 'none'; };
+
+  window.saveEditLead = async () => {
+    const leadId = $('edit-lead-id').value;
+    const btn = $('edit-lead-save-btn');
+    btn.disabled = true; btn.textContent = 'Salvando...';
+    try {
+      const { doc: firestoreDoc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+      await updateDoc(firestoreDoc(db, 'leads', leadId), {
+        'tenant.name':  $('el-tenant-name').value.trim(),
+        'tenant.email': $('el-tenant-email').value.trim().toLowerCase(),
+        'tenant.cpf':   $('el-tenant-cpf').value.trim(),
+        'tenant.phone': $('el-tenant-phone').value.trim(),
+        'propertyDescription': $('el-prop-address').value.trim(),
+        'property.rentValue':  parseFloat($('el-rent-value').value) || 0,
+        'property.dueDay':     parseInt($('el-due-day').value) || 10,
+        'landlord.name':  $('el-landlord-name').value.trim(),
+        'landlord.email': $('el-landlord-email').value.trim().toLowerCase(),
+        'landlord.cpf':   $('el-landlord-cpf').value.trim(),
+        'landlord.phone': $('el-landlord-phone').value.trim(),
+      });
+      $('modal-edit-lead').style.display = 'none';
+      showToast('Lead atualizado!', 'success');
+      await loadLeads();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Salvar'; }
   };
 
   window.rejectLead = (leadId) => {
@@ -4524,7 +4571,7 @@
   $('tenant-cancel').addEventListener('click',  () => { $('modal-tenant').style.display = 'none'; resetTenantForm(); });
   $('tenant-save').addEventListener('click', saveTenant);
 
-  [$('modal-tenant'), $('modal-docs'), $('modal-billing'), $('modal-edit-tenant'), $('modal-extras'), $('modal-history'), $('modal-adjust-rent'), $('modal-credit-analysis'), $('modal-approve-lead'), $('modal-lead-detail')].forEach(m => {
+  [$('modal-tenant'), $('modal-docs'), $('modal-billing'), $('modal-edit-tenant'), $('modal-extras'), $('modal-history'), $('modal-adjust-rent'), $('modal-credit-analysis'), $('modal-approve-lead'), $('modal-lead-detail'), $('modal-edit-lead')].forEach(m => {
     if (m) m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
   });
   // Upgrade modal: backdrop close also clears PIX interval
@@ -6149,6 +6196,49 @@
     <div style="display:flex;gap:10px">
       <button onclick="closeEditBroker()" style="flex:1;background:#0f1117;border:1px solid #2a2d3e;color:#aaa;padding:11px;border-radius:9px;font-size:14px;cursor:pointer">Cancelar</button>
       <button id="edit-broker-save-btn" onclick="saveEditBroker()" style="flex:2;background:#1565C0;border:none;color:#fff;padding:11px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal editar lead -->
+<div id="modal-edit-lead" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;overflow-y:auto">
+  <div style="background:#1a1d2e;border-radius:16px;padding:28px;width:90%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,.5);margin:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 style="margin:0">✏️ Editar Lead</h3>
+      <button onclick="closeEditLeadModal()" style="background:none;border:none;color:#888;font-size:22px;cursor:pointer">&times;</button>
+    </div>
+    <input type="hidden" id="edit-lead-id">
+    <p style="color:#888;font-size:12px;margin-bottom:16px">Corrija os dados enviados pelo corretor antes de aprovar.</p>
+
+    <p style="font-weight:700;margin-bottom:8px;color:#42A5F5">Dados do Inquilino</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div><label style="font-size:11px;color:#888">Nome</label><input id="el-tenant-name" type="text" class="input-field" style="width:100%"></div>
+      <div><label style="font-size:11px;color:#888">E-mail</label><input id="el-tenant-email" type="email" class="input-field" style="width:100%"></div>
+      <div><label style="font-size:11px;color:#888">CPF</label><input id="el-tenant-cpf" type="text" class="input-field" style="width:100%"></div>
+      <div><label style="font-size:11px;color:#888">Telefone</label><input id="el-tenant-phone" type="text" class="input-field" style="width:100%"></div>
+    </div>
+
+    <p style="font-weight:700;margin-bottom:8px;color:#42A5F5">Dados do Imóvel</p>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:#888">Endereço</label>
+      <input id="el-prop-address" type="text" class="input-field" style="width:100%;box-sizing:border-box">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div><label style="font-size:11px;color:#888">Valor do aluguel (R$)</label><input id="el-rent-value" type="number" class="input-field" style="width:100%"></div>
+      <div><label style="font-size:11px;color:#888">Dia de vencimento</label><input id="el-due-day" type="number" min="1" max="31" class="input-field" style="width:100%"></div>
+    </div>
+
+    <p style="font-weight:700;margin-bottom:8px;color:#42A5F5">Dados do Proprietário</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
+      <div><label style="font-size:11px;color:#888">Nome</label><input id="el-landlord-name" type="text" class="input-field" style="width:100%"></div>
+      <div><label style="font-size:11px;color:#888">E-mail</label><input id="el-landlord-email" type="email" class="input-field" style="width:100%"></div>
+      <div><label style="font-size:11px;color:#888">CPF/CNPJ</label><input id="el-landlord-cpf" type="text" class="input-field" style="width:100%"></div>
+      <div><label style="font-size:11px;color:#888">Telefone</label><input id="el-landlord-phone" type="text" class="input-field" style="width:100%"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeEditLeadModal()" style="background:none;border:1px solid #555;color:#aaa;padding:10px 20px;border-radius:8px;cursor:pointer">Cancelar</button>
+      <button id="edit-lead-save-btn" onclick="saveEditLead()" style="background:#FFB74D;color:#000;border:none;padding:10px 24px;border-radius:8px;font-weight:700;cursor:pointer">Salvar</button>
     </div>
   </div>
 </div>
