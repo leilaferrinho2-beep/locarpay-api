@@ -552,13 +552,22 @@ async function handleApproveLead(db, body) {
     await leadRef.update({ landlord: landlordOverride });
   }
 
+  // Aprova o lead ANTES do Assinafy — garante que o lead fica aprovado mesmo em caso de timeout
+  await leadRef.update({
+    status:         'approved',
+    contractStatus: 'AGUARDANDO_PROPRIETARIO',
+    tenantId,
+    contractId,
+    approvedAt:     FieldValue.serverTimestamp(),
+    updatedAt:      FieldValue.serverTimestamp()
+  });
+
   if (skipAssinafy) {
     console.log('[approve-lead] skipAssinafy=true — contrato criado sem enviar ao Assinafy');
-    await leadRef.update({ status: 'approved', contractId, tenantId, approvedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
     return { ok: true, contractId, assinafySkipped: true };
   }
 
-  // Gera contrato no Assinafy — 1 tentativa (cron faz retentativas automáticas)
+  // Gera contrato no Assinafy (maxDuration=300s, sem race artificial)
   let assinafyResult = null;
   const assinafyPayload = {
     contractId,
@@ -578,11 +587,7 @@ async function handleApproveLead(db, body) {
     deposit:   cd.deposit   || parseFloat(lp.deposit)    || 0
   };
   try {
-    // Timeout global de 30s para todo o fluxo Assinafy (cron retenta se falhar)
-    assinafyResult = await Promise.race([
-      createAssinafyContract(db, contractId, assinafyPayload),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Assinafy timeout 30s')), 30000))
-    ]);
+    assinafyResult = await createAssinafyContract(db, contractId, assinafyPayload);
     console.log(`[approve-lead] contrato enviado ao Assinafy`);
   } catch (e) {
     console.error(`[approve-lead] Assinafy falhou:`, e.message);
@@ -600,16 +605,6 @@ async function handleApproveLead(db, body) {
       ).catch(() => {});
     } catch (_) {}
   }
-
-  // Atualiza lead PRIMEIRO (crítico) — antes dos envios que podem demorar
-  await leadRef.update({
-    status:         'approved',
-    contractStatus: 'AGUARDANDO_PROPRIETARIO',
-    tenantId,
-    contractId,
-    approvedAt:     FieldValue.serverTimestamp(),
-    updatedAt:      FieldValue.serverTimestamp()
-  });
 
   // Dispara todos os envios em paralelo (não bloqueia a resposta entre si)
   if (!landlordEmail) console.warn('[approve-lead] landlordEmail vazio. owner.email:', owner.email, 'lead.landlord:', JSON.stringify(lead.landlord));
