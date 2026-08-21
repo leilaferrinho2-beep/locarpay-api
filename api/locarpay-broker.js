@@ -875,21 +875,31 @@ async function handleGenerateContract(db, body) {
 
   let result = {};
   try {
+    // Se já existe documento no Assinafy, anula-o antes de criar novo
     if (c.assinafyDocumentId) {
-      // Documento já existe — apenas reenvia notificação aos signatários
       const configSnap = await db.collection('config').doc('assinafy').get();
       const apiKey = configSnap.data()?.apiKey;
-      if (!apiKey) throw new Error('Chave Assinafy não configurada');
-      try {
-        await assinafyReq('POST', `documents/${c.assinafyDocumentId}/send`, null, apiKey);
-      } catch (_) {
-        await assinafyReq('POST', `documents/${c.assinafyDocumentId}/publish`, null, apiKey);
+      if (apiKey) {
+        try {
+          await assinafyReq('DELETE', `documents/${c.assinafyDocumentId}`, null, apiKey);
+          console.log('[generate-contract] documento anterior anulado:', c.assinafyDocumentId);
+        } catch (e) {
+          // Pode falhar se já estava anulado/expirado — continua mesmo assim
+          console.warn('[generate-contract] falha ao anular doc anterior:', e.message);
+        }
       }
-      result = { documentId: c.assinafyDocumentId, resent: true };
-      console.log('[generate-contract] reenvio ao Assinafy:', c.assinafyDocumentId);
-    } else {
-      result = await createAssinafyContract(db, contractId, { ...contractPdfData, tenantPhone });
+      // Limpa referência antiga no Firestore antes de criar novo
+      await db.collection('contracts').doc(contractId).update({
+        assinafyDocumentId:   null,
+        assinafyAssignmentId: null,
+        assinafySignerId1:    null,
+        assinafySignerId2:    null,
+        assinafyStatus:       'pending',
+        contractStatus:       'AGUARDANDO_PROPRIETARIO',
+        updatedAt:            FieldValue.serverTimestamp()
+      });
     }
+    result = await createAssinafyContract(db, contractId, { ...contractPdfData, tenantPhone });
   } catch (e) {
     console.error('[generate-contract] Assinafy error:', e.message);
     throw Object.assign(new Error('Falha ao enviar ao Assinafy: ' + e.message), { status: 500 });
