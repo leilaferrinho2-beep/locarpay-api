@@ -1262,7 +1262,7 @@
         <button class="btn-sm" style="color:#ef5350;border-color:#ef5350;margin-left:4px" onclick="rejectLead('${l.id}')">❌ Rejeitar</button>
       ` : l.status === 'approved' && l.contractId ? `
         <button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="viewLeadDetail('${l.id}')">🔍 Detalhes</button>
-        ${cs === 'CONTRATO_ASSINADO' || cs === 'CHAVES_ENTREGUES' ? '' : `<button class="btn-sm" style="margin-left:4px" onclick="regenContract('${l.contractId}')">📄 Reenviar contrato</button>`}
+        ${cs === 'CONTRATO_ASSINADO' || cs === 'CHAVES_ENTREGUES' ? '' : `<button class="btn-sm" style="margin-left:4px" onclick="regenContract('${l.contractId}',this)">📄 Reenviar contrato</button>`}
         ${cs === 'CONTRATO_ASSINADO' ? `<button class="btn-sm" style="color:#64B5F6;border-color:#64B5F6;margin-left:4px" onclick="deliverKeys('${l.contractId}','${l.tenantId||''}')">🔑 Entregar chaves</button>` : ''}
         ${!cs ? `<button class="btn-sm" style="color:#64B5F6;border-color:#64B5F6;margin-left:4px" onclick="deliverKeys('${l.contractId}','${l.tenantId||''}')">🏠 Entregar chaves</button>` : ''}
         <button class="btn-sm" style="color:#ef5350;border-color:#ef5350;margin-left:4px" onclick="removeLead('${l.id}')">🗑 Remover</button>

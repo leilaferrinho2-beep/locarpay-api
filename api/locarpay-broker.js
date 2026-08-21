@@ -875,9 +875,24 @@ async function handleGenerateContract(db, body) {
 
   let result = {};
   try {
-    result = await createAssinafyContract(db, contractId, { ...contractPdfData, tenantPhone });
+    if (c.assinafyDocumentId) {
+      // Documento já existe — apenas reenvia notificação aos signatários
+      const configSnap = await db.collection('config').doc('assinafy').get();
+      const apiKey = configSnap.data()?.apiKey;
+      if (!apiKey) throw new Error('Chave Assinafy não configurada');
+      try {
+        await assinafyReq('POST', `documents/${c.assinafyDocumentId}/send`, null, apiKey);
+      } catch (_) {
+        await assinafyReq('POST', `documents/${c.assinafyDocumentId}/publish`, null, apiKey);
+      }
+      result = { documentId: c.assinafyDocumentId, resent: true };
+      console.log('[generate-contract] reenvio ao Assinafy:', c.assinafyDocumentId);
+    } else {
+      result = await createAssinafyContract(db, contractId, { ...contractPdfData, tenantPhone });
+    }
   } catch (e) {
     console.error('[generate-contract] Assinafy error:', e.message);
+    throw Object.assign(new Error('Falha ao enviar ao Assinafy: ' + e.message), { status: 500 });
   }
 
   // Envia PDF do contrato por e-mail ao proprietário (sempre, independente da Assinafy)
