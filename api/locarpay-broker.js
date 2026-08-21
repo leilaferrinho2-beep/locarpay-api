@@ -721,6 +721,7 @@ async function createAssinafyContract(db, contractId, data) {
     getOrCreateSigner(apiKey, accountId, data.tenantName || 'Inquilino',    data.tenantEmail),
   ]);
   if (!s1Id || !s2Id) throw new Error('Assinafy não retornou IDs dos signatários');
+  if (s1Id === s2Id) throw new Error(`Proprietário e inquilino têm o mesmo e-mail (${data.ownerEmail}). Use e-mails diferentes para cada parte.`);
 
   // 3. Cria assignment (sequencial: proprietário step 1, inquilino step 2)
   // Assinafy auto-envia o e-mail de assinatura ao criar o assignment
