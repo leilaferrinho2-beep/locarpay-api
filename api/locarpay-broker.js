@@ -227,17 +227,15 @@ async function sendWhatsApp(phone, message) {
   const number = digits.startsWith('55') ? digits : `55${digits}`;
   const headers = { 'Content-Type': 'application/json', 'apikey': apiKey };
   try {
-    await fetch(`${baseUrl}/message/sendMedia/${instance}`, {
+    const r = await fetch(`${baseUrl}/message/sendText/${instance}`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        number,
-        mediatype: 'image',
-        mimetype: 'image/webp',
-        media: 'https://www.ilocarpay.com.br/logo.webp',
-        caption: message
-      })
+      body: JSON.stringify({ number, text: message })
     });
+    if (!r.ok) {
+      const err = await r.text().catch(() => r.status);
+      console.warn('[whatsapp] sendText falhou:', err);
+    }
   } catch (e) { console.warn('[whatsapp]', e.message); }
 }
 
