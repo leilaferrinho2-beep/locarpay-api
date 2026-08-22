@@ -1448,26 +1448,33 @@ async function handleCronRetryAssinafy(db) {
     else if (step === 'upload-doc')        result = await handleUploadDoc(db, req.body);
     else if (step === 'get-signed-url')    result = await handleGetSignedReadUrl(req.body, req._storageBucket);
     else if (step === 'whatsapp-qr') {
-      const baseUrl  = process.env.EVOLUTION_API_URL;
+      const baseUrl  = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
       const apiKey   = process.env.EVOLUTION_API_KEY;
       const instance = process.env.EVOLUTION_INSTANCE;
-      if (!baseUrl || !apiKey || !instance) throw Object.assign(new Error('Evolution API não configurada'), { status: 500 });
+      if (!baseUrl || !apiKey || !instance) throw Object.assign(new Error('Evolution API não configurada (verifique env vars)'), { status: 500 });
+      const evoFetch = (path) => {
+        const ctrl = new AbortController();
+        setTimeout(() => ctrl.abort(), 10000);
+        return fetch(`${baseUrl}/${path}`, { headers: { 'apikey': apiKey }, signal: ctrl.signal });
+      };
       // Verifica status da instância
-      const statusRes = await fetch(`${baseUrl}/instance/connectionState/${instance}`, {
-        headers: { 'apikey': apiKey }
-      });
-      const statusData = await statusRes.json();
+      const statusRes = await evoFetch(`instance/connectionState/${instance}`);
+      const statusText = await statusRes.text();
+      console.log('[whatsapp-qr] connectionState:', statusText.slice(0, 200));
+      let statusData;
+      try { statusData = JSON.parse(statusText); } catch { statusData = {}; }
       const state = statusData?.instance?.state || statusData?.state;
       if (state === 'open') {
         result = { ok: true, connected: true };
       } else {
         // Busca QR Code
-        const qrRes = await fetch(`${baseUrl}/instance/connect/${instance}`, {
-          headers: { 'apikey': apiKey }
-        });
-        const qrData = await qrRes.json();
+        const qrRes = await evoFetch(`instance/connect/${instance}`);
+        const qrText = await qrRes.text();
+        console.log('[whatsapp-qr] connect response:', qrText.slice(0, 300));
+        let qrData;
+        try { qrData = JSON.parse(qrText); } catch { qrData = {}; }
         const base64 = qrData?.base64 || qrData?.qrcode?.base64 || qrData?.code;
-        result = { ok: true, connected: false, base64, message: qrData?.message, state };
+        result = { ok: true, connected: false, base64, message: qrData?.message || qrText.slice(0, 100), state };
       }
     }
     else if (step === 'test-email') {

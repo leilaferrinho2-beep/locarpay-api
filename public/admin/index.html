@@ -2878,20 +2878,26 @@
     img.style.display = 'none';
     status.textContent = '⏳ Buscando QR Code...';
     try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
       const res = await fetch('/api/locarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'whatsapp-qr' })
+        body: JSON.stringify({ step: 'whatsapp-qr' }),
+        signal: ctrl.signal
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao buscar QR Code');
+      clearTimeout(timer);
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { throw new Error('Resposta inválida: ' + text.slice(0, 100)); }
+      if (!res.ok) throw new Error(data.error || 'Erro ' + res.status);
       if (data.connected) {
         status.textContent = '✅ WhatsApp já está conectado!';
       } else if (data.base64) {
-        img.src = data.base64;
+        img.src = data.base64.startsWith('data:') ? data.base64 : 'data:image/png;base64,' + data.base64;
         img.style.display = 'block';
-        status.textContent = 'Escaneie com o WhatsApp → Aparelhos conectados → Conectar aparelho';
+        status.textContent = 'Escaneie: WhatsApp → Aparelhos conectados → Conectar aparelho';
       } else {
-        status.textContent = '⚠️ ' + (data.message || 'Instância não encontrada');
+        status.textContent = '⚠️ ' + (data.message || JSON.stringify(data));
       }
     } catch (e) { status.textContent = 'Erro: ' + e.message; }
   }
