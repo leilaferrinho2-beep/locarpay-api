@@ -2869,6 +2869,33 @@
     finally { btn.disabled = false; btn.textContent = 'Avisar vencimentos'; }
   }
 
+  // ── WhatsApp QR Code ──────────────────────────────────────────
+  async function openWhatsappQr() {
+    const modal = $('modal-whatsapp-qr');
+    const img   = $('whatsapp-qr-img');
+    const status = $('whatsapp-qr-status');
+    modal.style.display = 'flex';
+    img.style.display = 'none';
+    status.textContent = '⏳ Buscando QR Code...';
+    try {
+      const res = await fetch('/api/locarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'whatsapp-qr' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao buscar QR Code');
+      if (data.connected) {
+        status.textContent = '✅ WhatsApp já está conectado!';
+      } else if (data.base64) {
+        img.src = data.base64;
+        img.style.display = 'block';
+        status.textContent = 'Escaneie com o WhatsApp → Aparelhos conectados → Conectar aparelho';
+      } else {
+        status.textContent = '⚠️ ' + (data.message || 'Instância não encontrada');
+      }
+    } catch (e) { status.textContent = 'Erro: ' + e.message; }
+  }
+
   // ── Limpar cobranças órfãs ────────────────────────────────────
   async function cleanOrphanCharges() {
     const btn = $('btn-clean-orphans');
@@ -4567,6 +4594,7 @@
   $('adjust-save').addEventListener('click', applyAdjustRent);
   $('adjust-cancel').addEventListener('click', () => $('modal-adjust-rent').style.display = 'none');
   $('btn-export-csv').addEventListener('click', exportCSV);
+  $('btn-whatsapp-qr').addEventListener('click', openWhatsappQr);
   $('et-save').addEventListener('click', saveEditTenant);
   $('et-cancel').addEventListener('click', () => $('modal-edit-tenant').style.display = 'none');
   $('et-close-contract').addEventListener('click', closeContractFromModal);
@@ -4576,7 +4604,7 @@
   $('tenant-cancel').addEventListener('click',  () => { $('modal-tenant').style.display = 'none'; resetTenantForm(); });
   $('tenant-save').addEventListener('click', saveTenant);
 
-  [$('modal-tenant'), $('modal-docs'), $('modal-billing'), $('modal-edit-tenant'), $('modal-extras'), $('modal-history'), $('modal-adjust-rent'), $('modal-credit-analysis'), $('modal-approve-lead'), $('modal-lead-detail'), $('modal-edit-lead')].forEach(m => {
+  [$('modal-tenant'), $('modal-docs'), $('modal-billing'), $('modal-edit-tenant'), $('modal-extras'), $('modal-history'), $('modal-adjust-rent'), $('modal-credit-analysis'), $('modal-approve-lead'), $('modal-lead-detail'), $('modal-edit-lead'), $('modal-whatsapp-qr')].forEach(m => {
     if (m) m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
   });
   // Upgrade modal: backdrop close also clears PIX interval
@@ -5080,6 +5108,7 @@
         <button class="btn-secondary" id="btn-adjust-rent" title="Reajuste de aluguel para todos os contratos">💰 Reajuste</button>
         <button class="btn-secondary" id="btn-export-csv" title="Exporta todas as cobranças em CSV">⬇ Exportar CSV</button>
         <button class="btn-secondary" id="btn-clean-orphans" title="Exclui cobranças de inquilinos que não existem mais">🗑 Limpar órfãs</button>
+        <button class="btn-secondary" id="btn-whatsapp-qr" title="Gera QR Code para conectar WhatsApp">📱 WhatsApp QR</button>
       </div>
     </div>
   </div>
@@ -6036,6 +6065,15 @@
 </div>
 
 <!-- Modal: Reajuste de Aluguel -->
+<div id="modal-whatsapp-qr" class="modal-overlay">
+  <div class="modal-box" style="max-width:380px;text-align:center">
+    <h3>📱 WhatsApp — Conectar instância</h3>
+    <p id="whatsapp-qr-status" style="color:#aaa;font-size:14px;margin:16px 0">⏳ Buscando QR Code...</p>
+    <img id="whatsapp-qr-img" src="" alt="QR Code" style="display:none;max-width:260px;border-radius:12px;margin:0 auto 16px">
+    <button onclick="$('modal-whatsapp-qr').style.display='none'" style="margin-top:8px;padding:10px 24px;background:#333;border:none;color:#fff;border-radius:8px;cursor:pointer">Fechar</button>
+  </div>
+</div>
+
 <div id="modal-adjust-rent" class="modal-overlay">
   <div class="modal-box" style="max-width:420px">
     <h3>Reajuste de Aluguel</h3>
