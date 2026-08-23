@@ -1,66 +1,51 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0f1117"/>
-      <stop offset="100%" style="stop-color:#1a2a1a"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:#4CAF50"/>
-      <stop offset="100%" style="stop-color:#81C784"/>
-    </linearGradient>
-  </defs>
 
-  <!-- Background -->
-  <rect width="1200" height="630" fill="url(#bg)"/>
+  <!-- Background sólido verde escuro (sem gradiente = nítido no WhatsApp) -->
+  <rect width="1200" height="630" fill="#0d1f0d"/>
 
-  <!-- Decorative circles -->
-  <circle cx="1050" cy="100" r="200" fill="#4CAF50" opacity="0.04"/>
-  <circle cx="150" cy="530" r="150" fill="#4CAF50" opacity="0.04"/>
+  <!-- Borda verde sutil -->
+  <rect x="0" y="0" width="1200" height="8" fill="#25a244"/>
+  <rect x="0" y="622" width="1200" height="8" fill="#25a244"/>
 
-  <!-- Green accent bar left -->
-  <rect x="0" y="0" width="6" height="630" fill="url(#accent)"/>
-
-  <!-- Logo mark (pin icon) -->
-  <g transform="translate(100, 210)">
-    <!-- Pin shape -->
-    <ellipse cx="70" cy="62" rx="42" ry="42" fill="none" stroke="#4CAF50" stroke-width="6"/>
-    <ellipse cx="70" cy="62" rx="20" ry="20" fill="#4CAF50"/>
-    <line x1="70" y1="104" x2="70" y2="140" stroke="#4CAF50" stroke-width="6" stroke-linecap="round"/>
-    <!-- Circle accent -->
-    <circle cx="70" cy="62" r="55" fill="none" stroke="#4CAF50" stroke-width="2" opacity="0.3"/>
+  <!-- Logo mark centralizado verticalmente -->
+  <g transform="translate(90, 175)">
+    <!-- Círculo externo -->
+    <circle cx="90" cy="90" r="80" fill="none" stroke="#25a244" stroke-width="8"/>
+    <!-- Círculo interno preenchido -->
+    <circle cx="90" cy="90" r="36" fill="#25a244"/>
+    <!-- Haste do pin -->
+    <rect x="83" y="168" width="14" height="52" rx="7" fill="#25a244"/>
+    <!-- Ponta oval -->
+    <ellipse cx="90" cy="226" rx="10" ry="6" fill="#25a244"/>
+    <!-- Anel decorativo -->
+    <circle cx="90" cy="90" r="100" fill="none" stroke="#25a244" stroke-width="2" opacity="0.25"/>
   </g>
 
   <!-- iLocarPay wordmark -->
-  <text x="240" y="285" font-family="Arial, sans-serif" font-weight="700" font-size="82" fill="white" letter-spacing="-2">iLocar<tspan fill="#4CAF50">Pay</tspan></text>
+  <text x="280" y="305" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="110" fill="#ffffff" letter-spacing="-3">iLocar<tspan fill="#25a244">Pay</tspan></text>
 
   <!-- Tagline -->
-  <text x="240" y="340" font-family="Arial, sans-serif" font-weight="400" font-size="28" fill="#9E9E9E" letter-spacing="0.5">Gestão de Aluguéis para Imobiliárias</text>
+  <text x="283" y="370" font-family="Arial, sans-serif" font-weight="400" font-size="32" fill="#7ab87a" letter-spacing="0.5">Gestão de Aluguéis para Imobiliárias</text>
 
-  <!-- Divider -->
-  <rect x="240" y="368" width="80" height="3" fill="url(#accent)" rx="2"/>
+  <!-- Linha separadora -->
+  <rect x="283" y="400" width="100" height="4" fill="#25a244" rx="2"/>
 
   <!-- Features -->
-  <g transform="translate(240, 415)">
-    <circle cx="8" cy="8" r="8" fill="#4CAF50" opacity="0.2"/>
-    <circle cx="8" cy="8" r="4" fill="#4CAF50"/>
-    <text x="28" y="13" font-family="Arial, sans-serif" font-size="22" fill="#E0E0E0">Cobranças automáticas</text>
+  <g transform="translate(283, 440)">
+    <circle cx="10" cy="10" r="10" fill="#25a244"/>
+    <text x="32" y="16" font-family="Arial, sans-serif" font-size="26" fill="#c8e6c8">Cobranças automáticas</text>
   </g>
-  <g transform="translate(240, 455)">
-    <circle cx="8" cy="8" r="8" fill="#4CAF50" opacity="0.2"/>
-    <circle cx="8" cy="8" r="4" fill="#4CAF50"/>
-    <text x="28" y="13" font-family="Arial, sans-serif" font-size="22" fill="#E0E0E0">Contratos digitais</text>
+  <g transform="translate(283, 488)">
+    <circle cx="10" cy="10" r="10" fill="#25a244"/>
+    <text x="32" y="16" font-family="Arial, sans-serif" font-size="26" fill="#c8e6c8">Contratos digitais</text>
   </g>
-  <g transform="translate(240, 495)">
-    <circle cx="8" cy="8" r="8" fill="#4CAF50" opacity="0.2"/>
-    <circle cx="8" cy="8" r="4" fill="#4CAF50"/>
-    <text x="28" y="13" font-family="Arial, sans-serif" font-size="22" fill="#E0E0E0">App para inquilinos e corretores</text>
+  <g transform="translate(283, 536)">
+    <circle cx="10" cy="10" r="10" fill="#25a244"/>
+    <text x="32" y="16" font-family="Arial, sans-serif" font-size="26" fill="#c8e6c8">App para inquilinos e corretores</text>
   </g>
 
-  <!-- Domain badge -->
-  <rect x="830" y="490" width="280" height="52" rx="26" fill="#4CAF50" opacity="0.12"/>
-  <rect x="830" y="490" width="280" height="52" rx="26" fill="none" stroke="#4CAF50" stroke-width="1.5" opacity="0.4"/>
-  <text x="970" y="522" font-family="Arial, sans-serif" font-size="20" fill="#4CAF50" text-anchor="middle" font-weight="600">ilocarpay.com.br</text>
+  <!-- URL badge -->
+  <rect x="880" y="528" width="260" height="58" rx="29" fill="none" stroke="#25a244" stroke-width="3"/>
+  <text x="1010" y="563" font-family="Arial, sans-serif" font-weight="700" font-size="24" fill="#25a244" text-anchor="middle">ilocarpay.com.br</text>
 
-  <!-- Bottom accent line -->
-  <rect x="0" y="624" width="1200" height="6" fill="url(#accent)" opacity="0.6"/>
 </svg>
