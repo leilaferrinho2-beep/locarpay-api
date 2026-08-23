@@ -1555,6 +1555,12 @@ async function handleCronRetryAssinafy(db) {
     else if (step === 'whatsapp-disconnect') {
       result = await handleWhatsappDisconnect(db, req.body);
     }
+    else if (step === 'send-whatsapp-test') {
+      const { phone, message } = req.body;
+      if (!phone) throw Object.assign(new Error('phone obrigatório'), { status: 400 });
+      await sendWhatsApp(phone, message || 'Teste iLocarPay\n\nhttps://www.ilocarpay.com.br');
+      result = { ok: true };
+    }
     else if (step === 'test-email') {
       const { to } = req.body;
       if (!to) throw Object.assign(new Error('to obrigatório'), { status: 400 });
