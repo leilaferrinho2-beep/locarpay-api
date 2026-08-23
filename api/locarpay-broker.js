@@ -217,25 +217,21 @@ async function sendContractEmail({ landlordName, landlordEmail, tenantName, tena
   ]);
 }
 
-async function sendWhatsApp(phone, message) {
-  const baseUrl  = process.env.EVOLUTION_API_URL;
-  const apiKey   = process.env.EVOLUTION_API_KEY;
-  const instance = process.env.EVOLUTION_INSTANCE;
+async function sendWhatsApp(phone, message, ownerData = null) {
+  const baseUrl  = (ownerData?.evolutionApiUrl  || process.env.EVOLUTION_API_URL  || '').replace(/\/$/, '');
+  const apiKey   =  ownerData?.evolutionApiKey  || process.env.EVOLUTION_API_KEY  || '';
+  const instance =  ownerData?.evolutionInstance || process.env.EVOLUTION_INSTANCE || '';
   if (!baseUrl || !apiKey || !instance || !phone) return;
   const digits = phone.replace(/\D/g, '');
   if (digits.length < 10) return;
   const number = digits.startsWith('55') ? digits : `55${digits}`;
-  const headers = { 'Content-Type': 'application/json', 'apikey': apiKey };
   try {
     const r = await fetch(`${baseUrl}/message/sendText/${instance}`, {
       method: 'POST',
-      headers,
+      headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
       body: JSON.stringify({ number, text: message })
     });
-    if (!r.ok) {
-      const err = await r.text().catch(() => r.status);
-      console.warn('[whatsapp] sendText falhou:', err);
-    }
+    if (!r.ok) console.warn('[whatsapp] sendText falhou:', await r.text().catch(() => r.status));
   } catch (e) { console.warn('[whatsapp]', e.message); }
 }
 
@@ -1113,6 +1109,111 @@ async function handleRejectLead(db, body) {
   return { ok: true };
 }
 
+// ── WHATSAPP (por owner) ──────────────────────────────────────────────────────
+
+function getEvoConfig(ownerData) {
+  // Usa credenciais do owner se tiver; senão usa globais
+  const baseUrl  = (ownerData?.evolutionApiUrl || process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
+  const apiKey   = ownerData?.evolutionApiKey  || process.env.EVOLUTION_API_KEY  || '';
+  const instance = ownerData?.evolutionInstance || process.env.EVOLUTION_INSTANCE || '';
+  return { baseUrl, apiKey, instance };
+}
+
+function makeEvoFetch(baseUrl, apiKey) {
+  return (path, opts = {}) => {
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), 12000);
+    return fetch(`${baseUrl}/${path}`, {
+      ...opts,
+      headers: { 'apikey': apiKey, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+      signal: ctrl.signal,
+    });
+  };
+}
+
+async function ensureEvoInstance(evoFetch, instance) {
+  // Cria instância se não existir
+  try {
+    const r = await evoFetch(`instance/create`, {
+      method: 'POST',
+      body: JSON.stringify({ instanceName: instance, qrcode: true, integration: 'WHATSAPP-BAILEYS' }),
+    });
+    const d = await r.json().catch(() => ({}));
+    console.log('[evo] create instance:', JSON.stringify(d).slice(0, 200));
+  } catch (e) {
+    console.warn('[evo] create instance error (pode já existir):', e.message);
+  }
+}
+
+async function handleWhatsappQr(db, body) {
+  const { ownerId } = body;
+
+  // Carrega dados do owner (se fornecido) para pegar credenciais específicas
+  let ownerData = null;
+  if (ownerId) {
+    const snap = await db.collection('owners').doc(ownerId).get();
+    ownerData = snap.exists ? snap.data() : null;
+  }
+
+  const { baseUrl, apiKey, instance } = getEvoConfig(ownerData);
+  if (!baseUrl || !apiKey || !instance) {
+    throw Object.assign(new Error('Evolution API não configurada para esta imobiliária'), { status: 500 });
+  }
+
+  const evoFetch = makeEvoFetch(baseUrl, apiKey);
+
+  // Verifica estado da instância
+  const statusRes = await evoFetch(`instance/connectionState/${instance}`);
+  const statusText = await statusRes.text();
+  let statusData;
+  try { statusData = JSON.parse(statusText); } catch { statusData = {}; }
+  const state = statusData?.instance?.state || statusData?.state;
+  console.log(`[whatsapp-qr] ownerId=${ownerId} instance=${instance} state=${state}`);
+
+  if (state === 'open') {
+    // Salva status no owner
+    if (ownerId) {
+      await db.collection('owners').doc(ownerId).update({
+        whatsappConnected: true,
+        whatsappInstance: instance,
+        whatsappConnectedAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
+    return { ok: true, connected: true };
+  }
+
+  // Instância não existe (404) — cria automaticamente
+  if (statusRes.status === 404 || !state) {
+    await ensureEvoInstance(evoFetch, instance);
+  }
+
+  // Busca QR Code
+  const qrRes  = await evoFetch(`instance/connect/${instance}`);
+  const qrText = await qrRes.text();
+  let qrData;
+  try { qrData = JSON.parse(qrText); } catch { qrData = {}; }
+  const base64 = qrData?.base64 || qrData?.qrcode?.base64 || qrData?.code;
+
+  return { ok: true, connected: false, base64, state, instance };
+}
+
+async function handleWhatsappDisconnect(db, body) {
+  const { ownerId } = body;
+  let ownerData = null;
+  if (ownerId) {
+    const snap = await db.collection('owners').doc(ownerId).get();
+    ownerData = snap.exists ? snap.data() : null;
+  }
+  const { baseUrl, apiKey, instance } = getEvoConfig(ownerData);
+  if (!baseUrl || !apiKey || !instance) throw Object.assign(new Error('Evolution API não configurada'), { status: 500 });
+  const evoFetch = makeEvoFetch(baseUrl, apiKey);
+  await evoFetch(`instance/logout/${instance}`, { method: 'DELETE' }).catch(() => {});
+  if (ownerId) {
+    await db.collection('owners').doc(ownerId).update({ whatsappConnected: false }).catch(() => {});
+  }
+  return { ok: true };
+}
+
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
 
 async function handleGetSignedReadUrl(body) {
@@ -1448,34 +1549,10 @@ async function handleCronRetryAssinafy(db) {
     else if (step === 'upload-doc')        result = await handleUploadDoc(db, req.body);
     else if (step === 'get-signed-url')    result = await handleGetSignedReadUrl(req.body, req._storageBucket);
     else if (step === 'whatsapp-qr') {
-      const baseUrl  = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
-      const apiKey   = process.env.EVOLUTION_API_KEY;
-      const instance = process.env.EVOLUTION_INSTANCE;
-      if (!baseUrl || !apiKey || !instance) throw Object.assign(new Error('Evolution API não configurada (verifique env vars)'), { status: 500 });
-      const evoFetch = (path) => {
-        const ctrl = new AbortController();
-        setTimeout(() => ctrl.abort(), 10000);
-        return fetch(`${baseUrl}/${path}`, { headers: { 'apikey': apiKey }, signal: ctrl.signal });
-      };
-      // Verifica status da instância
-      const statusRes = await evoFetch(`instance/connectionState/${instance}`);
-      const statusText = await statusRes.text();
-      console.log('[whatsapp-qr] connectionState:', statusText.slice(0, 200));
-      let statusData;
-      try { statusData = JSON.parse(statusText); } catch { statusData = {}; }
-      const state = statusData?.instance?.state || statusData?.state;
-      if (state === 'open') {
-        result = { ok: true, connected: true };
-      } else {
-        // Busca QR Code
-        const qrRes = await evoFetch(`instance/connect/${instance}`);
-        const qrText = await qrRes.text();
-        console.log('[whatsapp-qr] connect response:', qrText.slice(0, 300));
-        let qrData;
-        try { qrData = JSON.parse(qrText); } catch { qrData = {}; }
-        const base64 = qrData?.base64 || qrData?.qrcode?.base64 || qrData?.code;
-        result = { ok: true, connected: false, base64, message: qrData?.message || qrText.slice(0, 100), state };
-      }
+      result = await handleWhatsappQr(db, req.body);
+    }
+    else if (step === 'whatsapp-disconnect') {
+      result = await handleWhatsappDisconnect(db, req.body);
     }
     else if (step === 'test-email') {
       const { to } = req.body;

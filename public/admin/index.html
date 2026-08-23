@@ -538,6 +538,7 @@
           <button class="btn-sm" onclick="switchOwner('${o.id}')">Inquilinos</button>
           <button class="btn-sm" style="color:#4CAF50;border-color:#2a4a2a" onclick="openBillingModal('${o.id}')">Plano</button>
           <button class="btn-sm" style="color:#CE93D8;border-color:#3a1a4a" title="Configurar webhook de pagamento Asaas" onclick="setupPaymentWebhook('${o.id}', this)">Webhook</button>
+          <button class="btn-sm" style="color:#25D366;border-color:#1a3a2a" title="Conectar WhatsApp desta imobiliária" onclick="openWhatsappQr('${o.id}')"><span data-wa-badge="${o.id}">${o.whatsappConnected ? '🟢' : '🔴'}</span> WhatsApp</button>
         </td>
       `;
       tbody.appendChild(row);
@@ -2869,37 +2870,88 @@
     finally { btn.disabled = false; btn.textContent = 'Avisar vencimentos'; }
   }
 
-  // ── WhatsApp QR Code ──────────────────────────────────────────
-  async function openWhatsappQr() {
-    const modal = $('modal-whatsapp-qr');
-    const img   = $('whatsapp-qr-img');
+  // ── WhatsApp QR Code (por imobiliária) ──────────────────────────
+  let _qrTimer = null;
+  let _qrCountdown = null;
+  let _qrOwnerId = null;
+
+  function _clearQrTimers() {
+    if (_qrTimer)     { clearInterval(_qrTimer);     _qrTimer = null; }
+    if (_qrCountdown) { clearInterval(_qrCountdown); _qrCountdown = null; }
+  }
+
+  async function openWhatsappQr(ownerId) {
+    _qrOwnerId = ownerId || currentOwnerId;
+    const modal  = $('modal-whatsapp-qr');
+    const img    = $('whatsapp-qr-img');
     const status = $('whatsapp-qr-status');
+    const timerEl = $('whatsapp-qr-timer');
+    const connEl  = $('whatsapp-qr-connected');
+    _clearQrTimers();
     modal.style.display = 'flex';
     img.style.display = 'none';
+    if (connEl) connEl.style.display = 'none';
+    if (timerEl) timerEl.textContent = '';
     status.textContent = '⏳ Buscando QR Code...';
+    await _fetchQr();
+  }
+
+  async function _fetchQr() {
+    const img    = $('whatsapp-qr-img');
+    const status = $('whatsapp-qr-status');
+    const timerEl = $('whatsapp-qr-timer');
+    const connEl  = $('whatsapp-qr-connected');
+    _clearQrTimers();
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 15000);
-      const res = await fetch('/api/locarpay-broker', {
+      const res  = await fetch('/api/locarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'whatsapp-qr' }),
-        signal: ctrl.signal
+        body: JSON.stringify({ step: 'whatsapp-qr', ownerId: _qrOwnerId })
       });
-      clearTimeout(timer);
-      const text = await res.text();
-      let data;
-      try { data = JSON.parse(text); } catch { throw new Error('Resposta inválida: ' + text.slice(0, 100)); }
+      const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ' + res.status);
+
       if (data.connected) {
-        status.textContent = '✅ WhatsApp já está conectado!';
-      } else if (data.base64) {
-        img.src = data.base64.startsWith('data:') ? data.base64 : 'data:image/png;base64,' + data.base64;
-        img.style.display = 'block';
-        status.textContent = 'Escaneie: WhatsApp → Aparelhos conectados → Conectar aparelho';
-      } else {
-        status.textContent = '⚠️ ' + (data.message || JSON.stringify(data));
+        img.style.display = 'none';
+        if (timerEl) timerEl.textContent = '';
+        if (connEl) { connEl.style.display = 'block'; }
+        status.textContent = '✅ WhatsApp conectado com sucesso!';
+        // Atualiza badge na lista de owners
+        _updateOwnerWhatsappBadge(_qrOwnerId, true);
+        return;
       }
-    } catch (e) { status.textContent = 'Erro: ' + e.message; }
+
+      if (data.base64) {
+        const src = data.base64.startsWith('data:') ? data.base64 : 'data:image/png;base64,' + data.base64;
+        img.src = src;
+        img.style.display = 'block';
+        status.textContent = '📷 Escaneie: WhatsApp → ⋮ → Aparelhos conectados → Conectar';
+        // Contador regressivo 25s
+        let secs = 25;
+        if (timerEl) { timerEl.style.color = '#4CAF50'; timerEl.textContent = secs + 's'; }
+        _qrCountdown = setInterval(() => {
+          secs--;
+          if (timerEl) {
+            timerEl.textContent = secs + 's';
+            timerEl.style.color = secs <= 8 ? '#ff5252' : '#4CAF50';
+          }
+          if (secs <= 0) { clearInterval(_qrCountdown); _fetchQr(); }
+        }, 1000);
+      } else {
+        status.textContent = '⚠️ Sem QR — tentando novamente...';
+        _qrTimer = setTimeout(_fetchQr, 3000);
+      }
+    } catch (e) {
+      $('whatsapp-qr-status').textContent = 'Erro: ' + e.message;
+      _qrTimer = setTimeout(_fetchQr, 5000);
+    }
+  }
+
+  function _updateOwnerWhatsappBadge(ownerId, connected) {
+    const badge = document.querySelector(`[data-wa-badge="${ownerId}"]`);
+    if (badge) {
+      badge.textContent = connected ? '🟢' : '🔴';
+      badge.title = connected ? 'WhatsApp conectado' : 'WhatsApp desconectado';
+    }
   }
 
   // ── Limpar cobranças órfãs ────────────────────────────────────
@@ -6072,11 +6124,21 @@
 
 <!-- Modal: Reajuste de Aluguel -->
 <div id="modal-whatsapp-qr" class="modal-overlay">
-  <div class="modal-box" style="max-width:380px;text-align:center">
-    <h3>📱 WhatsApp — Conectar instância</h3>
-    <p id="whatsapp-qr-status" style="color:#aaa;font-size:14px;margin:16px 0">⏳ Buscando QR Code...</p>
-    <img id="whatsapp-qr-img" src="" alt="QR Code" style="display:none;max-width:260px;border-radius:12px;margin:0 auto 16px">
-    <button onclick="$('modal-whatsapp-qr').style.display='none'" style="margin-top:8px;padding:10px 24px;background:#333;border:none;color:#fff;border-radius:8px;cursor:pointer">Fechar</button>
+  <div class="modal-box" style="max-width:380px;text-align:center;padding:28px">
+    <h3 style="margin-bottom:4px">📱 WhatsApp — Conectar</h3>
+    <p style="color:#aaa;font-size:12px;margin-bottom:16px">WhatsApp → ⋮ → Aparelhos conectados → Conectar aparelho</p>
+    <p id="whatsapp-qr-status" style="color:#aaa;font-size:13px;margin:0 0 12px">⏳ Buscando QR Code...</p>
+    <img id="whatsapp-qr-img" src="" alt="QR Code" style="display:none;width:240px;height:240px;border-radius:10px;border:6px solid #fff;margin:0 auto 8px;display:none">
+    <div id="whatsapp-qr-timer" style="font-size:28px;font-weight:bold;margin:6px 0"></div>
+    <div id="whatsapp-qr-connected" style="display:none;background:#1b5e20;border-radius:10px;padding:16px;margin:12px 0">
+      <div style="font-size:32px">✅</div>
+      <div style="font-weight:bold;color:#69f0ae;font-size:16px;margin-top:4px">WhatsApp Conectado!</div>
+      <div style="color:#aaa;font-size:12px;margin-top:4px">Mensagens serão enviadas automaticamente</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:center">
+      <button onclick="_fetchQr()" style="padding:9px 18px;background:#25D366;border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:13px">🔄 Novo QR</button>
+      <button onclick="_clearQrTimers();$('modal-whatsapp-qr').style.display='none'" style="padding:9px 18px;background:#333;border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:13px">Fechar</button>
+    </div>
   </div>
 </div>
 
