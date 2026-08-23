@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsApp QR — iLocarPay</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #111; color: #fff; font-family: Arial, sans-serif;
+         display: flex; flex-direction: column; align-items: center;
+         justify-content: center; min-height: 100vh; padding: 24px; }
+  h1 { color: #25D366; font-size: 22px; margin-bottom: 6px; }
+  .sub { color: #aaa; font-size: 13px; margin-bottom: 20px; text-align: center; max-width: 320px; }
+  #qr-box { position: relative; width: 260px; height: 260px; }
+  #qr-img { width: 260px; height: 260px; border: 8px solid #fff; border-radius: 8px; display: block; }
+  #overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.8);
+              border-radius: 6px; display: flex; align-items: center;
+              justify-content: center; font-size: 15px; color: #fff; }
+  #timer { margin-top: 14px; font-size: 32px; font-weight: bold; color: #25D366; }
+  #timer.urgent { color: #ff5252; }
+  #status { margin-top: 10px; font-size: 13px; color: #aaa; }
+  #connected { background: #25D366; color: #fff; padding: 24px 40px;
+               border-radius: 12px; font-size: 20px; font-weight: bold;
+               display: none; text-align: center; }
+  button { margin-top: 18px; background: #25D366; color: #fff;
+           border: none; padding: 11px 26px; border-radius: 8px;
+           font-size: 15px; cursor: pointer; }
+  button:active { opacity: 0.8; }
+</style>
+</head>
+<body>
+<h1>📱 WhatsApp — iLocarPay</h1>
+<p class="sub">WhatsApp → Menu (⋮) → Dispositivos conectados → Conectar dispositivo</p>
+
+<div id="main">
+  <div id="qr-box">
+    <img id="qr-img" src="" alt="QR Code">
+    <div id="overlay">Carregando...</div>
+  </div>
+  <div id="timer">--</div>
+  <div id="status">Buscando QR Code...</div>
+  <button onclick="fetchQr()">🔄 Atualizar agora</button>
+</div>
+
+<div id="connected">✅ WhatsApp Conectado!<br><small style="font-size:14px;font-weight:normal">O sistema já pode enviar mensagens.</small></div>
+
+<script>
+let countdown = 0;
+let timer;
+
+async function fetchQr() {
+  clearInterval(timer);
+  document.getElementById('overlay').style.display = 'flex';
+  document.getElementById('overlay').textContent = 'Atualizando...';
+  document.getElementById('status').textContent = 'Buscando QR Code...';
+  const timerEl = document.getElementById('timer');
+  timerEl.className = '';
+  timerEl.textContent = '--';
+
+  try {
+    const r = await fetch('/api/locarpay-broker', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step: 'whatsapp-qr' })
+    });
+    const data = await r.json();
+
+    if (data.connected) {
+      document.getElementById('main').style.display = 'none';
+      document.getElementById('connected').style.display = 'block';
+      return;
+    }
+
+    if (data.base64) {
+      document.getElementById('qr-img').src = data.base64;
+      document.getElementById('overlay').style.display = 'none';
+      document.getElementById('status').textContent = '📷 Escaneie antes do tempo acabar!';
+      countdown = 25;
+      timerEl.textContent = countdown + 's';
+      timer = setInterval(() => {
+        countdown--;
+        timerEl.textContent = countdown + 's';
+        timerEl.className = countdown <= 8 ? 'urgent' : '';
+        if (countdown <= 0) { clearInterval(timer); fetchQr(); }
+      }, 1000);
+    } else {
+      document.getElementById('status').textContent = 'Sem QR. Tentando em 3s...';
+      setTimeout(fetchQr, 3000);
+    }
+  } catch (e) {
+    document.getElementById('status').textContent = 'Erro de conexão. Tentando em 5s...';
+    setTimeout(fetchQr, 5000);
+  }
+}
+
+fetchQr();
+</script>
+</body>
+</html>

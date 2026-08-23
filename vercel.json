@@ -13,7 +13,9 @@
     { "source": "/api/locarpay-reassign-contract","destination": "/api/locarpay-fix-contract" },
     { "source": "/api/locarpay-sync-status",     "destination": "/api/locarpay-card" },
     { "source": "/download",                     "destination": "/download/index.html" },
-    { "source": "/download/",                    "destination": "/download/index.html" }
+    { "source": "/download/",                    "destination": "/download/index.html" },
+    { "source": "/qr",                           "destination": "/qr/index.html" },
+    { "source": "/qr/",                          "destination": "/qr/index.html" }
   ],
   "headers": [
     {
