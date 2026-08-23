@@ -1146,9 +1146,9 @@ async function ensureEvoInstance(evoFetch, instance) {
 }
 
 async function handleWhatsappQr(db, body) {
-  const { ownerId } = body;
+  const rawId = body.ownerId;
+  const ownerId = (rawId && typeof rawId === 'string' && rawId !== 'undefined' && rawId.trim()) ? rawId.trim() : null;
 
-  // Carrega dados do owner (se fornecido) para pegar credenciais específicas
   let ownerData = null;
   if (ownerId) {
     const snap = await db.collection('owners').doc(ownerId).get();
@@ -1198,7 +1198,8 @@ async function handleWhatsappQr(db, body) {
 }
 
 async function handleWhatsappDisconnect(db, body) {
-  const { ownerId } = body;
+  const rawId = body.ownerId;
+  const ownerId = (rawId && typeof rawId === 'string' && rawId !== 'undefined' && rawId.trim()) ? rawId.trim() : null;
   let ownerData = null;
   if (ownerId) {
     const snap = await db.collection('owners').doc(ownerId).get();
