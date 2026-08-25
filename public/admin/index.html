@@ -4113,7 +4113,7 @@
         <button onclick="this.closest('[data-toast]').remove()" style="background:none;border:none;color:#888;cursor:pointer;font-size:18px;padding:0;line-height:1">×</button>
       </div>
       <div style="margin-top:10px">
-        <button class="btn-sm" onclick="setTab('chamados');this.closest('[data-toast]').remove()" style="width:100%;text-align:center;background:#1565c0">Ver chamado</button>
+        <button class="btn-sm" onclick="setTab('chamados');selectChamado('${chamadoId}');this.closest('[data-toast]').remove()" style="width:100%;text-align:center;background:#1565c0">Ver chamado</button>
       </div>
     `;
     toast.setAttribute('data-toast','1');
@@ -4198,7 +4198,11 @@
     _renderChamadoList();
 
     const c = _chamadosAll.find(x => x.id === chamadoId);
-    if (!c) return;
+    if (!c) {
+      // Dados ainda não carregados — tenta novamente em 500ms
+      setTimeout(() => selectChamado(chamadoId), 500);
+      return;
+    }
 
     // Mostrar painel de chat
     const empty = $('ch-empty'); if (empty) empty.style.display = 'none';
@@ -4661,7 +4665,7 @@
         <button onclick="this.closest('div[data-toast]').remove()" style="background:none;border:none;color:#888;cursor:pointer;font-size:18px;padding:0;line-height:1">×</button>
       </div>
       <div style="margin-top:10px;display:flex;gap:8px">
-        <button class="btn-sm" onclick="setTab('chamados');this.closest('[data-toast]').remove()" style="flex:1;text-align:center">Ver chamado</button>
+        <button class="btn-sm" onclick="setTab('chamados');selectChamado('${id}');this.closest('[data-toast]').remove()" style="flex:1;text-align:center">Ver chamado</button>
       </div>
     `;
     toast.setAttribute('data-toast','1');
