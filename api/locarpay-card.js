@@ -58,6 +58,31 @@ async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
   return c.id;
 }
 
+// ── PUSH FCM: NOVA COBRANÇA ───────────────────────────────────────────────────
+// Envia push FCM a uma lista de {tenantId, chargeId, baseRent, dueDate} (fire-and-forget)
+async function pushNovaCobranca(db, charges) {
+  const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  await Promise.all(charges.map(async ({ tenantId, chargeId, baseRent, dueDate, description }) => {
+    try {
+      const userSnap = await db.collection('users').doc(tenantId).get();
+      const token = userSnap.data()?.fcmToken;
+      if (!token) return;
+      const dueFmt = (dueDate instanceof Date ? dueDate : new Date((dueDate?.seconds||0)*1000))
+        .toLocaleDateString('pt-BR');
+      const label = description ? description.replaceAll(/\b\w/g, c => c.toUpperCase()) : 'Aluguel';
+      await getMessaging().send({
+        token,
+        notification: {
+          title: `📋 Nova cobrança: ${label}`,
+          body:  `${fmt.format(baseRent)} — vence em ${dueFmt}. Acesse o app para pagar.`
+        },
+        data: { type: 'new_charge', chargeId: chargeId || '' },
+        android: { priority: 'high' }
+      });
+    } catch (_) {}
+  }));
+}
+
 // ── PIX AUTO-CHARGE ──────────────────────────────────────────────────────────
 // Cria cobrança PIX no Asaas para uma charge do Firestore e salva QR code.
 // ownerCfg: { finePercentage, interestRate } — valores em % ao mês.
@@ -1044,6 +1069,9 @@ async function handleGenerateCharges(db, body) {
         });
       } catch (_) {} // falha de e-mail não bloqueia a geração
     }));
+
+    // Push FCM imediato para cada inquilino (fire-and-forget)
+    pushNovaCobranca(db, newCharges).catch(() => {});
   }
 
   return { ok: true, created };
@@ -1189,6 +1217,9 @@ async function handleAutoGenerateUpcoming(db, { ownerId, ownerData = {} }) {
         });
       } catch (_) {}
     }));
+
+    // Push FCM imediato para cada inquilino (fire-and-forget)
+    pushNovaCobranca(db, newCharges).catch(() => {});
   }
 
   return { created };
