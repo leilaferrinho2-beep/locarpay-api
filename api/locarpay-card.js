@@ -2422,6 +2422,50 @@ async function handleCreateExtraPix(db, body) {
   return { ok: true, asaasChargeId: res.id };
 }
 
+async function handleMigrateTenantUid(db, body) {
+  const { uid, email } = body;
+  if (!uid || !email) throw new Error('uid e email obrigatórios');
+
+  // Se users/{uid} já existe, nada a fazer
+  const uidDoc = await db.collection('users').doc(uid).get();
+  if (uidDoc.exists) return { ok: true, migrated: false };
+
+  // Busca doc antigo pelo e-mail
+  const snap = await db.collection('users')
+    .where('email', '==', email.trim().toLowerCase())
+    .where('role', '==', 'tenant')
+    .limit(1).get();
+  if (snap.empty) return { ok: true, migrated: false, reason: 'no_old_doc' };
+
+  const oldDoc = snap.docs[0];
+  const oldId  = oldDoc.id;
+  if (oldId === uid) return { ok: true, migrated: false };
+
+  const data = oldDoc.data();
+
+  // Cria users/{uid} com os dados do doc antigo
+  await db.collection('users').doc(uid).set({ ...data, id: uid });
+
+  // Atualiza cobranças com tenantId antigo
+  const chargesSnap = await db.collection('charges')
+    .where('tenantId', '==', oldId).get();
+  const batch1 = db.batch();
+  chargesSnap.docs.forEach(d => batch1.update(d.ref, { tenantId: uid }));
+  if (!chargesSnap.empty) await batch1.commit();
+
+  // Atualiza contratos com tenantId antigo
+  const contractsSnap = await db.collection('contracts')
+    .where('tenantId', '==', oldId).get();
+  const batch2 = db.batch();
+  contractsSnap.docs.forEach(d => batch2.update(d.ref, { tenantId: uid }));
+  if (!contractsSnap.empty) await batch2.commit();
+
+  // Remove doc antigo
+  await db.collection('users').doc(oldId).delete();
+
+  return { ok: true, migrated: true, oldId, chargesUpdated: chargesSnap.size, contractsUpdated: contractsSnap.size };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -2473,6 +2517,7 @@ export default async function handler(req, res) {
     if (step === 'cron-daily')           return res.status(200).json(await handleCronDaily(db, req));
     if (step === 'revoke-tenant')        return res.status(200).json(await handleRevokeTenant(db, req.body, req));
     if (step === 'create-extra-pix')     return res.status(200).json(await handleCreateExtraPix(db, req.body));
+    if (step === 'migrate-tenant-uid')   return res.status(200).json(await handleMigrateTenantUid(db, req.body));
 
     // Webhook Asaas sem step (evento direto da subconta)
     if (!step && req.body?.event && req.body?.payment) {
