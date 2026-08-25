@@ -2368,6 +2368,60 @@ async function handleRevokeTenant(db, body, req) {
   return { ok: true, message: 'Sessao do inquilino invalidada.' };
 }
 
+// Cria PIX Asaas para um documento de extra já criado no Firestore.
+// Taxa de cartão repassada ao inquilino via `enableDunning: true` e sem subsídio do owner.
+async function handleCreateExtraPix(db, body) {
+  const { chargeId, ownerId } = body;
+  if (!chargeId || !ownerId) throw Object.assign(new Error('chargeId e ownerId obrigatórios'), { status: 400 });
+
+  const chargeSnap = await db.collection('charges').doc(chargeId).get();
+  if (!chargeSnap.exists) throw Object.assign(new Error('Extra não encontrado'), { status: 404 });
+  const charge = chargeSnap.data();
+  if (charge.asaasChargeId) return { ok: true, skipped: 'PIX já gerado' };
+
+  const apiKey = await getAsaasKey(db, ownerId);
+  if (!apiKey) throw Object.assign(new Error('Chave Asaas não configurada'), { status: 500 });
+
+  const ownerSnap = await db.collection('owners').doc(ownerId).get();
+  const ownerCfg = ownerSnap.data() || {};
+  const fineVal     = ownerCfg.finePercentage  ?? 2;
+  const interestVal = ownerCfg.interestRate     ?? 1;
+
+  const dueDate = charge.dueDate instanceof Date ? charge.dueDate : new Date((charge.dueDate?.seconds || 0) * 1000);
+  const dueDateStr = `${dueDate.getFullYear()}-${String(dueDate.getMonth()+1).padStart(2,'0')}-${String(dueDate.getDate()).padStart(2,'0')}`;
+
+  const customerId = await (async () => {
+    const tSnap = await db.collection('users').doc(charge.tenantId).get();
+    const t = tSnap.data() || {};
+    return findOrCreateCustomer(t.name || t.email, t.email, t.cpf || t.document, t.phone, apiKey);
+  })();
+
+  const pixBody = {
+    customer:    customerId,
+    billingType: 'PIX',
+    value:       parseFloat((charge.totalAmount || charge.baseRent || 0).toFixed(2)),
+    dueDate:     dueDateStr,
+    description: charge.description || 'Extra iLocarPay',
+    fine:        { value: fineVal },
+    interest:    { value: interestVal },
+  };
+
+  let res;
+  try { res = await asaasReq('POST', '/payments', pixBody, apiKey); }
+  catch (e) { throw Object.assign(new Error('Asaas: ' + e.message), { status: 502 }); }
+
+  const pixQrRes = await asaasReq('GET', `/payments/${res.id}/pixQrCode`, null, apiKey).catch(() => null);
+
+  await db.collection('charges').doc(chargeId).update({
+    asaasChargeId: res.id,
+    pixQrCode:     pixQrRes?.encodedImage || res.pixQrCode    || '',
+    pixCopyPaste:  pixQrRes?.payload      || res.pixCopyPaste || '',
+    pixExpiresAt:  pixQrRes?.expirationDate ? new Date(pixQrRes.expirationDate) : null,
+  });
+
+  return { ok: true, asaasChargeId: res.id };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -2418,6 +2472,7 @@ export default async function handler(req, res) {
     if (step === 'notify-expiry')        return res.status(200).json(await handleNotifyContractExpiry(db, req.body));
     if (step === 'cron-daily')           return res.status(200).json(await handleCronDaily(db, req));
     if (step === 'revoke-tenant')        return res.status(200).json(await handleRevokeTenant(db, req.body, req));
+    if (step === 'create-extra-pix')     return res.status(200).json(await handleCreateExtraPix(db, req.body));
 
     // Webhook Asaas sem step (evento direto da subconta)
     if (!step && req.body?.event && req.body?.payment) {

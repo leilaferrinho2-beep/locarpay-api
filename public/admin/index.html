@@ -3425,69 +3425,104 @@
   };
 
   // ── Cobranças extras ──────────────────────────────────────────
-  let extrasForTenant = null;
+  let extrasForTenant = null; // { tenantId, tenantEmail, items: [{id, description, value, dueDate, status}] }
+
   window.openExtras = async function openExtras(tenantId) {
-    extrasForTenant = tenantId;
     const t = tenants.find(x => x.id === tenantId);
     $('extras-tenant-name').textContent = t?.name || tenantId;
     $('ex-desc').value  = '';
     $('ex-value').value = '';
-    // Busca cobrança pendente/vencida do mês
+    $('ex-due').value   = '';
+    extrasForTenant = { tenantId, tenantEmail: t?.email || '' };
+    await loadExtraCharges();
+    $('modal-extras').style.display = 'flex';
+  };
+
+  async function loadExtraCharges() {
     const snap = await getDocs(query(
       collection(db, 'charges'),
-      where('tenantId', '==', tenantId),
-      where('status', 'in', ['pending', 'overdue'])
+      where('tenantId', '==', extrasForTenant.tenantId),
+      where('type', '==', 'extra')
     ));
-    if (snap.empty) { showToast('Nenhuma cobrança pendente para este inquilino.', 'error'); return; }
-    // Pega a mais recente
-    const charge = snap.docs.sort((a,b) => (b.data().dueDate?.seconds||0) - (a.data().dueDate?.seconds||0))[0];
-    extrasForTenant = { tenantId, chargeId: charge.id, extras: charge.data().extras || [] };
+    extrasForTenant.items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a,b) => (b.dueDate?.seconds||0) - (a.dueDate?.seconds||0));
     renderExtrasList();
-    $('modal-extras').style.display = 'flex';
   }
 
   function renderExtrasList() {
     const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const list = $('extras-list');
-    const items = extrasForTenant?.extras || [];
-    list.innerHTML = items.length === 0
-      ? '<div style="color:#666;font-size:13px">Nenhum extra adicionado</div>'
-      : items.map((e,i) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2a2d3e">
-          <span style="font-size:13px">${e.description}</span>
-          <span style="font-size:13px;color:#4caf50">${fmt.format(e.value)}
-            <button class="btn-sm" style="margin-left:8px;color:#ef5350;border-color:#3a1a1a" onclick="removeExtra(${i})">✕</button>
-          </span>
-        </div>`).join('');
+    const items = extrasForTenant?.items || [];
+    if (!items.length) {
+      list.innerHTML = '<div style="color:#666;font-size:13px">Nenhum extra adicionado</div>';
+      return;
+    }
+    list.innerHTML = items.map(e => {
+      const due = e.dueDate?.seconds ? new Date(e.dueDate.seconds*1000).toLocaleDateString('pt-BR') : '—';
+      const statusColor = e.status === 'paid' ? '#4caf50' : e.status === 'overdue' ? '#ef5350' : '#ffb74d';
+      const statusLabel = e.status === 'paid' ? 'Pago' : e.status === 'overdue' ? 'Vencido' : 'Pendente';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #2a2d3e;gap:8px">
+        <div style="flex:1">
+          <div style="font-size:13px;color:#e0e0e0">${_esc(e.description)}</div>
+          <div style="font-size:11px;color:#666;margin-top:2px">Venc.: ${due} · <span style="color:${statusColor}">${statusLabel}</span></div>
+        </div>
+        <span style="font-size:13px;color:#4caf50;white-space:nowrap">${fmt.format(e.totalAmount || e.value || 0)}</span>
+        ${e.status !== 'paid' ? `<button class="btn-sm" style="color:#ef5350;border-color:#3a1a1a;white-space:nowrap" onclick="removeExtraCharge('${e.id}')">✕</button>` : ''}
+      </div>`;
+    }).join('');
   }
 
-  window.removeExtra = async (idx) => {
-    extrasForTenant.extras.splice(idx, 1);
-    await applyExtras();
-    renderExtrasList();
+  window.removeExtraCharge = async (chargeId) => {
+    if (!confirm('Remover este extra?')) return;
+    await deleteDoc(doc(db, 'charges', chargeId));
+    await loadExtraCharges();
+    showToast('Extra removido.', 'success');
   };
 
   async function addExtra() {
     const desc  = $('ex-desc').value.trim();
     const value = parseBRL($('ex-value').value);
+    const dueStr = $('ex-due').value; // yyyy-mm-dd
     if (!desc || isNaN(value) || value <= 0) { showToast('Preencha descrição e valor', 'error'); return; }
-    extrasForTenant.extras.push({ description: desc, value });
-    $('ex-desc').value = '';
-    $('ex-value').value = '';
-    await applyExtras();
-    renderExtrasList();
-  }
+    if (!dueStr) { showToast('Preencha a data de vencimento', 'error'); return; }
 
-  async function applyExtras() {
-    const ref = doc(db, 'charges', extrasForTenant.chargeId);
-    const snap = await getDoc(ref);
-    const base  = snap.data()?.baseRent || 0;
-    const total = base + extrasForTenant.extras.reduce((s, e) => s + e.value, 0);
-    await updateDoc(ref, { extras: extrasForTenant.extras, totalAmount: total });
+    const dueDate = new Date(dueStr + 'T12:00:00');
+    const chargeRef = doc(collection(db, 'charges'));
+    await setDoc(chargeRef, {
+      id:           chargeRef.id,
+      type:         'extra',
+      tenantId:     extrasForTenant.tenantId,
+      tenantEmail:  extrasForTenant.tenantEmail,
+      description:  desc,
+      baseRent:     value,
+      extras:       [],
+      totalAmount:  value,
+      dueDate:      { seconds: Math.floor(dueDate.getTime()/1000), nanoseconds: 0 },
+      status:       'pending',
+      asaasChargeId:'',
+      pixCopyPaste: '',
+      pixQrCode:    '',
+      ownerId:      currentOwnerId,
+      createdAt:    serverTimestamp()
+    });
+
+    $('ex-desc').value  = '';
+    $('ex-value').value = '';
+    $('ex-due').value   = '';
+
+    // Gera PIX Asaas para o extra (taxa de cartão repassada ao inquilino)
+    fetch('/api/locarpay-card', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step: 'create-extra-pix', chargeId: chargeRef.id, ownerId: currentOwnerId })
+    }).catch(() => {}); // fire-and-forget; QR aparece em segundos no app
+
+    await loadExtraCharges();
+    showToast('Extra adicionado! PIX sendo gerado...', 'success');
   }
 
   async function closeExtras() {
     $('modal-extras').style.display = 'none';
-    showToast('Extras salvos.', 'success');
     await renderMetrics();
   }
 
@@ -6581,13 +6616,18 @@
 <div id="modal-extras" class="modal-overlay">
   <div class="modal-box">
     <h3>Extras — <span id="extras-tenant-name"></span></h3>
-    <p style="font-size:12px;color:#666;margin-bottom:16px">Adicionados à cobrança pendente mais recente</p>
+    <p style="font-size:12px;color:#666;margin-bottom:16px">Cada extra gera uma cobrança independente com PIX e cartão para o inquilino</p>
     <div id="extras-list" style="margin-bottom:20px;min-height:40px"></div>
-    <div class="row2" style="align-items:flex-end">
+    <div class="row2" style="align-items:flex-end;margin-bottom:10px">
       <div><label>Descrição</label><input id="ex-desc" type="text" placeholder="Condomínio, IPTU, Água…"></div>
       <div><label>Valor (R$)</label><input id="ex-value" type="text" inputmode="numeric" placeholder="R$ 0,00" oninput="maskBRL(this)"></div>
     </div>
-    <div class="modal-actions" style="margin-top:16px">
+    <div style="margin-bottom:16px">
+      <label>Vencimento</label>
+      <input id="ex-due" type="date" style="width:100%;box-sizing:border-box">
+    </div>
+    <p style="font-size:11px;color:#666;margin-bottom:16px">Taxa de cartão de crédito repassada ao inquilino — imobiliária recebe valor líquido.</p>
+    <div class="modal-actions" style="margin-top:4px">
       <button class="btn-outline" id="ex-close">Fechar</button>
       <button class="btn" id="ex-add">+ Adicionar extra</button>
     </div>
