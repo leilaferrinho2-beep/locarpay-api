@@ -3,9 +3,9 @@ const { readFileSync, writeFileSync } = require('fs');
 const sa = JSON.parse(readFileSync('C:/Users/denis/Downloads/locarpayapp-firebase-adminsdk-fbsvc-e92d24aa50.json', 'utf8'));
 admin.initializeApp({ credential: admin.credential.cert(sa) });
 const db = admin.firestore();
-const versionCode = 287;
-const versionName = '5.61';
-const url = 'https://www.ilocarpay.com.br/download/locarpay-v103.apk';
+const versionCode = 288;
+const versionName = '5.62';
+const url = 'https://www.ilocarpay.com.br/download/locarpay-v104.apk';
 (async () => {
   await db.collection('config').doc('app').set({ versionCode, versionName, url });
   writeFileSync('version.json', JSON.stringify({ versionCode, versionName, url }, null, 2));
