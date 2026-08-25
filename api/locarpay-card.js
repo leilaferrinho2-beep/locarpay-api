@@ -574,6 +574,16 @@ async function handleRefund(db, body) {
     refundNote:    `estornado via Asaas (ID: ${txId})`
   });
 
+  // Regenera PIX após estorno
+  const ownerSnap = await db.collection('owners').doc(ownerId).get().catch(() => null);
+  const ownerCfg  = ownerSnap?.data() || {};
+  createPixForCharge(
+    db, chargeId, charge.tenantId,
+    charge.totalAmount || charge.baseRent || 0,
+    charge.dueDate,
+    apiKey, ownerCfg
+  ).catch(e => console.error('[PIX] refund regen:', e.message));
+
   return { ok: true, message: `Estorno solicitado com sucesso`, asaasChargeId: txId };
 }
 
@@ -790,6 +800,15 @@ async function handleSyncStatus(db, body) {
           refundNote:    `sincronizado do Asaas: ${payment.status}`
         });
         toReset.push(doc.id);
+        // Regenera PIX após reset por estorno detectado no Asaas
+        const ownerCfgSnap = await db.collection('owners').doc(ownerId).get().catch(() => null);
+        const ownerCfg = ownerCfgSnap?.data() || {};
+        createPixForCharge(
+          db, doc.id, data.tenantId,
+          data.totalAmount || data.baseRent || 0,
+          data.dueDate,
+          apiKey, ownerCfg
+        ).catch(e => console.error('[PIX] sync refund regen:', e.message));
       }
     } catch (_) {}
   }));
