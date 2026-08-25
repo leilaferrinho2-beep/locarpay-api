@@ -8,7 +8,9 @@ const versionName = '5.65';
 const url = 'https://www.ilocarpay.com.br/download/locarpay-v107.apk';
 (async () => {
   await db.collection('config').doc('app').set({ versionCode, versionName, url });
-  writeFileSync('version.json', JSON.stringify({ versionCode, versionName, url }, null, 2));
-  console.log(`config/app atualizado: ${versionCode} / ${versionName} (locarpay-v82)`);
+  const payload = JSON.stringify({ versionCode, versionName, url }, null, 2);
+  writeFileSync('version.json', payload);
+  writeFileSync('public/version.json', payload);
+  console.log(`config/app atualizado: ${versionCode} / ${versionName}`);
   process.exit(0);
 })();
