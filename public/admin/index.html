@@ -2975,7 +2975,7 @@
         <td style="text-align:center"><span class="badge ${docsCount>0?'active':'inactive'}" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;font-size:12px;font-weight:700;flex-direction:column;gap:1px" onclick="openDocsModal_${t.id}()"><span style="font-size:14px">📄</span>${docsCount}/5</span></td>
         <td style="white-space:nowrap">
           <button class="btn-sm" onclick="openEditTenant('${t.id}')">Editar</button>
-          <button class="btn-sm btn-sm-alt" onclick="openExtras('${t.id}')">+Extra</button>
+
           <button class="btn-sm btn-sm-alt" onclick="openAvulsa('${t.id}','${(t.name||'').replace(/'/g,"\\'")}')" style="color:#FFD54F;border-color:#FFD54F">+Avulsa</button>
           <button class="btn-sm btn-sm-alt" onclick="openAviso('${t.id}','${(t.name||'').replace(/'/g,"\\'")}')" style="color:#80DEEA;border-color:#80DEEA">📢 Aviso</button>
           <button class="btn-sm" onclick="openHistory('${t.id}')">Histórico</button>
@@ -3424,107 +3424,6 @@
     }
   };
 
-  // ── Cobranças extras ──────────────────────────────────────────
-  let extrasForTenant = null; // { tenantId, tenantEmail, items: [{id, description, value, dueDate, status}] }
-
-  window.openExtras = async function openExtras(tenantId) {
-    const t = tenants.find(x => x.id === tenantId);
-    $('extras-tenant-name').textContent = t?.name || tenantId;
-    $('ex-desc').value  = '';
-    $('ex-value').value = '';
-    $('ex-due').value   = '';
-    extrasForTenant = { tenantId, tenantEmail: t?.email || '' };
-    await loadExtraCharges();
-    $('modal-extras').style.display = 'flex';
-  };
-
-  async function loadExtraCharges() {
-    const snap = await getDocs(query(
-      collection(db, 'charges'),
-      where('tenantId', '==', extrasForTenant.tenantId),
-      where('type', '==', 'extra')
-    ));
-    extrasForTenant.items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .sort((a,b) => (b.dueDate?.seconds||0) - (a.dueDate?.seconds||0));
-    renderExtrasList();
-  }
-
-  function renderExtrasList() {
-    const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-    const list = $('extras-list');
-    const items = extrasForTenant?.items || [];
-    if (!items.length) {
-      list.innerHTML = '<div style="color:#666;font-size:13px">Nenhum extra adicionado</div>';
-      return;
-    }
-    list.innerHTML = items.map(e => {
-      const due = e.dueDate?.seconds ? new Date(e.dueDate.seconds*1000).toLocaleDateString('pt-BR') : '—';
-      const statusColor = e.status === 'paid' ? '#4caf50' : e.status === 'overdue' ? '#ef5350' : '#ffb74d';
-      const statusLabel = e.status === 'paid' ? 'Pago' : e.status === 'overdue' ? 'Vencido' : 'Pendente';
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #2a2d3e;gap:8px">
-        <div style="flex:1">
-          <div style="font-size:13px;color:#e0e0e0">${_esc(e.description)}</div>
-          <div style="font-size:11px;color:#666;margin-top:2px">Venc.: ${due} · <span style="color:${statusColor}">${statusLabel}</span></div>
-        </div>
-        <span style="font-size:13px;color:#4caf50;white-space:nowrap">${fmt.format(e.totalAmount || e.value || 0)}</span>
-        ${e.status !== 'paid' ? `<button class="btn-sm" style="color:#ef5350;border-color:#3a1a1a;white-space:nowrap" onclick="removeExtraCharge('${e.id}')">✕</button>` : ''}
-      </div>`;
-    }).join('');
-  }
-
-  window.removeExtraCharge = async (chargeId) => {
-    if (!confirm('Remover este extra?')) return;
-    await deleteDoc(doc(db, 'charges', chargeId));
-    await loadExtraCharges();
-    showToast('Extra removido.', 'success');
-  };
-
-  async function addExtra() {
-    const desc  = $('ex-desc').value.trim();
-    const value = parseBRL($('ex-value').value);
-    const dueStr = $('ex-due').value; // yyyy-mm-dd
-    if (!desc || isNaN(value) || value <= 0) { showToast('Preencha descrição e valor', 'error'); return; }
-    if (!dueStr) { showToast('Preencha a data de vencimento', 'error'); return; }
-
-    const dueDate = new Date(dueStr + 'T12:00:00');
-    const chargeRef = doc(collection(db, 'charges'));
-    await setDoc(chargeRef, {
-      id:           chargeRef.id,
-      type:         'extra',
-      tenantId:     extrasForTenant.tenantId,
-      tenantEmail:  extrasForTenant.tenantEmail,
-      description:  desc,
-      baseRent:     value,
-      extras:       [],
-      totalAmount:  value,
-      dueDate:      { seconds: Math.floor(dueDate.getTime()/1000), nanoseconds: 0 },
-      status:       'pending',
-      asaasChargeId:'',
-      pixCopyPaste: '',
-      pixQrCode:    '',
-      ownerId:      currentOwnerId,
-      createdAt:    serverTimestamp()
-    });
-
-    $('ex-desc').value  = '';
-    $('ex-value').value = '';
-    $('ex-due').value   = '';
-
-    // Gera PIX Asaas para o extra (taxa de cartão repassada ao inquilino)
-    fetch('/api/locarpay-card', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ step: 'create-extra-pix', chargeId: chargeRef.id, ownerId: currentOwnerId })
-    }).catch(() => {}); // fire-and-forget; QR aparece em segundos no app
-
-    await loadExtraCharges();
-    showToast('Extra adicionado! PIX sendo gerado...', 'success');
-  }
-
-  async function closeExtras() {
-    $('modal-extras').style.display = 'none';
-    await renderMetrics();
-  }
 
   // ── Exportar CSV ──────────────────────────────────────────────
   async function exportCSV() {
@@ -4852,13 +4751,12 @@
   $('et-save').addEventListener('click', saveEditTenant);
   $('et-cancel').addEventListener('click', () => $('modal-edit-tenant').style.display = 'none');
   $('et-close-contract').addEventListener('click', closeContractFromModal);
-  $('ex-add').addEventListener('click', addExtra);
-  $('ex-close').addEventListener('click', closeExtras);
+
   $('history-close').addEventListener('click', () => $('modal-history').style.display = 'none');
   $('tenant-cancel').addEventListener('click',  () => { $('modal-tenant').style.display = 'none'; resetTenantForm(); });
   $('tenant-save').addEventListener('click', saveTenant);
 
-  [$('modal-tenant'), $('modal-docs'), $('modal-billing'), $('modal-edit-tenant'), $('modal-extras'), $('modal-history'), $('modal-adjust-rent'), $('modal-credit-analysis'), $('modal-approve-lead'), $('modal-lead-detail'), $('modal-edit-lead'), $('modal-whatsapp-qr')].forEach(m => {
+  [$('modal-tenant'), $('modal-docs'), $('modal-billing'), $('modal-edit-tenant'), $('modal-history'), $('modal-adjust-rent'), $('modal-credit-analysis'), $('modal-approve-lead'), $('modal-lead-detail'), $('modal-edit-lead'), $('modal-whatsapp-qr')].forEach(m => {
     if (m) m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
   });
   // Upgrade modal: backdrop close also clears PIX interval
@@ -6612,27 +6510,6 @@
   </div>
 </div>
 
-<!-- Modal: Cobranças Extras -->
-<div id="modal-extras" class="modal-overlay">
-  <div class="modal-box">
-    <h3>Extras — <span id="extras-tenant-name"></span></h3>
-    <p style="font-size:12px;color:#666;margin-bottom:16px">Cada extra gera uma cobrança independente com PIX e cartão para o inquilino</p>
-    <div id="extras-list" style="margin-bottom:20px;min-height:40px"></div>
-    <div class="row2" style="align-items:flex-end;margin-bottom:10px">
-      <div><label>Descrição</label><input id="ex-desc" type="text" placeholder="Condomínio, IPTU, Água…"></div>
-      <div><label>Valor (R$)</label><input id="ex-value" type="text" inputmode="numeric" placeholder="R$ 0,00" oninput="maskBRL(this)"></div>
-    </div>
-    <div style="margin-bottom:16px">
-      <label>Vencimento</label>
-      <input id="ex-due" type="date" style="width:100%;box-sizing:border-box">
-    </div>
-    <p style="font-size:11px;color:#666;margin-bottom:16px">Taxa de cartão de crédito repassada ao inquilino — imobiliária recebe valor líquido.</p>
-    <div class="modal-actions" style="margin-top:4px">
-      <button class="btn-outline" id="ex-close">Fechar</button>
-      <button class="btn" id="ex-add">+ Adicionar extra</button>
-    </div>
-  </div>
-</div>
 
 <div class="toast" id="toast"></div>
 
