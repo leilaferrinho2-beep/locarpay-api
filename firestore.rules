@@ -6,34 +6,35 @@ service cloud.firestore {
     function myEmail()  { return request.auth.token.email; }
     function isMaster() { return isAuth() && (myEmail() == 'denisfelicio20@gmail.com' || myEmail() == 'contatotransgu@gmail.com'); }
 
-    // Verifica se o usuario autenticado nao foi suspenso/removido
-    // Se o documento nao existir OU suspended=true → bloqueia tudo
     function isActiveTenant() {
       return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true;
     }
 
+    // Verifica se o usuário autenticado é owner do ownerId gravado no documento
+    function isOwnerOf(ownerId) {
+      return isAuth() && ownerId != '' &&
+        exists(/databases/$(database)/documents/owners/$(ownerId)) &&
+        get(/databases/$(database)/documents/owners/$(ownerId)).data.get('email','') == myEmail();
+    }
+
     // ── owners ─────────────────────────────────────────────────────────────
     match /owners/{ownerId} {
-      allow read:   if isMaster() || (isAuth() && resource.data.get('email','') == myEmail());
+      allow read:   if isMaster()
+                    || (isAuth() && resource.data.get('email','') == myEmail())
+                    || (isAuth() && ownerId in request.auth.token.get('ownerIds', []));
       allow write:  if isMaster();
     }
 
     // ── users ───────────────────────────────────────────────────────────────
     match /users/{userId} {
-      // Leitura do proprio doc: permite mesmo que suspended (para o listener detectar)
-      // Leitura de outros docs: owner (isAuth) ou master
       allow read:   if isAuth() && (request.auth.uid == userId || isMaster() || isActiveTenant());
       allow create: if isAuth();
       allow update: if isAuth() && (
         resource.data.get('email', '') == myEmail() ||
         isMaster() ||
-        // Owner pode atualizar dados dos seus inquilinos
-        (resource.data.get('ownerId', '') != '' &&
-         exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
-         get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail())
+        isOwnerOf(resource.data.get('ownerId', ''))
       );
-      // Qualquer owner autenticado pode suspender/deletar (para o delete funcionar no app)
       allow delete: if isAuth();
 
       match /savedCards/{cardId} {
@@ -44,35 +45,32 @@ service cloud.firestore {
     }
 
     // ── contracts ────────────────────────────────────────────────────────────
-    // Inquilinos suspensos nao conseguem ler contratos
     match /contracts/{contractId} {
       allow read:   if isMaster() || (isAuth() && isActiveTenant());
       allow create: if isAuth();
-      allow update: if isAuth() && isActiveTenant();
-      allow delete: if isAuth();
+      allow update: if isAuth() && (
+        isMaster() ||
+        isActiveTenant() ||
+        isOwnerOf(resource.data.get('ownerId', ''))
+      );
+      allow delete: if isAuth() && (isMaster() || isOwnerOf(resource.data.get('ownerId', '')));
     }
 
     // ── charges ──────────────────────────────────────────────────────────────
-    // Inquilinos suspensos nao conseguem ler cobranças
     match /charges/{chargeId} {
       allow read:   if isMaster() || (isAuth() && isActiveTenant());
-      allow create: if isAuth() && isActiveTenant();
+      allow create: if isAuth();
       allow update: if isAuth() && (
         resource.data.get('tenantEmail', '') == myEmail() ||
         isMaster() ||
-        // Owner via ownerId gravado na cobrança
-        (resource.data.get('ownerId', '') != '' &&
-         exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
-         get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail()) ||
-        // Cobranças sem ownerId (dados antigos): verifica via tenantId → users.ownerId → owner.email
+        isOwnerOf(resource.data.get('ownerId', '')) ||
+        // Cobranças antigas sem ownerId: resolve via tenantId → users.ownerId
         (resource.data.get('ownerId', '') == '' &&
          resource.data.get('tenantId', '') != '' &&
          exists(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))) &&
-         get(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))).data.get('ownerId','') != '' &&
-         exists(/databases/$(database)/documents/owners/$(get(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))).data.get('ownerId',''))) &&
-         get(/databases/$(database)/documents/owners/$(get(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))).data.get('ownerId',''))).data.get('email','') == myEmail())
+         isOwnerOf(get(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))).data.get('ownerId','')))
       );
-      allow delete: if isAuth();
+      allow delete: if isAuth() && (isMaster() || isOwnerOf(resource.data.get('ownerId', '')));
     }
 
     // ── cardVerifications ────────────────────────────────────────────────────
@@ -90,7 +88,7 @@ service cloud.firestore {
 
     // ── config ───────────────────────────────────────────────────────────────
     match /config/app {
-      allow read: if true;  // versão do app é pública — qualquer usuário autenticado ou não
+      allow read: if true;
       allow write: if isMaster();
     }
     match /config/{docId} {
@@ -108,17 +106,17 @@ service cloud.firestore {
       allow read: if isAuth() && (
         resource.data.get('email','') == myEmail() ||
         isMaster() ||
-        // owner da imobiliaria le seus proprios corretores
-        (resource.data.get('ownerId','') != '' &&
-          exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
-          get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail())
+        isOwnerOf(resource.data.get('ownerId',''))
       );
-      // Corretor pode atualizar seu proprio doc (fcmToken, perfil)
-      allow update: if isAuth() && resource.data.get('email','') == myEmail();
-      allow create, delete: if isMaster();
+      allow update: if isAuth() && (
+        resource.data.get('email','') == myEmail() ||
+        isMaster() ||
+        isOwnerOf(resource.data.get('ownerId',''))
+      );
+      allow create, delete: if isMaster() || isOwnerOf(request.resource.data.get('ownerId',''));
     }
 
-    // ── brokerChats (chat imobiliária ↔ corretor) ─────────────────────────────
+    // ── brokerChats ─────────────────────────────────────────────────────────
     match /brokerChats/{chatId} {
       allow read, write: if isAuth();
       match /messages/{msgId} {
@@ -128,39 +126,27 @@ service cloud.firestore {
     }
 
     // ── leads ─────────────────────────────────────────────────────────────────
-    // Corretor só lê leads onde é o brokerEmail; owner/master lê todos do ownerId
     match /leads/{leadId} {
       allow read: if isAuth() && (
         isMaster() ||
         resource.data.get('brokerEmail','') == myEmail() ||
-        exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
-          get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail()
+        isOwnerOf(resource.data.get('ownerId',''))
       );
       allow create: if isAuth();
       allow update: if isAuth() && (
         isMaster() ||
-        exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
-          get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail()
+        isOwnerOf(resource.data.get('ownerId',''))
       );
-      allow delete: if isMaster();
+      allow delete: if isMaster() || isOwnerOf(resource.data.get('ownerId',''));
     }
 
     // ── maintenance (chamados) ────────────────────────────────────────────────
     match /maintenance/{chamadoId} {
       allow read:   if isAuth();
       allow create: if isAuth() && isActiveTenant();
-      allow update: if isAuth() && (
-        isMaster() ||
-        exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
-          get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail()
-      );
-      allow delete: if isAuth() && (
-        isMaster() ||
-        exists(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))) &&
-          get(/databases/$(database)/documents/owners/$(resource.data.get('ownerId',''))).data.get('email','') == myEmail()
-      );
+      allow update: if isAuth() && (isMaster() || isOwnerOf(resource.data.get('ownerId','')));
+      allow delete: if isAuth() && (isMaster() || isOwnerOf(resource.data.get('ownerId','')));
 
-      // Mensagens do chamado (chat inquilino ↔ imobiliária)
       match /messages/{msgId} {
         allow read:   if isAuth();
         allow create: if isAuth();
@@ -168,12 +154,18 @@ service cloud.firestore {
       }
     }
 
-    // ── _rateLimits (uso interno da API — Admin SDK bypassa regras) ───────────
+    // ── _rateLimits ───────────────────────────────────────────────────────────
     match /_rateLimits/{docId} {
       allow read, write: if false;
     }
 
-    // ── default: nega tudo nao declarado ─────────────────────────────────────
+    // ── crash_logs ────────────────────────────────────────────────────────────
+    match /crash_logs/{docId} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
+
+    // ── default ───────────────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }
