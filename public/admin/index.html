@@ -3055,6 +3055,8 @@
     if (_qrCountdown) { clearInterval(_qrCountdown); _qrCountdown = null; }
   }
   window._clearQrTimers = _clearQrTimers;
+  window._fetchQr = _fetchQr;
+  window.openWhatsappQr = openWhatsappQr;
 
   async function openWhatsappQr(ownerId) {
     _qrOwnerId = ownerId || currentOwnerId;
