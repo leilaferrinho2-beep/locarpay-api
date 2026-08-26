@@ -3098,7 +3098,7 @@
     const connEl  = $('whatsapp-qr-connected');
     _clearQrTimers();
     try {
-      status.textContent = `⏳ Buscando QR (owner: ${_qrOwnerId?.slice(0,8) || 'null'})...`;
+      status.textContent = '⏳ Buscando QR Code...';
       const res  = await fetch('/api/locarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'whatsapp-qr', ownerId: _qrOwnerId })
@@ -4803,7 +4803,7 @@
   $('adjust-save').addEventListener('click', applyAdjustRent);
   $('adjust-cancel').addEventListener('click', () => $('modal-adjust-rent').style.display = 'none');
   $('btn-export-csv').addEventListener('click', exportCSV);
-  $('btn-whatsapp-qr').addEventListener('click', openWhatsappQr);
+  $('btn-whatsapp-qr').addEventListener('click', () => openWhatsappQr(currentOwnerId));
   $('et-save').addEventListener('click', saveEditTenant);
   $('et-cancel').addEventListener('click', () => $('modal-edit-tenant').style.display = 'none');
   $('et-close-contract').addEventListener('click', closeContractFromModal);
