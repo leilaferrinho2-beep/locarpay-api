@@ -1222,6 +1222,9 @@ async function handleWhatsappQr(db, body) {
     throw Object.assign(new Error('Evolution API não configurada no servidor'), { status: 500 });
   }
 
+  // Indica se esta instância já estava vinculada a este owner antes desta chamada
+  const instanceAlreadyRegistered = !!(ownerData?.evolutionInstance);
+
   // Persiste a instância no owner se ainda não estava salva
   if (ownerId && ownerData && !ownerData.evolutionInstance) {
     await db.collection('owners').doc(ownerId).update({ evolutionInstance: instance }).catch(() => {});
@@ -1235,10 +1238,10 @@ async function handleWhatsappQr(db, body) {
   let statusData;
   try { statusData = JSON.parse(statusText); } catch { statusData = {}; }
   const state = statusData?.instance?.state || statusData?.state;
-  console.log(`[whatsapp-qr] ownerId=${ownerId} instance=${instance} state=${state}`);
+  console.log(`[whatsapp-qr] ownerId=${ownerId} instance=${instance} state=${state} registered=${instanceAlreadyRegistered}`);
 
-  if (state === 'open') {
-    // Salva status no owner
+  if (state === 'open' && instanceAlreadyRegistered) {
+    // Só considera conectado se esta instância já estava vinculada a este owner
     if (ownerId) {
       await db.collection('owners').doc(ownerId).update({
         whatsappConnected: true,
@@ -1249,8 +1252,8 @@ async function handleWhatsappQr(db, body) {
     return { ok: true, connected: true };
   }
 
-  // Instância não existe (404) — cria automaticamente
-  if (statusRes.status === 404 || !state) {
+  // Instância não existe (404), não está open, ou é recém-gerada — cria/reconecta
+  if (statusRes.status === 404 || !state || (state === 'open' && !instanceAlreadyRegistered)) {
     await ensureEvoInstance(evoFetch, instance);
   }
 

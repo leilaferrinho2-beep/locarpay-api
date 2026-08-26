@@ -196,7 +196,8 @@
     }
 
     // WhatsApp — status box
-    const connected = !!currentOwnerData?.whatsappConnected;
+    // Só considera conectado se a instância está registrada E whatsappConnected=true
+    const connected = !!(currentOwnerData?.whatsappConnected && currentOwnerData?.evolutionInstance);
     const waBadge   = $('wa-config-badge');
     const waIcon    = $('wa-status-icon');
     const waLabel   = $('wa-status-label');
@@ -4808,6 +4809,7 @@
   const modalUpgrade = $('modal-upgrade');
   if (modalUpgrade) modalUpgrade.addEventListener('click', e => { if (e.target === modalUpgrade) upgClose(); });
   $('docs-modal-close').addEventListener('click', () => { $('modal-docs').style.display = 'none'; });
+  $('btn-wa-modal-close').addEventListener('click', () => { _clearQrTimers(); $('modal-whatsapp-qr').style.display = 'none'; });
 
   // Saudação dinâmica: primeira visita vs. retorno
   (function() {
@@ -6407,7 +6409,7 @@
     </div>
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:center">
       <button onclick="_fetchQr()" style="padding:9px 18px;background:#25D366;border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:13px">🔄 Novo QR</button>
-      <button onclick="_clearQrTimers();$('modal-whatsapp-qr').style.display='none'" style="padding:9px 18px;background:#333;border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:13px">Fechar</button>
+      <button id="btn-wa-modal-close" style="padding:9px 18px;background:#333;border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:13px">Fechar</button>
     </div>
   </div>
 </div>
