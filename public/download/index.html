@@ -11,87 +11,123 @@
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="description" content="Acompanhe sua locação, pague o aluguel e abra chamados direto pelo app iLocarPay.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: Arial, sans-serif;
-      background: #0a1a0a;
+      font-family: 'Inter', Arial, sans-serif;
+      background: linear-gradient(160deg, #071a07 0%, #0d2b0d 60%, #0a1f1a 100%);
       color: #fff;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 24px;
+      padding: 32px 20px;
     }
     .card {
-      background: #1a2a1a;
-      border-radius: 16px;
-      padding: 40px 32px;
-      max-width: 420px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 28px;
+      padding: 48px 36px 40px;
+      max-width: 400px;
       width: 100%;
       text-align: center;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      backdrop-filter: blur(12px);
     }
-    .logo {
-      width: 100px;
-      height: 100px;
-      border-radius: 0;
-      margin: 0 auto 20px;
-      background: transparent;
+    .logo-wrap {
+      width: 120px;
+      height: 120px;
+      border-radius: 28px;
+      margin: 0 auto 28px;
+      background: #fff;
       display: flex;
       align-items: center;
       justify-content: center;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
     }
-    h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
-    .sub { color: #aaa; font-size: 15px; margin-bottom: 32px; }
+    .logo-wrap img {
+      width: 90%;
+      height: 90%;
+      object-fit: contain;
+    }
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+      color: #fff;
+    }
+    .sub {
+      color: rgba(255,255,255,0.5);
+      font-size: 15px;
+      font-weight: 400;
+      margin-bottom: 36px;
+    }
     .btn {
       display: block;
       background: #2E7D32;
       color: #fff;
       text-decoration: none;
-      padding: 16px 24px;
-      border-radius: 12px;
+      padding: 18px 24px;
+      border-radius: 16px;
       font-size: 17px;
       font-weight: 700;
-      margin-bottom: 12px;
-      transition: background 0.2s;
+      margin-bottom: 14px;
+      transition: background 0.2s, transform 0.1s;
+      box-shadow: 0 4px 20px rgba(46,125,50,0.4);
     }
-    .btn:hover { background: #1B5E20; }
-    .btn span { display: block; font-size: 12px; font-weight: 400; opacity: 0.8; margin-top: 2px; }
+    .btn:hover { background: #1B5E20; transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn span { display: block; font-size: 12px; font-weight: 500; opacity: 0.75; margin-top: 3px; }
     .info {
-      margin-top: 28px;
+      margin-top: 24px;
       font-size: 13px;
-      color: #666;
-      line-height: 1.6;
+      color: rgba(255,255,255,0.35);
+      line-height: 1.7;
     }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(46,125,50,0.15);
+      border: 1px solid rgba(46,125,50,0.3);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: #81C784;
+      margin-bottom: 20px;
+      font-weight: 600;
+    }
+    .dot { width: 6px; height: 6px; background: #4CAF50; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="logo"><img src="/og-image.png" alt="iLocarPay" style="width:100%;height:100%;object-fit:contain;"></div>
+    <div class="logo-wrap">
+      <img src="/og-image.png" alt="iLocarPay">
+    </div>
+    <div class="badge"><span class="dot"></span> App disponível</div>
     <h1>iLocarPay</h1>
     <p class="sub">Gestão inteligente de aluguéis</p>
 
     <a class="btn" id="apk-link" href="#">
       📲 Baixar app (Android)
-      <span>Arquivo APK direto</span>
+      <span>Arquivo APK • instalação direta</span>
     </a>
 
     <p class="info">
-      Após baixar, abra o arquivo APK no seu celular.<br>
-      Se solicitado, permita a instalação de fontes desconhecidas.
+      Após baixar, abra o arquivo APK no celular.<br>
+      Se solicitado, permita instalar de fontes desconhecidas.
     </p>
   </div>
 
   <script>
-    // Busca a URL do APK mais recente do servidor
     fetch('/version.json')
       .then(r => r.json())
-      .then(data => {
-        if (data.url) {
-          document.getElementById('apk-link').href = data.url;
-        }
-      })
+      .then(data => { if (data.url) document.getElementById('apk-link').href = data.url; })
       .catch(() => {});
   </script>
 </body>
