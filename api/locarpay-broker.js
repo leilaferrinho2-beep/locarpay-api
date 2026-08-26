@@ -1632,6 +1632,23 @@ async function handleCronRetryAssinafy(db) {
     else if (step === 'whatsapp-qr') {
       result = await handleWhatsappQr(db, req.body);
     }
+    else if (step === 'whatsapp-debug') {
+      // Diagnóstico: retorna resposta bruta da Evolution para um owner
+      const rawId = req.body.ownerId;
+      const ownerId = (rawId && rawId !== 'undefined') ? rawId.trim() : null;
+      let ownerData = null;
+      if (ownerId) {
+        const snap = await db.collection('owners').doc(ownerId).get();
+        ownerData = snap.exists ? snap.data() : null;
+      }
+      const { baseUrl, apiKey, instance } = getEvoConfig(ownerData, ownerId);
+      const evoFetch = makeEvoFetch(baseUrl, apiKey);
+      const stateRes = await evoFetch(`instance/connectionState/${instance}`);
+      const stateText = await stateRes.text();
+      const connectRes = await evoFetch(`instance/connect/${instance}`);
+      const connectText = await connectRes.text();
+      result = { ok: true, instance, baseUrl: baseUrl.slice(0,30)+'...', stateStatus: stateRes.status, stateBody: stateText.slice(0,500), connectStatus: connectRes.status, connectBody: connectText.slice(0,500) };
+    }
     else if (step === 'whatsapp-disconnect') {
       result = await handleWhatsappDisconnect(db, req.body);
     }
