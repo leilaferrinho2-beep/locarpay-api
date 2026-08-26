@@ -1249,7 +1249,7 @@ async function handleWhatsappQr(db, body) {
         whatsappConnectedAt: new Date().toISOString(),
       }).catch(() => {});
     }
-    return { ok: true, connected: true };
+    return { ok: true, connected: true, instance };
   }
 
   // Instância não existe (404), não está open, ou é recém-gerada — cria/reconecta

@@ -3105,15 +3105,23 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ' + res.status);
 
+      // Atualiza instância no cache local (backend salva no Firestore, front precisa saber)
+      if (data.instance && _qrOwnerId === currentOwnerId && !currentOwnerData?.evolutionInstance) {
+        currentOwnerData = { ...currentOwnerData, evolutionInstance: data.instance };
+        const found = allOwners?.find(o => o.id === _qrOwnerId);
+        if (found) found.evolutionInstance = data.instance;
+      }
+
       if (data.connected) {
         img.style.display = 'none';
         if (timerEl) timerEl.textContent = '';
         if (connEl) { connEl.style.display = 'block'; }
         status.textContent = '✅ WhatsApp conectado com sucesso!';
-        // Atualiza badge na lista de owners e status box nas configs
         _updateOwnerWhatsappBadge(_qrOwnerId, true);
         if (_qrOwnerId === currentOwnerId) {
-          currentOwnerData = { ...currentOwnerData, whatsappConnected: true };
+          currentOwnerData = { ...currentOwnerData, whatsappConnected: true, evolutionInstance: data.instance || currentOwnerData?.evolutionInstance };
+          const found = allOwners?.find(o => o.id === _qrOwnerId);
+          if (found) { found.whatsappConnected = true; }
           loadConfigTab();
         }
         return;
