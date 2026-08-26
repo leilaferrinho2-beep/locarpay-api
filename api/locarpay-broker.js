@@ -1184,7 +1184,7 @@ function getEvoConfig(ownerData, ownerId) {
 function makeEvoFetch(baseUrl, apiKey) {
   return (path, opts = {}) => {
     const ctrl = new AbortController();
-    setTimeout(() => ctrl.abort(), 12000);
+    setTimeout(() => ctrl.abort(), 25000);
     return fetch(`${baseUrl}/${path}`, {
       ...opts,
       headers: { 'apikey': apiKey, 'Content-Type': 'application/json', ...(opts.headers || {}) },
@@ -1261,14 +1261,16 @@ async function handleWhatsappQr(db, body) {
   if (needsCreate || isStuck) {
     if (isStuck) {
       console.log(`[whatsapp-qr] instância ${instance} travada (${state}) — deletando para recriar`);
-      await evoFetch(`instance/logout/${instance}`, { method: 'DELETE' }).catch(() => {});
-      await new Promise(r => setTimeout(r, 1000));
-      await evoFetch(`instance/delete/${instance}`, { method: 'DELETE' }).catch(() => {});
-      await new Promise(r => setTimeout(r, 1500));
+      // Logout e delete em paralelo, ignorando erros — Evolution pode rejeitar se já estiver desconectado
+      await Promise.allSettled([
+        evoFetch(`instance/logout/${instance}`, { method: 'DELETE' }),
+        sleep(800).then(() => evoFetch(`instance/delete/${instance}`, { method: 'DELETE' })),
+      ]);
+      await sleep(1000);
     }
     await ensureEvoInstance(evoFetch, instance);
     // Aguarda a instância inicializar antes de pedir o QR
-    await new Promise(r => setTimeout(r, 2000));
+    await sleep(2000);
   }
 
   // Busca QR Code — tenta até 2 vezes se vier vazio
