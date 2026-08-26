@@ -1256,20 +1256,19 @@ async function handleWhatsappQr(db, body) {
 
   // Instância não existe (404), não está open, ou é recém-gerada — cria/reconecta
   const needsCreate = statusRes.status === 404 || !state || (state === 'open' && !instanceAlreadyRegistered);
-  // Instância travada em "connecting" (tentativa anterior falhou) — deletar e recriar do zero
+  // Instância travada em "connecting" ou "close" — deletar e recriar do zero
   const isStuck = state === 'connecting' || state === 'close';
   if (needsCreate || isStuck) {
     if (isStuck) {
       console.log(`[whatsapp-qr] instância ${instance} travada (${state}) — deletando para recriar`);
-      // Logout e delete em paralelo, ignorando erros — Evolution pode rejeitar se já estiver desconectado
-      await Promise.allSettled([
-        evoFetch(`instance/logout/${instance}`, { method: 'DELETE' }),
-        sleep(800).then(() => evoFetch(`instance/delete/${instance}`, { method: 'DELETE' })),
-      ]);
-      await sleep(1000);
+      // Tenta logout e delete ignorando qualquer erro — servidor pode rejeitar/abortar
+      try { await evoFetch(`instance/logout/${instance}`, { method: 'DELETE' }); } catch {}
+      await sleep(500);
+      try { await evoFetch(`instance/delete/${instance}`, { method: 'DELETE' }); } catch {}
+      await sleep(800);
     }
+    // Cria instância — ignora erro 403 "já existe" (ensureEvoInstance já trata isso)
     await ensureEvoInstance(evoFetch, instance);
-    // Aguarda a instância inicializar antes de pedir o QR
     await sleep(2000);
   }
 
