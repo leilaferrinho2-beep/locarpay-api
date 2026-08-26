@@ -8,6 +8,7 @@ import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, Timestamp }       from 'firebase-admin/firestore';
 import { getAuth }                        from 'firebase-admin/auth';
 import { getMessaging }                   from 'firebase-admin/messaging';
+import { getStorage }                     from 'firebase-admin/storage';
 import nodemailer                         from 'nodemailer';
 
 const PLANS = {
@@ -18,7 +19,10 @@ const PLANS = {
 
 function initFirebase() {
   if (getApps().length) return;
-  initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
+  initializeApp({
+    credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
+    storageBucket: 'locarpayapp.firebasestorage.app',
+  });
 }
 
 // Le a chave master Asaas (da conta principal)
@@ -606,6 +610,20 @@ async function handleSetupPaymentWebhook(db, body) {
   return { ok: true, action: 'created', webhookId: created.id };
 }
 
+async function handleGetMany(db, body) {
+  const { ownerIds } = body;
+  if (!Array.isArray(ownerIds) || ownerIds.length === 0)
+    throw Object.assign(new Error('ownerIds obrigatorio'), { status: 400 });
+  const ids = ownerIds.slice(0, 20); // limite de segurança
+  const results = await Promise.all(ids.map(async id => {
+    const snap = await db.collection('owners').doc(id).get();
+    if (!snap.exists) return { id, name: 'Imobiliária', plan: 'trial' };
+    const d = snap.data();
+    return { id, name: d.name || 'Imobiliária', plan: d.plan || 'trial' };
+  }));
+  return { ok: true, owners: results };
+}
+
 async function handleCronDaily(db) {
   const BASE = 'https://ilocarpay.com.br/api/locarpay-card';
   const OWNER_URL = 'https://ilocarpay.com.br/api/locarpay-owner';
@@ -825,6 +843,7 @@ export default async function handler(req, res) {
     if (step === 'setup-asaas')    return res.status(200).json(await handleSetupAsaas(db, body));
     if (step === 'migrate')        return res.status(200).json(await handleMigrate(db, body));
     if (step === 'get')            return res.status(200).json(await handleGet(db, body));
+    if (step === 'get-many')       return res.status(200).json(await handleGetMany(db, body));
     if (step === 'activate-plan')  return res.status(200).json(await handleActivatePlan(db, body));
     if (step === 'billing-status') return res.status(200).json(await handleBillingStatus(db, body));
     if (step === 'notify-trial')   return res.status(200).json(await handleNotifyTrial(db, body));
@@ -832,6 +851,7 @@ export default async function handler(req, res) {
     if (step === 'setup-payment-webhook')  return res.status(200).json(await handleSetupPaymentWebhook(db, body));
     if (step === 'delete-tenant')        return res.status(200).json(await handleDeleteTenant(db, body, req));
     if (step === 'send-notification')    return res.status(200).json(await handleSendNotification(db, body));
+    if (step === 'upload-photo')         return res.status(200).json(await handleUploadPhoto(body));
 
     return res.status(400).json({ error: 'step invalido' });
 
@@ -839,5 +859,17 @@ export default async function handler(req, res) {
     console.error('locarpay-owner error:', e.message);
     return res.status(e.status || 500).json({ error: e.message, ...(e.ownerId ? { ownerId: e.ownerId } : {}) });
   }
+}
+
+async function handleUploadPhoto(body) {
+  const { uid, imageBase64, contentType = 'image/jpeg' } = body;
+  if (!uid || !imageBase64) throw Object.assign(new Error('uid e imageBase64 obrigatorios'), { status: 400 });
+  const buffer = Buffer.from(imageBase64, 'base64');
+  const bucket = getStorage().bucket();
+  const file = bucket.file(`profile_photos/${uid}.jpg`);
+  await file.save(buffer, { metadata: { contentType }, public: true });
+  await file.makePublic();
+  const url = `https://storage.googleapis.com/${bucket.name}/profile_photos/${uid}.jpg`;
+  return { ok: true, url };
 }
 

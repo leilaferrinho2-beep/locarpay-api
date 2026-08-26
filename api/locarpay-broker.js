@@ -323,17 +323,27 @@ ${data.deposit ? `<p><strong>Caução:</strong> ${fmt(data.deposit)}</p>` : ''}
 // ── REGISTER BROKER ───────────────────────────────────────────────────────────
 
 async function handleRegisterBroker(db, body) {
-  const { ownerId, name, email, phone } = body;
+  const { ownerId, name, email, phone, commission } = body;
   if (!ownerId || !email) throw Object.assign(new Error('ownerId e email obrigatórios'), { status: 400 });
 
   const ownerSnap = await db.collection('owners').doc(ownerId).get();
   if (!ownerSnap.exists) throw Object.assign(new Error('Imobiliária não encontrada'), { status: 404 });
+  const ownerData = ownerSnap.data();
 
-  const id = email.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + ownerId.slice(0, 6);
+  const emailNorm = email.toLowerCase().trim();
+  const brokerName = name || emailNorm.split('@')[0];
+  const commPct = parseFloat(commission) || 5;
+
+  const id = emailNorm.replace(/[^a-z0-9]/g, '_') + '_' + ownerId.slice(0, 6);
   await db.collection('brokers').doc(id).set({
-    ownerId, name: name || email.split('@')[0],
-    email: email.toLowerCase().trim(), phone: phone || '',
-    active: true, createdAt: FieldValue.serverTimestamp()
+    ownerId,
+    name: brokerName,
+    email: emailNorm,
+    phone: phone || '',
+    active: true,
+    commission: commPct,
+    commissionPct: commPct,
+    createdAt: FieldValue.serverTimestamp()
   }, { merge: true });
 
   // Adiciona ao users também para login OTP
@@ -341,13 +351,53 @@ async function handleRegisterBroker(db, body) {
   const userSnap = await userRef.get();
   if (!userSnap.exists) {
     await userRef.set({
-      ownerId, name: name || email.split('@')[0],
-      email: email.toLowerCase().trim(), phone: phone || '',
+      ownerId, name: brokerName,
+      email: emailNorm, phone: phone || '',
       role: 'broker', active: true, createdAt: FieldValue.serverTimestamp()
     });
   }
 
+  // Email de boas-vindas ao corretor (fire-and-forget)
+  sendWelcomeBrokerEmail({ brokerName, brokerEmail: emailNorm, ownerName: ownerData.name || 'sua imobiliária' })
+    .catch(e => console.warn('[register-broker] email erro:', e.message));
+
   return { ok: true, brokerId: id };
+}
+
+async function sendWelcomeBrokerEmail({ brokerName, brokerEmail, ownerName }) {
+  const firstName = brokerName.split(' ')[0];
+  await sendEmail(
+    brokerEmail,
+    `Você foi adicionado como corretor — ${ownerName}`,
+    `
+    <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;padding:32px 24px;background:#fff">
+      <div style="margin-bottom:20px">
+        <span style="font-weight:900;font-size:20px;color:#4CAF50">● iLocarPay</span>
+      </div>
+      <h2 style="color:#1a1a1a;margin-bottom:8px;font-size:20px">Olá, ${firstName}! 👋</h2>
+      <p style="color:#555;line-height:1.7;margin-bottom:20px">
+        Você foi cadastrado como <strong>corretor</strong> na imobiliária <strong>${ownerName}</strong> na plataforma iLocarPay.
+      </p>
+      <div style="background:#f0f7f0;border-radius:10px;padding:20px;margin-bottom:24px">
+        <h3 style="color:#2e7d32;font-size:14px;margin-bottom:12px;margin-top:0">Como acessar o app</h3>
+        <ol style="color:#555;line-height:2;padding-left:20px;margin:0">
+          <li>Baixe o app <strong>iLocarPay</strong> para Android</li>
+          <li>Na tela de login, informe seu e-mail: <strong>${brokerEmail}</strong></li>
+          <li>Você receberá um código de acesso por e-mail</li>
+          <li>Digite o código e pronto — você já está dentro!</li>
+        </ol>
+      </div>
+      <a href="https://www.ilocarpay.com.br/download" style="display:inline-block;background:#4CAF50;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:700;font-size:15px;margin-bottom:24px">
+        📲 Baixar o app agora
+      </a>
+      <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+      <p style="color:#aaa;font-size:12px;margin:0">
+        Dúvidas? Entre em contato com <strong>${ownerName}</strong>.<br>
+        Este convite foi enviado automaticamente pela plataforma iLocarPay.
+      </p>
+    </div>
+    `
+  );
 }
 
 // ── UPDATE BROKER ─────────────────────────────────────────────────────────────

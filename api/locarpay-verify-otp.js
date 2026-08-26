@@ -31,17 +31,20 @@ export default async function handler(req, res) {
   if (!isValidEmail(email)) return res.status(400).json({ error: 'Email inválido' });
 
   const ip = getClientIp(req);
+  console.log('[verify-otp] start email:', email, 'ip:', ip);
   initAdmin(); // deve ser chamado antes do rateLimit que usa getFirestore()
   try {
     // Rate limit: máx 5 tentativas por IP por minuto, e 10 por email por 5 minutos
     await rateLimit(`otp:ip:${ip}`,    { maxRequests: 5,  windowSeconds: 60  });
     await rateLimit(`otp:email:${email}`, { maxRequests: 10, windowSeconds: 300 });
+    console.log('[verify-otp] rate limit ok');
 
     const db = getFirestore();
     const auth = getAuth();
 
     const id = Buffer.from(email).toString('base64').replace(/[^a-zA-Z0-9]/g, '_');
     const doc = await db.collection('loginOtps').doc(id).get();
+    console.log('[verify-otp] otp doc exists:', doc.exists);
 
     if (!doc.exists) return res.status(401).json({ error: 'Código inválido' });
 
@@ -58,9 +61,11 @@ export default async function handler(req, res) {
     try {
       const user = await auth.getUserByEmail(email);
       uid = user.uid;
+      console.log('[verify-otp] auth user found uid:', uid);
     } catch {
       const newUser = await auth.createUser({ email });
       uid = newUser.uid;
+      console.log('[verify-otp] auth user created uid:', uid);
     }
 
     // Role: admin se tiver licença ativa OU estiver em owners, senão tenant
@@ -101,14 +106,17 @@ export default async function handler(req, res) {
       userRole = userDoc.data().role || 'tenant';
     }
 
+    console.log('[verify-otp] hasLicense:', hasLicense, 'ownerDoc:', ownerDoc?.id || null);
     const isAdmin = hasLicense || !!ownerDoc;
     const mappedRole = (userRole === 'broker' || userRole === 'corretor') ? 'corretor' : userRole;
     const role = isAdmin ? 'admin' : mappedRole;
 
     // ownerId: para owners é o próprio doc ID; para corretores está em brokers; para tenants em users
     let ownerId = null;
+    let ownerIds = [];
     if (ownerDoc) {
       ownerId = ownerDoc.id;
+      ownerIds = [ownerId];
     } else {
       try {
         const userSnap = await db.collection('users').doc(uid).get();
@@ -117,20 +125,25 @@ export default async function handler(req, res) {
           const q = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get();
           if (!q.empty) ownerId = q.docs[0].data().ownerId || null;
         }
-        // Corretores: ownerId está na coleção brokers (não em users)
-        if (!ownerId) {
-          const bq = await db.collection('brokers').where('email', '==', email.toLowerCase()).limit(1).get();
-          if (!bq.empty) ownerId = bq.docs[0].data().ownerId || null;
+        // Corretores: busca TODOS os vínculos (multi-imobiliária)
+        const bq = await db.collection('brokers').where('email', '==', email.toLowerCase()).get();
+        if (!bq.empty) {
+          ownerIds = bq.docs.map(d => d.data().ownerId).filter(Boolean);
+          // ownerId principal = primeiro ativo
+          const activeDoc = bq.docs.find(d => d.data().active !== false);
+          if (!ownerId) ownerId = (activeDoc || bq.docs[0]).data().ownerId || null;
         }
+        if (ownerIds.length === 0 && ownerId) ownerIds = [ownerId];
       } catch (_) {}
     }
 
-    await auth.setCustomUserClaims(uid, { role, ownerId });
-    const customToken = await auth.createCustomToken(uid, { role, ownerId });
+    console.log('[verify-otp] role:', role, 'ownerId:', ownerId, 'ownerIds:', ownerIds);
+    await auth.setCustomUserClaims(uid, { role, ownerId, ownerIds });
+    const customToken = await auth.createCustomToken(uid, { role, ownerId, ownerIds });
     // Login bem-sucedido: reseta contadores de rate limit
     await rateLimitReset(`otp:ip:${ip}`);
     await rateLimitReset(`otp:email:${email}`);
-    return res.status(200).json({ ok: true, customToken, role, ownerId });
+    return res.status(200).json({ ok: true, customToken, role, ownerId, ownerIds });
   } catch (e) {
     if (e.status === 429) {
       res.setHeader('Retry-After', String(e.retryAfter || 60));

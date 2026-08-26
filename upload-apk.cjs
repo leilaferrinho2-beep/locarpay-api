@@ -1,31 +1,44 @@
-// Faz upload do APK para o Firebase Storage e retorna a URL pública
 const admin = require('firebase-admin');
 const { readFileSync } = require('fs');
+const path = require('path');
 
-const SA_PATH = 'C:/Users/denis/Downloads/locarpayapp-firebase-adminsdk-fbsvc-e92d24aa50.json';
-const BUCKET  = 'transgu-web-6d50f.firebasestorage.app'; // bucket usado pelo app
-const APK_LOCAL = 'C:/locarpay-api/public/download/locarpay-v100.apk';
-const APK_DEST  = 'download/locarpay-v100.apk';
+const sa = JSON.parse(readFileSync('C:/Users/denis/Downloads/locarpayapp-firebase-adminsdk-fbsvc-e92d24aa50.json', 'utf8'));
+admin.initializeApp({
+  credential: admin.credential.cert(sa),
+  storageBucket: 'locarpayapp.appspot.com'
+});
 
-const sa = JSON.parse(readFileSync(SA_PATH, 'utf8'));
-// Usa credencial do locarpayapp mas sobe no bucket do transgu-web-6d50f
-// (mesmo bucket usado para lead docs — service account tem acesso)
-const app = admin.initializeApp({ credential: admin.credential.cert(sa), storageBucket: BUCKET });
 const bucket = admin.storage().bucket();
+const apkPath = 'C:/locarpay-api/public/download/locarpay-v109.apk';
+const destPath = 'download/locarpay-v109.apk';
 
 (async () => {
-  console.log('Fazendo upload do APK para Firebase Storage...');
-  await bucket.upload(APK_LOCAL, {
-    destination: APK_DEST,
+  console.log('Enviando APK para Firebase Storage...');
+  await bucket.upload(apkPath, {
+    destination: destPath,
     metadata: {
       contentType: 'application/vnd.android.package-archive',
-      cacheControl: 'public, max-age=31536000',
-    },
+      cacheControl: 'public, max-age=31536000'
+    }
   });
-  // Torna o arquivo público
-  const file = bucket.file(APK_DEST);
+
+  // Gera URL pública (sem expiração)
+  const file = bucket.file(destPath);
   await file.makePublic();
-  const publicUrl = `https://storage.googleapis.com/${BUCKET}/${APK_DEST}`;
-  console.log('✅ APK disponível em:', publicUrl);
+  const url = `https://storage.googleapis.com/locarpayapp.firebasestorage.app/${destPath}`;
+  console.log('URL pública:', url);
+
+  // Atualiza Firestore
+  const db = admin.firestore();
+  const versionCode = 293;
+  const versionName = '5.67';
+  await db.collection('config').doc('app').set({ versionCode, versionName, url });
+
+  // Atualiza version.json
+  const { writeFileSync } = require('fs');
+  const payload = JSON.stringify({ versionCode, versionName, url }, null, 2);
+  writeFileSync('version.json', payload);
+  writeFileSync('public/version.json', payload);
+  console.log(`Firestore e version.json atualizados: ${versionCode} / ${versionName}`);
   process.exit(0);
-})().catch(e => { console.error('Erro:', e.message); process.exit(1); });
+})();

@@ -356,16 +356,22 @@
       const d = await r.json();
 
       if (r.status === 409) {
-        document.getElementById('success-sub').textContent =
-          `O e-mail ${email} já está cadastrado. Acesse o painel com sua conta Google.`;
+        // Conta já existe — envia OTP direto para fazer login
+        pendingOtpEmail = email;
         showSuccess();
+        document.getElementById('success-sub').textContent =
+          `O e-mail ${email} já está cadastrado. Entre com o código que vamos enviar agora.`;
+        await autoSendOtp(email);
         return;
       }
       if (!r.ok) throw new Error(d.error || 'Erro ao criar conta.');
 
+      // Conta criada — envia OTP automaticamente para entrar no painel
+      pendingOtpEmail = email;
       document.getElementById('success-sub').textContent =
-        `Enviamos um e-mail de boas-vindas para ${email}. Siga os passos abaixo para começar.`;
+        `Conta criada! Enviamos um código de acesso para ${email}.`;
       showSuccess();
+      await autoSendOtp(email);
     } catch (e) {
       showError(e.message);
       btn.disabled = false;
@@ -403,6 +409,29 @@
 
   let pendingOtpEmail = '';
 
+  // Envia OTP automaticamente e abre direto o campo de código
+  async function autoSendOtp(email) {
+    const hint = document.getElementById('otp-sent-hint');
+    // Mostra o campo de código direto sem pedir email de novo
+    document.getElementById('otp-section').style.display = 'block';
+    document.getElementById('btn-show-otp').style.display = 'none';
+    document.getElementById('otp-step-email').style.display = 'none';
+    document.getElementById('otp-step-code').style.display = 'block';
+    if (hint) hint.textContent = `Enviando código para ${email}...`;
+    try {
+      const r = await fetch('/api/locarpay-send-otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, role: 'admin' })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Erro ao enviar código.');
+      if (hint) hint.textContent = `✅ Código enviado para ${email} — verifique sua caixa de entrada.`;
+      document.getElementById('otp-code').focus();
+    } catch (e) {
+      if (hint) hint.textContent = `Erro ao enviar código: ${e.message}`;
+    }
+  }
+
   async function sendAdminOtp() {
     const email = document.getElementById('otp-email').value.trim().toLowerCase();
     const errEl = document.getElementById('otp-err1');
@@ -433,17 +462,23 @@
     if (otp.length < 4) { errEl.textContent = 'Informe o código recebido.'; errEl.style.display='block'; return; }
     errEl.style.display = 'none';
     btn.disabled = true; btn.textContent = 'Verificando...';
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 30000);
     try {
       const r = await fetch('/api/locarpay-verify-otp', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: pendingOtpEmail, otp })
+        body: JSON.stringify({ email: pendingOtpEmail, otp }),
+        signal: ctrl.signal
       });
+      clearTimeout(timer);
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Código inválido.');
       if (d.customToken) sessionStorage.setItem('lp_custom_token', d.customToken);
       window.location.href = '/admin';
     } catch (e) {
-      errEl.textContent = e.message;
+      clearTimeout(timer);
+      const msg = e.name === 'AbortError' ? 'Tempo limite excedido. Tente novamente.' : e.message;
+      errEl.textContent = msg;
       errEl.style.display = 'block';
       btn.disabled = false; btn.textContent = 'Verificar e entrar';
     }

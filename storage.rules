@@ -17,6 +17,13 @@ service firebase.storage {
             || request.resource.contentType == 'application/pdf');
     }
 
+    match /profile_photos/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
     match /signed_contracts/{contractId} {
       allow read: if true;
       allow write: if false;
