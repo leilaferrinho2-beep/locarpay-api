@@ -227,7 +227,7 @@ async function sendWhatsApp(phone, message, ownerData = null, ownerId = null) {
     const r = await fetch(`${baseUrl}/message/sendText/${instance}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
-      body: JSON.stringify({ number, text: message })
+      body: JSON.stringify({ number, text: message, linkPreview: true })
     });
     if (!r.ok) console.warn('[whatsapp] sendText falhou:', await r.text().catch(() => r.status));
   } catch (e) { console.warn('[whatsapp]', e.message); }
