@@ -719,7 +719,7 @@ async function handleApproveLead(db, body) {
 
     // WhatsApp inquilino
     lead.tenant.phone ? sendWhatsApp(lead.tenant.phone,
-      `Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉\n\nSua locação do imóvel *${propAddrWa}* foi aprovada!\n\nO contrato será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o link no seu e-mail (${tenantEmail}).\n\nBaixe o app iLocarPay:\nhttps://www.ilocarpay.com.br\n\n— iLocarPay`,
+      `Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉\n\nSua locação do imóvel *${propAddrWa}* foi aprovada!\n\nO contrato será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o link no seu e-mail (${tenantEmail}).\n\nBaixe o app iLocarPay:\nhttps://www.ilocarpay.com.br/download\n\n— iLocarPay`,
       owner, lead.ownerId
     ).catch(e => console.warn('[approve-lead] whatsapp tenant:', e.message)) : Promise.resolve(),
 
