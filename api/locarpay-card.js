@@ -1125,12 +1125,38 @@ async function handleAutoGenerateUpcoming(db, { ownerId, ownerData = {} }) {
     const monthStr  = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`;
     const dueSecs   = Math.floor(dueDate.getTime() / 1000);
 
-    // Deduplicação: já existe cobrança para este contrato neste mês?
-    const existing = await db.collection('charges')
+    // Deduplicação por monthRef
+    const existingByRef = await db.collection('charges')
       .where('contractId', '==', contractId)
       .where('monthRef',   '==', monthStr)
       .limit(1).get();
-    if (!existing.empty) return;
+    if (!existingByRef.empty) {
+      // Se o dueDate mudou (ex: admin alterou dueDay), atualiza a cobrança existente
+      const ex = existingByRef.docs[0];
+      const exDueSecs = ex.data().dueDate?.seconds;
+      if (exDueSecs !== dueSecs && ex.data().status === 'pending') {
+        batch.update(ex.ref, { dueDate: { seconds: dueSecs, nanoseconds: 0 } });
+      }
+      return;
+    }
+
+    // Fallback: checa por dueDate no mês (cobranças antigas sem monthRef)
+    const monthStart = Math.floor(new Date(dueDate.getFullYear(), dueDate.getMonth(), 1).getTime() / 1000);
+    const monthEnd   = Math.floor(new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0, 23, 59, 59).getTime() / 1000);
+    const existingByDate = await db.collection('charges')
+      .where('contractId', '==', contractId)
+      .where('dueDate', '>=', { seconds: monthStart, nanoseconds: 0 })
+      .where('dueDate', '<=', { seconds: monthEnd,   nanoseconds: 0 })
+      .limit(1).get();
+    if (!existingByDate.empty) {
+      const ex = existingByDate.docs[0];
+      const updates = { monthRef: monthStr };
+      if (ex.data().dueDate?.seconds !== dueSecs && ex.data().status === 'pending') {
+        updates.dueDate = { seconds: dueSecs, nanoseconds: 0 };
+      }
+      batch.update(ex.ref, updates);
+      return;
+    }
 
     const chargeRef = db.collection('charges').doc();
     batch.set(chargeRef, {
