@@ -1253,16 +1253,26 @@ async function handleWhatsappQr(db, body) {
   }
 
   // Instância não existe (404), não está open, ou é recém-gerada — cria/reconecta
-  if (statusRes.status === 404 || !state || (state === 'open' && !instanceAlreadyRegistered)) {
+  const needsCreate = statusRes.status === 404 || !state || (state === 'open' && !instanceAlreadyRegistered);
+  if (needsCreate) {
     await ensureEvoInstance(evoFetch, instance);
+    // Aguarda a instância inicializar antes de pedir o QR
+    await new Promise(r => setTimeout(r, 2000));
   }
 
-  // Busca QR Code
-  const qrRes  = await evoFetch(`instance/connect/${instance}`);
-  const qrText = await qrRes.text();
-  let qrData;
-  try { qrData = JSON.parse(qrText); } catch { qrData = {}; }
-  const base64 = qrData?.base64 || qrData?.qrcode?.base64 || qrData?.code;
+  // Busca QR Code — tenta até 2 vezes se vier vazio
+  let base64 = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const qrRes  = await evoFetch(`instance/connect/${instance}`);
+    const qrText = await qrRes.text();
+    let qrData = {};
+    try { qrData = JSON.parse(qrText); } catch {}
+    console.log(`[whatsapp-qr] connect attempt ${attempt + 1}:`, JSON.stringify(qrData).slice(0, 300));
+    base64 = qrData?.base64 || qrData?.qrcode?.base64 || qrData?.code
+          || qrData?.data?.base64 || qrData?.data?.qrcode?.base64;
+    if (base64) break;
+    if (attempt === 0) await new Promise(r => setTimeout(r, 2000));
+  }
 
   return { ok: true, connected: false, base64, state, instance };
 }
