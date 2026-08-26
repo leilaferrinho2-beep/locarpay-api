@@ -676,7 +676,7 @@ async function handleApproveLead(db, body) {
     deposit:   cd.deposit   || parseFloat(lp.deposit)    || 0
   };
 
-  const propAddrWa = [lead.property?.street, lead.property?.number, lead.property?.city].filter(Boolean).join(', ') || lead.propertyDescription || 'imóvel';
+  const propAddrWa = [lead.property?.street, lead.property?.number, lead.property?.neighborhood, lead.property?.city, lead.property?.state, lead.property?.cep ? `CEP ${lead.property.cep}` : ''].filter(Boolean).join(', ') || lead.propertyDescription || 'imóvel';
 
   await Promise.allSettled([
     Promise.resolve(), // PDF separado removido — proprietário recebe link de assinatura via Assinafy
