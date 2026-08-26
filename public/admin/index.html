@@ -274,6 +274,7 @@
         currentOwnerData = allOwners.find(o => o.id === currentOwnerId);
         $('owner-name-badge').textContent = currentOwnerData?.name || currentOwnerId;
         await loadTenants();
+        loadConfigTab();
       });
     }
     $('owner-name-badge').textContent = currentOwnerData?.name || currentOwnerId || '—';
