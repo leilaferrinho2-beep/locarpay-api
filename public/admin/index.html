@@ -195,21 +195,36 @@
       bst.style.color  = ok ? '#4CAF50' : '#FFD54F';
     }
 
-    // WhatsApp próprio
-    const waUrl  = $('wa-api-url');
-    const waKey  = $('wa-api-key');
-    const waInst = $('wa-instance');
-    const waBadge = $('wa-config-badge');
-    if (waUrl)  waUrl.value  = currentOwnerData?.evolutionApiUrl  || '';
-    if (waKey)  waKey.value  = currentOwnerData?.evolutionApiKey  || '';
-    if (waInst) waInst.value = currentOwnerData?.evolutionInstance || '';
-    if (waBadge) {
-      const configured = !!(currentOwnerData?.evolutionApiUrl && currentOwnerData?.evolutionApiKey && currentOwnerData?.evolutionInstance);
-      const connected  = !!currentOwnerData?.whatsappConnected;
-      waBadge.textContent = connected ? '🟢' : (configured ? '🟡' : '⬜');
-      waBadge.title = connected ? 'Conectado' : (configured ? 'Configurado, não conectado' : 'Não configurado');
-    }
+    // WhatsApp — status box
+    const connected = !!currentOwnerData?.whatsappConnected;
+    const waBadge   = $('wa-config-badge');
+    const waIcon    = $('wa-status-icon');
+    const waLabel   = $('wa-status-label');
+    const waSub     = $('wa-status-sub');
+    const waBtnDisc = $('btn-wa-disconnect');
+    if (waBadge)   { waBadge.textContent = connected ? '🟢' : '🔴'; waBadge.title = connected ? 'Conectado' : 'Desconectado'; }
+    if (waIcon)    waIcon.textContent  = connected ? '✅' : '📵';
+    if (waLabel)   waLabel.textContent = connected ? 'WhatsApp conectado' : 'Não conectado';
+    if (waSub)     waSub.textContent   = connected
+      ? `Mensagens automáticas ativas para esta imobiliária`
+      : 'Clique em Conectar para escanear o QR Code com o WhatsApp desta imobiliária';
+    if (waBtnDisc) waBtnDisc.style.display = connected ? 'inline-block' : 'none';
   }
+
+  window.disconnectWhatsapp = async () => {
+    if (!confirm('Desconectar o WhatsApp desta imobiliária?')) return;
+    try {
+      const { getAuth } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
+      const token = await getAuth().currentUser?.getIdToken();
+      await fetch('/api/locarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ step: 'whatsapp-disconnect', ownerId: currentOwnerId })
+      });
+      currentOwnerData = { ...currentOwnerData, whatsappConnected: false };
+      loadConfigTab();
+      showToast('WhatsApp desconectado', 'success');
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+  };
 
   window.saveWaConfig = async () => {
     const url   = ($('wa-api-url')?.value  || '').trim().replace(/\/$/, '');
@@ -3094,8 +3109,12 @@
         if (timerEl) timerEl.textContent = '';
         if (connEl) { connEl.style.display = 'block'; }
         status.textContent = '✅ WhatsApp conectado com sucesso!';
-        // Atualiza badge na lista de owners
+        // Atualiza badge na lista de owners e status box nas configs
         _updateOwnerWhatsappBadge(_qrOwnerId, true);
+        if (_qrOwnerId === currentOwnerId) {
+          currentOwnerData = { ...currentOwnerData, whatsappConnected: true };
+          loadConfigTab();
+        }
         return;
       }
 
@@ -5520,51 +5539,35 @@
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
           <span style="font-size:22px">📱</span>
           <div>
-            <div style="font-size:16px;font-weight:700;color:#f0f0f0">WhatsApp Próprio</div>
-            <div style="font-size:12px;color:#666">Configure sua própria instância para enviar mensagens pelo seu número</div>
+            <div style="font-size:16px;font-weight:700;color:#f0f0f0">WhatsApp</div>
+            <div style="font-size:12px;color:#666">Conecte o número desta imobiliária para enviar mensagens automáticas</div>
           </div>
           <span id="wa-config-badge" style="margin-left:auto;font-size:20px" title="Status">⬜</span>
         </div>
         <div style="border-top:1px solid #2a2d3e;margin:20px 0"></div>
 
-        <div style="margin-bottom:14px">
-          <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">URL DA EVOLUTION API</label>
-          <input id="wa-api-url" type="url" placeholder="https://evolution.suaempresa.com" autocomplete="off"
-            style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s"
-            onfocus="this.style.borderColor='#25D366'" onblur="this.style.borderColor='#2a2d3e'">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <!-- Campos técnicos ocultos — mantidos para compatibilidade com saveWaConfig -->
+        <input id="wa-api-url"  type="hidden">
+        <input id="wa-api-key"  type="hidden">
+        <input id="wa-instance" type="hidden">
+
+        <div id="wa-status-box" style="background:#0f1117;border-radius:12px;padding:18px;margin-bottom:18px;display:flex;align-items:center;gap:14px">
+          <span id="wa-status-icon" style="font-size:28px">📵</span>
           <div>
-            <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">API KEY</label>
-            <div style="position:relative">
-              <input id="wa-api-key" type="password" placeholder="••••••••••••••••" autocomplete="off"
-                style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 42px 11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s"
-                onfocus="this.style.borderColor='#25D366'" onblur="this.style.borderColor='#2a2d3e'">
-              <button onclick="document.getElementById('wa-api-key').type=document.getElementById('wa-api-key').type==='password'?'text':'password'" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;cursor:pointer;font-size:15px">👁</button>
-            </div>
-          </div>
-          <div>
-            <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">NOME DA INSTÂNCIA</label>
-            <input id="wa-instance" type="text" placeholder="minha-imobiliaria" autocomplete="off"
-              style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s"
-              onfocus="this.style.borderColor='#25D366'" onblur="this.style.borderColor='#2a2d3e'">
+            <div id="wa-status-label" style="font-weight:700;color:#e0e0e0;font-size:14px">Não conectado</div>
+            <div id="wa-status-sub" style="font-size:12px;color:#666;margin-top:2px">Clique em Conectar para escanear o QR Code com o WhatsApp desta imobiliária</div>
           </div>
         </div>
 
         <div id="wa-config-msg" style="font-size:12px;margin-bottom:14px;color:#555"></div>
 
         <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn" onclick="saveWaConfig()" style="background:#1a3a2a;border:1px solid #25D366;color:#25D366;font-size:13px">💾 Salvar credenciais</button>
-          <button class="btn-outline" onclick="openWhatsappQr(currentOwnerId)" style="font-size:13px;color:#25D366;border-color:#25D366">📷 Conectar WhatsApp</button>
-        </div>
-
-        <div style="margin-top:20px;background:#0f1117;border-radius:10px;padding:14px;font-size:12px;color:#555;line-height:1.6">
-          <strong style="color:#888">Como obter suas credenciais:</strong><br>
-          1. Instale a <strong style="color:#aaa">Evolution API</strong> em seu servidor (VPS, Railway, etc.)<br>
-          2. Copie a URL base do painel Evolution<br>
-          3. Gere uma API Key no painel Evolution → Settings<br>
-          4. Escolha um nome único para sua instância (ex: <em>imobiliaria-abc</em>)<br>
-          5. Salve e depois clique em "Conectar WhatsApp" para escanear o QR
+          <button class="btn" onclick="openWhatsappQr(currentOwnerId)" style="background:#1a3a2a;border:1px solid #25D366;color:#25D366;font-size:14px;padding:11px 22px">
+            📷 Conectar WhatsApp
+          </button>
+          <button id="btn-wa-disconnect" onclick="disconnectWhatsapp()" style="display:none;padding:11px 18px;background:transparent;border:1px solid #555;color:#888;border-radius:10px;font-size:13px;cursor:pointer">
+            Desconectar
+          </button>
         </div>
       </div>
 

@@ -217,10 +217,8 @@ async function sendContractEmail({ landlordName, landlordEmail, tenantName, tena
   ]);
 }
 
-async function sendWhatsApp(phone, message, ownerData = null) {
-  const baseUrl  = (ownerData?.evolutionApiUrl  || process.env.EVOLUTION_API_URL  || '').replace(/\/$/, '');
-  const apiKey   =  ownerData?.evolutionApiKey  || process.env.EVOLUTION_API_KEY  || '';
-  const instance =  ownerData?.evolutionInstance || process.env.EVOLUTION_INSTANCE || '';
+async function sendWhatsApp(phone, message, ownerData = null, ownerId = null) {
+  const { baseUrl, apiKey, instance } = getEvoConfig(ownerData, ownerId);
   if (!baseUrl || !apiKey || !instance || !phone) return;
   const digits = phone.replace(/\D/g, '');
   if (digits.length < 10) return;
@@ -715,12 +713,14 @@ async function handleApproveLead(db, body) {
 
     // WhatsApp proprietário
     landlordPhone ? sendWhatsApp(landlordPhone,
-      `Olá, ${landlordName}! 🏠\n\nA locação do imóvel *${propAddrWa}* foi aprovada pela imobiliária.\n\nVocê receberá um e-mail com o PDF do contrato e um link para assinatura digital. Verifique sua caixa de entrada (${landlordEmail}).\n\n— iLocarPay`
+      `Olá, ${landlordName}! 🏠\n\nA locação do imóvel *${propAddrWa}* foi aprovada pela imobiliária.\n\nVocê receberá um e-mail com o PDF do contrato e um link para assinatura digital. Verifique sua caixa de entrada (${landlordEmail}).\n\n— iLocarPay`,
+      owner, lead.ownerId
     ).catch(e => console.warn('[approve-lead] whatsapp landlord:', e.message)) : Promise.resolve(),
 
     // WhatsApp inquilino
     lead.tenant.phone ? sendWhatsApp(lead.tenant.phone,
-      `Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉\n\nSua locação do imóvel *${propAddrWa}* foi aprovada!\n\nO contrato será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o link no seu e-mail (${tenantEmail}).\n\nBaixe o app iLocarPay:\nhttps://www.ilocarpay.com.br\n\n— iLocarPay`
+      `Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉\n\nSua locação do imóvel *${propAddrWa}* foi aprovada!\n\nO contrato será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o link no seu e-mail (${tenantEmail}).\n\nBaixe o app iLocarPay:\nhttps://www.ilocarpay.com.br\n\n— iLocarPay`,
+      owner, lead.ownerId
     ).catch(e => console.warn('[approve-lead] whatsapp tenant:', e.message)) : Promise.resolve(),
 
     // E-mail ao corretor
@@ -963,14 +963,16 @@ async function handleGenerateContract(db, body) {
   const addr = c.propertyAddress || c.address || c.propertyCode || 'o imóvel';
   if (landlordPhone) {
     await sendWhatsApp(landlordPhone,
-      `Olá, ${landlordName}! 🏠\n\nUm contrato de locação do imóvel *${addr}* foi gerado e enviado para o seu e-mail (${landlordEmail}) para assinatura digital.\n\nPor favor, verifique sua caixa de entrada e assine o contrato para concluir a locação.\n\n— iLocarPay`
+      `Olá, ${landlordName}! 🏠\n\nUm contrato de locação do imóvel *${addr}* foi gerado e enviado para o seu e-mail (${landlordEmail}) para assinatura digital.\n\nPor favor, verifique sua caixa de entrada e assine o contrato para concluir a locação.\n\n— iLocarPay`,
+      owner, c.ownerId
     );
   }
 
   // WhatsApp ao inquilino informando que o contrato vai ao proprietário primeiro
   if (tenantPhone) {
     await sendWhatsApp(tenantPhone,
-      `Olá, ${tenantName}! 🎉\n\nO contrato de locação do imóvel *${addr}* foi gerado. Ele será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o contrato no seu e-mail (${c.tenantEmail}) para assinar digitalmente.\n\n— iLocarPay`
+      `Olá, ${tenantName}! 🎉\n\nO contrato de locação do imóvel *${addr}* foi gerado. Ele será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o contrato no seu e-mail (${c.tenantEmail}) para assinar digitalmente.\n\n— iLocarPay`,
+      owner, c.ownerId
     );
   }
 
@@ -1142,17 +1144,25 @@ async function handleRejectLead(db, body) {
   const addr    = [prop.street, prop.number, prop.city].filter(Boolean).join(', ') || lead.propertyDescription || 'o imóvel';
   const tenant  = lead.tenant   || {};
 
+  let rejectOwnerData = null;
+  if (lead.ownerId) {
+    const os = await db.collection('owners').doc(lead.ownerId).get().catch(() => null);
+    rejectOwnerData = os?.exists ? os.data() : null;
+  }
+
   // WhatsApp ao inquilino — neutro, sem expor motivo
   if (tenant.phone) {
     await sendWhatsApp(tenant.phone,
-      `Olá, ${tenant.name || 'inquilino'}.\n\nInformamos que sua proposta de locação para o imóvel *${addr}* não foi aprovada neste momento.\n\nPara mais informações, entre em contato com a imobiliária responsável.\n\n— iLocarPay`
+      `Olá, ${tenant.name || 'inquilino'}.\n\nInformamos que sua proposta de locação para o imóvel *${addr}* não foi aprovada neste momento.\n\nPara mais informações, entre em contato com a imobiliária responsável.\n\n— iLocarPay`,
+      rejectOwnerData, lead.ownerId
     );
   }
 
   // WhatsApp ao proprietário
   if (lead.landlordPhone) {
     await sendWhatsApp(lead.landlordPhone,
-      `Olá! Informamos que a proposta de locação do imóvel *${addr}* não foi aprovada pela imobiliária neste momento.\n\n— iLocarPay`
+      `Olá! Informamos que a proposta de locação do imóvel *${addr}* não foi aprovada pela imobiliária neste momento.\n\n— iLocarPay`,
+      rejectOwnerData, lead.ownerId
     );
   }
 
@@ -1161,11 +1171,13 @@ async function handleRejectLead(db, body) {
 
 // ── WHATSAPP (por owner) ──────────────────────────────────────────────────────
 
-function getEvoConfig(ownerData) {
-  // Usa credenciais do owner se tiver; senão usa globais
-  const baseUrl  = (ownerData?.evolutionApiUrl || process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
-  const apiKey   = ownerData?.evolutionApiKey  || process.env.EVOLUTION_API_KEY  || '';
-  const instance = ownerData?.evolutionInstance || process.env.EVOLUTION_INSTANCE || '';
+function getEvoConfig(ownerData, ownerId) {
+  // Credenciais: usa do owner se configuradas, senão usa globais (servidor compartilhado)
+  const baseUrl = (ownerData?.evolutionApiUrl || process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
+  const apiKey  = ownerData?.evolutionApiKey  || process.env.EVOLUTION_API_KEY  || '';
+  // Instância: usa do owner se configurada; senão gera automaticamente a partir do ownerId
+  const instance = ownerData?.evolutionInstance
+    || (ownerId ? `owner_${ownerId.slice(0, 12).replace(/[^a-zA-Z0-9]/g, '')}` : process.env.EVOLUTION_INSTANCE || '');
   return { baseUrl, apiKey, instance };
 }
 
@@ -1205,9 +1217,14 @@ async function handleWhatsappQr(db, body) {
     ownerData = snap.exists ? snap.data() : null;
   }
 
-  const { baseUrl, apiKey, instance } = getEvoConfig(ownerData);
-  if (!baseUrl || !apiKey || !instance) {
-    throw Object.assign(new Error('Evolution API não configurada para esta imobiliária'), { status: 500 });
+  const { baseUrl, apiKey, instance } = getEvoConfig(ownerData, ownerId);
+  if (!baseUrl || !apiKey) {
+    throw Object.assign(new Error('Evolution API não configurada no servidor'), { status: 500 });
+  }
+
+  // Persiste a instância no owner se ainda não estava salva
+  if (ownerId && ownerData && !ownerData.evolutionInstance) {
+    await db.collection('owners').doc(ownerId).update({ evolutionInstance: instance }).catch(() => {});
   }
 
   const evoFetch = makeEvoFetch(baseUrl, apiKey);
@@ -1255,7 +1272,7 @@ async function handleWhatsappDisconnect(db, body) {
     const snap = await db.collection('owners').doc(ownerId).get();
     ownerData = snap.exists ? snap.data() : null;
   }
-  const { baseUrl, apiKey, instance } = getEvoConfig(ownerData);
+  const { baseUrl, apiKey, instance } = getEvoConfig(ownerData, ownerId);
   if (!baseUrl || !apiKey || !instance) throw Object.assign(new Error('Evolution API não configurada'), { status: 500 });
   const evoFetch = makeEvoFetch(baseUrl, apiKey);
   await evoFetch(`instance/logout/${instance}`, { method: 'DELETE' }).catch(() => {});
