@@ -710,6 +710,7 @@
         <td class="actions">
           <button class="btn-sm" style="color:#81c784;border-color:#2a4a2a" onclick="markChargePaid('${c.id}')">✓ Pago</button>
           <button class="btn-sm" onclick="sendOverduePush('${c.tenantId}')">Push</button>
+          <button class="btn-sm" style="color:#ef9a9a;border-color:#4a1a1a" onclick="estornarCobranca('${c.id}','${esc(tenant.name)}')">↩ Estornar</button>
         </td>
       </tr>`;
     }).join('');
@@ -788,6 +789,27 @@
       const data = await r.json();
       showToast(data.ok ? 'Push enviado' : (data.error || 'Erro'), data.ok ? 'success' : 'error');
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+  };
+
+  window.estornarCobranca = async (chargeId, tenantNameOrId) => {
+    showConfirm(
+      `Estornar o pagamento de "${tenantNameOrId}"?\n\nO valor será devolvido via Asaas e a cobrança voltará para pendente.`,
+      async () => {
+        try {
+          const r = await fetch('/api/locarpay-card', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ step: 'refund', chargeId, ownerId: currentOwnerId })
+          });
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || 'Erro ao estornar');
+          showToast('Estorno realizado com sucesso. Novo PIX sendo gerado...', 'success');
+          await loadOverdue();
+        } catch (e) {
+          showToast('Erro: ' + e.message, 'error');
+        }
+      }
+    );
   };
 
   // ── Análise de Crédito ────────────────────────────────────────
@@ -3212,7 +3234,8 @@
               <td style="padding:10px 6px;text-align:center;color:${statusColor[c.status]||'#aaa'}">${statusLabel[c.status] || c.status}</td>
               <td style="padding:10px 6px;text-align:center">
                 ${c.status === 'paid'
-                  ? `<button class="btn-sm" onclick="sendReceipt('${c.id}','${tenantId}',this)">${c.receiptSentAt ? 'Reenviar' : 'Enviar'}</button>`
+                  ? `<button class="btn-sm" onclick="sendReceipt('${c.id}','${tenantId}',this)">${c.receiptSentAt ? 'Reenviar' : 'Enviar'} recibo</button>
+                     <button class="btn-sm" style="color:#ef9a9a;border-color:#4a1a1a;margin-left:4px" onclick="estornarCobranca('${c.id}','${tenantId}')">↩ Estornar</button>`
                   : '—'}
               </td>
             </tr>`).join('')}
