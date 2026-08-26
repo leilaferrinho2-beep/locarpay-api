@@ -1227,7 +1227,9 @@ async function handleWhatsappQr(db, body) {
 
   // Persiste a instância no owner se ainda não estava salva
   if (ownerId && ownerData && !ownerData.evolutionInstance) {
-    await db.collection('owners').doc(ownerId).update({ evolutionInstance: instance }).catch(() => {});
+    await db.collection('owners').doc(ownerId).update({ evolutionInstance: instance })
+      .then(() => console.log(`[whatsapp-qr] evolutionInstance salvo: ${instance} → owner ${ownerId}`))
+      .catch(e => console.error(`[whatsapp-qr] ERRO ao salvar evolutionInstance:`, e.message, e.code));
   }
 
   const evoFetch = makeEvoFetch(baseUrl, apiKey);

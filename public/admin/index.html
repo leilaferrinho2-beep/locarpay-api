@@ -3098,11 +3098,13 @@
     const connEl  = $('whatsapp-qr-connected');
     _clearQrTimers();
     try {
+      status.textContent = `⏳ Buscando QR (owner: ${_qrOwnerId?.slice(0,8) || 'null'})...`;
       const res  = await fetch('/api/locarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'whatsapp-qr', ownerId: _qrOwnerId })
       });
       const data = await res.json();
+      console.log('[whatsapp-qr] response:', JSON.stringify(data).slice(0, 200));
       if (!res.ok) throw new Error(data.error || 'Erro ' + res.status);
 
       // Atualiza instância no cache local (backend salva no Firestore, front precisa saber)
@@ -3144,7 +3146,7 @@
           if (secs <= 0) { clearInterval(_qrCountdown); _fetchQr(); }
         }, 1000);
       } else {
-        status.textContent = '⚠️ Sem QR — tentando novamente...';
+        status.textContent = `⚠️ Sem QR (state:${data.state||'?'} base64:${!!data.base64}) — tentando novamente...`;
         _qrTimer = setTimeout(_fetchQr, 3000);
       }
     } catch (e) {
