@@ -2789,8 +2789,23 @@
     $('et-save').disabled = true;
     $('et-save').textContent = 'Salvando...';
     try {
-      const userUpdates = { name: $('et-name').value.trim(), phone: $('et-phone').value.trim(), cpf: $('et-cpf').value.trim() };
+      const newName  = $('et-name').value.trim();
+      const newPhone = $('et-phone').value.trim();
+      const newCpf   = $('et-cpf').value.trim();
+      const userUpdates = { name: newName, phone: newPhone, cpf: newCpf };
       await updateDoc(doc(db, 'users', editingTenantId), userUpdates);
+      // Sincroniza nome/telefone no lead vinculado ao contrato
+      if (c?.leadId) {
+        try {
+          await updateDoc(doc(db, 'leads', c.leadId), {
+            'tenant.name': newName, 'tenant.phone': newPhone, 'tenant.cpf': newCpf
+          });
+        } catch (_) {}
+      }
+      // Sincroniza tenantName/tenantPhone no contrato
+      if (c) {
+        try { await updateDoc(doc(db, 'contracts', c.id), { tenantName: newName, tenantPhone: newPhone }); } catch (_) {}
+      }
       if (c) {
         const rent = parseBRL($('et-rent').value);
         const due  = parseInt($('et-due').value);
