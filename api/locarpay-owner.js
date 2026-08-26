@@ -744,16 +744,23 @@ async function handleDeleteTenant(db, body, req) {
     await getAuth().deleteUser(fbUser.uid);
   } catch (_) {}
 
-  // Deleta cobranças, contratos, leads e usuário
-  const [chargesSnap, contractsSnap, leadsSnap] = await Promise.all([
+  const tenantEmail = userSnap.data().email || '';
+
+  // Deleta cobranças, contratos, leads (por tenantId e por tenant.email para leads pendentes) e usuário
+  const [chargesSnap, contractsSnap, leadsByIdSnap, leadsByEmailSnap] = await Promise.all([
     db.collection('charges').where('tenantId', '==', tenantId).get(),
     db.collection('contracts').where('tenantId', '==', tenantId).get(),
     db.collection('leads').where('tenantId', '==', tenantId).get(),
+    tenantEmail
+      ? db.collection('leads').where('tenant.email', '==', tenantEmail).get()
+      : Promise.resolve({ docs: [] }),
   ]);
   const batch = db.batch();
   chargesSnap.docs.forEach(d => batch.delete(d.ref));
   contractsSnap.docs.forEach(d => batch.delete(d.ref));
-  leadsSnap.docs.forEach(d => batch.delete(d.ref));
+  const deletedLeadIds = new Set();
+  leadsByIdSnap.docs.forEach(d => { deletedLeadIds.add(d.id); batch.delete(d.ref); });
+  leadsByEmailSnap.docs.forEach(d => { if (!deletedLeadIds.has(d.id)) batch.delete(d.ref); });
   batch.delete(db.collection('users').doc(tenantId));
   await batch.commit();
 
