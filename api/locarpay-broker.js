@@ -1644,6 +1644,23 @@ async function handleCronRetryAssinafy(db) {
     else if (step === 'whatsapp-qr') {
       result = await handleWhatsappQr(db, req.body);
     }
+    else if (step === 'setup-webhook') {
+      // Configura webhook no Evolution para receber eventos de leitura
+      const rawId = req.body.ownerId;
+      const ownerId = (rawId && rawId !== 'undefined') ? rawId.trim() : null;
+      let ownerData = null;
+      if (ownerId) {
+        const snap = await db.collection('owners').doc(ownerId).get();
+        ownerData = snap.exists ? snap.data() : null;
+      }
+      const { baseUrl, apiKey, instance } = getEvoConfig(ownerData, ownerId);
+      const evoFetch = makeEvoFetch(baseUrl, apiKey);
+      const webhookUrl = 'https://www.ilocarpay.com.br/api/locarpay-evolution-webhook';
+      const body = JSON.stringify({ webhook: { enabled: true, url: webhookUrl, webhook_by_events: true, events: ['MESSAGES_UPDATE', 'MESSAGES_UPSERT'] } });
+      const r = await evoFetch(`webhook/set/${instance}`, { method: 'POST', body });
+      const text = await r.text();
+      result = { ok: true, instance, status: r.status, body: text.slice(0, 300) };
+    }
     else if (step === 'whatsapp-debug') {
       // Diagnóstico completo: cria instância e tenta pegar QR
       const rawId = req.body.ownerId;
