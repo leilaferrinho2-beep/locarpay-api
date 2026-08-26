@@ -3150,8 +3150,21 @@
         _qrTimer = setTimeout(_fetchQr, 3000);
       }
     } catch (e) {
-      $('whatsapp-qr-status').textContent = 'Erro: ' + e.message;
-      _qrTimer = setTimeout(_fetchQr, 5000);
+      const isServerDown = e.message?.includes('aborted') || e.message?.includes('fetch') || e.message?.includes('network');
+      if (isServerDown) {
+        $('whatsapp-qr-status').textContent = '🔴 Servidor WhatsApp offline. Reconectando automaticamente...';
+        let wait = 30;
+        const timerEl = $('whatsapp-qr-timer');
+        if (timerEl) { timerEl.style.color = '#ff5252'; timerEl.textContent = wait + 's'; }
+        _qrCountdown = setInterval(() => {
+          wait--;
+          if (timerEl) timerEl.textContent = wait + 's';
+          if (wait <= 0) { clearInterval(_qrCountdown); _fetchQr(); }
+        }, 1000);
+      } else {
+        $('whatsapp-qr-status').textContent = 'Erro: ' + e.message;
+        _qrTimer = setTimeout(_fetchQr, 5000);
+      }
     }
   }
 
