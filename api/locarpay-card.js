@@ -2263,8 +2263,18 @@ async function handleAsaasPaymentWebhook(db, body) {
   // Já marcada como paga — idempotência
   if (charge.status === 'paid') return { ok: true, alreadyPaid: true };
 
-  // Marca como paga
-  await chargeDoc.ref.update({ status: 'paid', paidAt: new Date() });
+  // Marca como paga (e cobranças vinculadas se for PIX combinado)
+  const batch = db.batch();
+  batch.update(chargeDoc.ref, { status: 'paid', paidAt: new Date() });
+  const linkedIds = charge.linkedChargeIds;
+  if (Array.isArray(linkedIds) && linkedIds.length > 0) {
+    for (const lid of linkedIds) {
+      if (lid !== chargeDoc.id) {
+        batch.update(db.collection('charges').doc(lid), { status: 'paid', paidAt: new Date() });
+      }
+    }
+  }
+  await batch.commit();
 
   // Push de confirmação ao tenant
   try {

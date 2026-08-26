@@ -64,6 +64,144 @@ async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
   return customer.id;
 }
 
+// Gera um PIX combinado para múltiplas cobranças selecionadas pelo inquilino.
+// Salva asaasChargeId + linkedChargeIds na primeira cobrança (primária).
+// O webhook e o polling marcam TODAS as cobranças como pagas ao confirmar.
+async function handleMultiChargePix(db, req, res, tenantId, chargeIds, checkOnly) {
+  try {
+    const userSnap = await db.collection('users').doc(tenantId).get();
+    if (!userSnap.exists) return res.status(404).json({ error: 'Inquilino não encontrado' });
+
+    // Carrega todas as cobranças
+    const chargeSnaps = await Promise.all(chargeIds.map(id => db.collection('charges').doc(id).get()));
+    const valid = chargeSnaps.filter(s => s.exists && ['pending','overdue'].includes(s.data().status));
+    if (!valid.length) return res.status(404).json({ error: 'Nenhuma cobrança válida encontrada' });
+
+    // Se todas já pagas, retorna paid
+    if (valid.every(s => s.data().status === 'paid')) return res.status(200).json({ paid: true });
+
+    const primarySnap = valid[0];
+    const primaryId   = primarySnap.id;
+    const primaryData = primarySnap.data();
+    const ownerId     = primaryData.ownerId || await getDefaultOwnerId(db);
+
+    // checkOnly: checa status do PIX primário
+    if (checkOnly) {
+      if (primaryData.asaasChargeId) {
+        try {
+          const s = await fetch(`https://api.asaas.com/v3/payments/${primaryData.asaasChargeId}`, {
+            headers: { 'access_token': await getAsaasKey(db, ownerId) }
+          });
+          const d = await s.json();
+          if (d.status === 'RECEIVED' || d.status === 'CONFIRMED') {
+            const batch = db.batch();
+            valid.forEach(snap => batch.update(snap.ref, { status: 'paid', paidAt: new Date() }));
+            await batch.commit();
+            return res.status(200).json({ paid: true });
+          }
+        } catch (_) {}
+      }
+      return res.status(200).json({ paid: false });
+    }
+
+    const planCheck = await checkOwnerPlanActive(db, ownerId);
+    if (!planCheck.active) return res.status(402).json({ error: 'Plano expirado' });
+
+    const [apiKey, ownerSnap] = await Promise.all([
+      getAsaasKey(db, ownerId),
+      db.collection('owners').doc(ownerId).get()
+    ]);
+    if (!apiKey) return res.status(500).json({ error: 'Chave Asaas não configurada' });
+
+    const ownerCfg = ownerSnap.exists ? (ownerSnap.data() || {}) : {};
+    const finePercentage         = ownerCfg.finePercentage          ?? 2;
+    const interestRate           = ownerCfg.interestRate             ?? 1;
+    const monetaryCorrectionRate = ownerCfg.monetaryCorrectionRate   ?? 0.35;
+    const user = userSnap.data();
+
+    const nowBR = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    nowBR.setHours(0, 0, 0, 0);
+    const todayStr = nowBR.toISOString().slice(0, 10);
+
+    // Se QR combinado já gerado hoje, retorna direto
+    if (primaryData.asaasChargeId && primaryData.pixCopyPaste && primaryData.pixQrCode
+        && primaryData.pixGeneratedDate === todayStr
+        && JSON.stringify((primaryData.linkedChargeIds || []).sort()) === JSON.stringify([...chargeIds].sort())) {
+      return res.status(200).json({ pixCopyPaste: primaryData.pixCopyPaste, pixQrCode: primaryData.pixQrCode });
+    }
+
+    // Cancela QR anterior se existir
+    if (primaryData.asaasChargeId) {
+      try {
+        await fetch(`https://api.asaas.com/v3/payments/${primaryData.asaasChargeId}`, {
+          method: 'DELETE', headers: { 'access_token': apiKey }
+        });
+      } catch (_) {}
+      await db.collection('charges').doc(primaryId).update({
+        asaasChargeId: null, pixCopyPaste: null, pixQrCode: null, pixGeneratedDate: null
+      });
+    }
+
+    // Calcula valor total combinado com multa/juros
+    let totalValue = 0;
+    for (const snap of valid) {
+      const c = snap.data();
+      const baseVal = c.baseRent || c.totalAmount || 0;
+      const dueDate = c.dueDate?.seconds ? new Date(c.dueDate.seconds * 1000) : null;
+      const dueMid = dueDate ? new Date(dueDate.setHours(0,0,0,0)) : nowBR;
+      const days = Math.max(0, Math.floor((nowBR - dueMid) / 86400000));
+      if (days > 0) {
+        const fine     = baseVal * finePercentage / 100;
+        const interest = baseVal * (interestRate + monetaryCorrectionRate) / 100 / 30 * days;
+        totalValue += Math.round((baseVal + fine + interest) * 100) / 100;
+      } else {
+        totalValue += baseVal;
+      }
+    }
+    totalValue = Math.round(totalValue * 100) / 100;
+
+    const customerId = await findOrCreateCustomer(
+      user.name || user.email?.split('@')[0] || 'Inquilino',
+      user.email || '', user.cpf || '', user.phone || '', apiKey
+    );
+
+    // Split de comissão
+    let splitEntry = null;
+    try {
+      const cfgAsaas = await db.collection('config').doc('asaas').get();
+      const masterWalletId = cfgAsaas.data()?.walletId || process.env.ASAAS_MASTER_WALLET_ID;
+      const commPct = ownerCfg.commissionPercentage ?? cfgAsaas.data()?.commissionPercentage ?? 1;
+      if (masterWalletId) splitEntry = { walletId: masterWalletId, percentualValor: commPct };
+    } catch (_) {}
+
+    const paymentBody = {
+      customer: customerId,
+      billingType: 'PIX',
+      value: totalValue,
+      dueDate: todayStr,
+      description: `Pagamento combinado — ${valid.length} cobranças`
+    };
+    if (splitEntry) paymentBody.split = [splitEntry];
+
+    const asaasCharge = await asaasPost('/payments', paymentBody, apiKey);
+    const pix         = await asaasGet(`/payments/${asaasCharge.id}/pixQrCode`, apiKey);
+
+    await db.collection('charges').doc(primaryId).update({
+      asaasChargeId:    asaasCharge.id,
+      pixCopyPaste:     pix.payload,
+      pixQrCode:        pix.encodedImage,
+      pixGeneratedDate: todayStr,
+      pixTotalValue:    totalValue,
+      linkedChargeIds:  chargeIds   // todos os IDs para marcar como pago no webhook
+    });
+
+    return res.status(200).json({ pixCopyPaste: pix.payload, pixQrCode: pix.encodedImage });
+  } catch (e) {
+    console.error('handleMultiChargePix error:', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -73,8 +211,14 @@ export default async function handler(req, res) {
     initFirebase();
     const db = getFirestore();
 
-    const { tenantId, chargeId, checkOnly } = req.body || {};
+    const { tenantId, chargeId, chargeIds, checkOnly } = req.body || {};
     if (!tenantId) return res.status(400).json({ error: 'tenantId obrigatório' });
+
+    // ── Multi-charge: chargeIds[] enviado pelo app para PIX combinado ─────
+    const isMulti = Array.isArray(chargeIds) && chargeIds.length > 1;
+    if (isMulti) {
+      return handleMultiChargePix(db, req, res, tenantId, chargeIds, checkOnly);
+    }
 
     // Lê dados do Firestore
     const [userSnap, chargeSnap] = await Promise.all([
