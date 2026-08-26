@@ -102,6 +102,8 @@ async function handleSend(db, body) {
     : `data:application/pdf;base64,${pdfBase64}`;
 
   // 1. Upload do documento
+  const webhookUrl = 'https://www.ilocarpay.com.br/api/locarpay-clicksign-webhook';
+
   const docResp = await csRequest('POST', '/documents', {
     document: {
       path: `/contratos/${fileName}`,
@@ -109,7 +111,11 @@ async function handleSend(db, body) {
       deadline_at: null,
       auto_close: true,
       locale: 'pt-BR',
-      sequence_enabled: true
+      sequence_enabled: true,
+      webhook: {
+        url: webhookUrl,
+        skip_data: false
+      }
     }
   });
   const documentKey = docResp.document?.key;
