@@ -1618,6 +1618,46 @@ async function handleCronRetryAssinafy(db) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  // Webhook do Evolution API (POST /api/locarpay-broker?step=evolution-webhook)
+  if (req.query?.step === 'evolution-webhook') {
+    try {
+      initFirebase();
+      const db = getFirestore();
+      const event = req.body?.event || req.body?.type;
+      if (event === 'messages.update' || event === 'message.update') {
+        const updates = Array.isArray(req.body?.data) ? req.body.data : [req.body?.data].filter(Boolean);
+        const batch = db.batch();
+        let updated = 0;
+        for (const upd of updates) {
+          const status = upd?.status || upd?.update?.status;
+          const remoteJid = upd?.key?.remoteJid || upd?.remoteJid || '';
+          const fromMe = upd?.key?.fromMe ?? upd?.fromMe ?? false;
+          if (!fromMe) continue;
+          if (status !== 'READ' && status !== 'read' && status !== 4) continue;
+          const phone = remoteJid.replace(/@.*/, '').replace(/\D/g, '');
+          if (!phone) continue;
+          console.log(`[evo-webhook] READ phone=${phone}`);
+          const chamadosSnap = await db.collectionGroup('messages')
+            .where('readByTenant', '==', false)
+            .where('fromMe', '==', true)
+            .get();
+          for (const msgDoc of chamadosSnap.docs) {
+            const msgPhone = (msgDoc.data().tenantPhone || '').replace(/\D/g, '');
+            if (msgPhone && msgPhone.endsWith(phone.slice(-8))) {
+              batch.update(msgDoc.ref, { readByTenant: true, readAt: new Date().toISOString() });
+              updated++;
+            }
+          }
+        }
+        if (updated > 0) await batch.commit();
+        console.log(`[evo-webhook] ${updated} msgs lidas`);
+      }
+    } catch (e) {
+      console.error('[evo-webhook]', e.message);
+    }
+    return res.status(200).json({ ok: true });
+  }
+
   try {
     initFirebase();
     const db   = getFirestore();
@@ -1645,7 +1685,6 @@ async function handleCronRetryAssinafy(db) {
       result = await handleWhatsappQr(db, req.body);
     }
     else if (step === 'setup-webhook') {
-      // Configura webhook no Evolution para receber eventos de leitura
       const rawId = req.body.ownerId;
       const ownerId = (rawId && rawId !== 'undefined') ? rawId.trim() : null;
       let ownerData = null;
@@ -1655,7 +1694,7 @@ async function handleCronRetryAssinafy(db) {
       }
       const { baseUrl, apiKey, instance } = getEvoConfig(ownerData, ownerId);
       const evoFetch = makeEvoFetch(baseUrl, apiKey);
-      const webhookUrl = 'https://www.ilocarpay.com.br/api/locarpay-evolution-webhook';
+      const webhookUrl = 'https://www.ilocarpay.com.br/api/locarpay-broker?step=evolution-webhook';
       const body = JSON.stringify({ webhook: { enabled: true, url: webhookUrl, webhook_by_events: true, events: ['MESSAGES_UPDATE', 'MESSAGES_UPSERT'] } });
       const r = await evoFetch(`webhook/set/${instance}`, { method: 'POST', body });
       const text = await r.text();
