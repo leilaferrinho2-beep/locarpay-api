@@ -2,6 +2,7 @@
   "name": "transgu-deploy",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "dependencies": {
     "firebase-admin": "^12.3.0",
     "nodemailer": "^6.9.14",
