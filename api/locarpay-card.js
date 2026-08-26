@@ -246,20 +246,41 @@ async function handleInit(db, body, apiKey) {
   const cardFeeRate  = (configData.cardFeePercentage ?? 2.99) / 100;
   const cardFeeFixed = configData.cardFeeFixed ?? 0.49;
   const charge       = chargeSnap.data();
-  const baseValue    = charge.totalAmount || charge.baseRent || 5;
-  const dueDateObj   = charge.dueDate?.toDate ? charge.dueDate.toDate() : new Date(charge.dueDate?.seconds * 1000);
-  const today        = new Date(); today.setHours(0, 0, 0, 0);
-  const dueDateOnly  = new Date(dueDateObj); dueDateOnly.setHours(0, 0, 0, 0);
-  const diasAtraso   = Math.max(0, Math.floor((today - dueDateOnly) / 86400000));
-  const finePercentage       = (configData.finePercentage          ?? 2)    / 100;
-  const interestRate         = (configData.interestRate             ?? 1)    / 100 / 30;
-  const monetaryCorrectionRate = (configData.monetaryCorrectionRate ?? 0.35) / 100 / 30;
-  let valueComAtraso = baseValue;
-  if (diasAtraso > 0) {
-    const dailyRate = interestRate + monetaryCorrectionRate;
-    valueComAtraso = parseFloat((baseValue * (1 + finePercentage + dailyRate * diasAtraso)).toFixed(2));
+  const finePercentage         = (configData.finePercentage          ?? 2)    / 100;
+  const interestRate           = (configData.interestRate             ?? 1)    / 100 / 30;
+  const monetaryCorrectionRate = (configData.monetaryCorrectionRate  ?? 0.35) / 100 / 30;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+
+  // Suporta múltiplas cobranças: soma os valores de todas
+  const chargeIdsAll = (body.chargeIds?.length > 1) ? body.chargeIds : [chargeId];
+  let totalValue = 0;
+  if (chargeIdsAll.length > 1) {
+    const allSnaps = await Promise.all(chargeIdsAll.map(id => db.collection('charges').doc(id).get()));
+    for (const s of allSnaps) {
+      if (!s.exists) continue;
+      const c = s.data();
+      const base = c.totalAmount || c.baseRent || 0;
+      const due  = c.dueDate?.toDate ? c.dueDate.toDate() : new Date((c.dueDate?.seconds || 0) * 1000);
+      const due0 = new Date(due); due0.setHours(0, 0, 0, 0);
+      const dias = Math.max(0, Math.floor((today - due0) / 86400000));
+      if (dias > 0) {
+        totalValue += parseFloat((base * (1 + finePercentage + (interestRate + monetaryCorrectionRate) * dias)).toFixed(2));
+      } else {
+        totalValue += base;
+      }
+    }
+  } else {
+    const baseValue   = charge.totalAmount || charge.baseRent || 5;
+    const dueDateObj  = charge.dueDate?.toDate ? charge.dueDate.toDate() : new Date(charge.dueDate?.seconds * 1000);
+    const dueDateOnly = new Date(dueDateObj); dueDateOnly.setHours(0, 0, 0, 0);
+    const diasAtraso  = Math.max(0, Math.floor((today - dueDateOnly) / 86400000));
+    if (diasAtraso > 0) {
+      totalValue = parseFloat((baseValue * (1 + finePercentage + (interestRate + monetaryCorrectionRate) * diasAtraso)).toFixed(2));
+    } else {
+      totalValue = baseValue;
+    }
   }
-  const realValue = parseFloat(((valueComAtraso + cardFeeFixed) / (1 - cardFeeRate)).toFixed(2));
+  const realValue = parseFloat(((totalValue + cardFeeFixed) / (1 - cardFeeRate)).toFixed(2));
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -334,6 +355,7 @@ async function handleInit(db, body, apiKey) {
     postalCode,
     email,
     phone:          phone || '',
+    chargeIds:      chargeIdsAll,          // todas as cobranças a marcar como pagas
     microAmount,                         // valor de verificação — inquilino deve confirmar este valor
     microPaymentId: microCharge.id,      // estornamos aqui após verificação bem-sucedida
     realValue,                           // valor real do aluguel — cobrado no confirm
@@ -493,12 +515,13 @@ async function handleConfirm(db, body) {
 
   const realCharge = await asaasReq('POST', '/payments', realChargeBody, apiKey);
 
+  const chargeIdsToMark = ver.chargeIds?.length > 1 ? ver.chargeIds : [ver.chargeId];
   const ops = [
-    db.collection('charges').doc(ver.chargeId).update({
+    ...chargeIdsToMark.map(cid => db.collection('charges').doc(cid).update({
       asaasChargeId: realCharge.id,
       status:        'paid',
       paidAt:        FieldValue.serverTimestamp()
-    }),
+    })),
     verRef.update({ verified: true, realPaymentId: realCharge.id, paidAt: FieldValue.serverTimestamp(), cardFallback: FieldValue.delete() }),
     db.collection('paymentLogs').add({
       tenantId:       ver.tenantId,
@@ -614,14 +637,15 @@ async function handleRefund(db, body) {
 
 // ── PREVIEW VALORES ──────────────────────────────────────────────────────────
 async function handlePreview(db, body) {
-  const { chargeId } = body;
-  if (!chargeId) throw Object.assign(new Error('chargeId obrigatório'), { status: 400 });
+  const { chargeId, chargeIds: multiIds } = body;
+  const allIds = (multiIds?.length > 1) ? multiIds : (chargeId ? [chargeId] : null);
+  if (!allIds?.length) throw Object.assign(new Error('chargeId obrigatório'), { status: 400 });
 
-  const chargeSnap = await db.collection('charges').doc(chargeId).get();
-  if (!chargeSnap.exists) throw Object.assign(new Error('Cobrança não encontrada'), { status: 404 });
+  const primarySnap = await db.collection('charges').doc(allIds[0]).get();
+  if (!primarySnap.exists) throw Object.assign(new Error('Cobrança não encontrada'), { status: 404 });
 
-  const charge = chargeSnap.data();
-  const ownerId = charge.ownerId || await getDefaultOwnerId(db);
+  const primaryCharge = primarySnap.data();
+  const ownerId = primaryCharge.ownerId || await getDefaultOwnerId(db);
   const ownerSnap = await db.collection('owners').doc(ownerId).get();
   const cfg = ownerSnap.exists ? ownerSnap.data() : {};
 
@@ -631,25 +655,31 @@ async function handlePreview(db, body) {
   const interestRate           = (cfg.interestRate             ?? 1)    / 100 / 30;
   const monetaryCorrectionRate = (cfg.monetaryCorrectionRate   ?? 0.35) / 100 / 30;
 
-  const baseValue   = charge.totalAmount || charge.baseRent || 5;
-  const dueDateObj  = charge.dueDate?.toDate ? charge.dueDate.toDate() : new Date(charge.dueDate?.seconds * 1000);
-  const today       = new Date(); today.setHours(0, 0, 0, 0);
-  const dueDateOnly = new Date(dueDateObj); dueDateOnly.setHours(0, 0, 0, 0);
-  const diasAtraso  = Math.max(0, Math.floor((today - dueDateOnly) / 86400000));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
 
-  let valueComAtraso = baseValue;
-  let multa = 0, juros = 0, correcao = 0;
-  if (diasAtraso > 0) {
-    multa   = parseFloat((baseValue * finePercentage).toFixed(2));
-    juros   = parseFloat((baseValue * interestRate * diasAtraso).toFixed(2));
-    correcao = parseFloat((baseValue * monetaryCorrectionRate * diasAtraso).toFixed(2));
-    valueComAtraso = parseFloat((baseValue + multa + juros + correcao).toFixed(2));
+  // Soma todas as cobranças selecionadas
+  let totalBase = 0, totalMulta = 0, totalJuros = 0, maxDiasAtraso = 0;
+  const snaps = await Promise.all(allIds.map(id => db.collection('charges').doc(id).get()));
+  for (const snap of snaps) {
+    if (!snap.exists) continue;
+    const c = snap.data();
+    const base = c.totalAmount || c.baseRent || 0;
+    const due  = c.dueDate?.toDate ? c.dueDate.toDate() : new Date((c.dueDate?.seconds || 0) * 1000);
+    const due0 = new Date(due); due0.setHours(0, 0, 0, 0);
+    const dias = Math.max(0, Math.floor((today - due0) / 86400000));
+    if (dias > maxDiasAtraso) maxDiasAtraso = dias;
+    if (dias > 0) {
+      totalMulta += parseFloat((base * finePercentage).toFixed(2));
+      totalJuros += parseFloat((base * (interestRate + monetaryCorrectionRate) * dias).toFixed(2));
+    }
+    totalBase += base;
   }
 
+  const valueComAtraso = parseFloat((totalBase + totalMulta + totalJuros).toFixed(2));
   const totalCartao = parseFloat(((valueComAtraso + cardFeeFixed) / (1 - cardFeeRate)).toFixed(2));
   const taxaCartao  = parseFloat((totalCartao - valueComAtraso).toFixed(2));
 
-  return { baseValue, multa, juros, correcao, diasAtraso, valueComAtraso, taxaCartao, totalCartao };
+  return { baseValue: totalBase, multa: totalMulta, juros: totalJuros, correcao: 0, diasAtraso: maxDiasAtraso, valueComAtraso, taxaCartao, totalCartao };
 }
 
 // ── SYNC CUSTOMERS (atualiza mobilePhone no Asaas para todos os inquilinos) ──
