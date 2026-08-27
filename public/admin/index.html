@@ -427,21 +427,31 @@
     } catch (_) {}
 
     const cards = [
-      { label: 'Inquilinos',       value: totalTenants,           icon: '👤', color: '#4CAF50' },
-      { label: 'Contratos ativos', value: totalContracts,         icon: '📄', color: '#4CAF50' },
-      { label: 'Leads em análise', value: leadsCount,             icon: '📋', color: leadsCount > 0 ? '#FFB74D' : '#888' },
-      { label: 'Cobranças pend.',  value: pendingCount,           icon: '⏳', color: '#FFB74D' },
-      { label: 'Pagas',            value: paidCount,              icon: '✅', color: '#81C784' },
-      { label: 'Aluguel/mês',      value: fmt.format(totalRent),  icon: '💰', color: '#CE93D8' },
+      { label: 'Inquilinos',       value: totalTenants,           icon: '👤', color: '#4CAF50', tab: 'tenants',  loadFn: 'loadTenants' },
+      { label: 'Contratos ativos', value: totalContracts,         icon: '📄', color: '#4CAF50', tab: 'tenants',  loadFn: 'loadTenants' },
+      { label: 'Leads em análise', value: leadsCount,             icon: '📋', color: leadsCount > 0 ? '#FFB74D' : '#888', tab: 'leads', loadFn: 'loadLeads' },
+      { label: 'Cobranças pend.',  value: pendingCount,           icon: '⏳', color: '#FFB74D', tab: 'overdue',  loadFn: 'loadOverdue' },
+      { label: 'Pagas',            value: paidCount,              icon: '✅', color: '#81C784', tab: 'overdue',  loadFn: 'loadOverdue' },
+      { label: 'Aluguel/mês',      value: fmt.format(totalRent),  icon: '💰', color: '#CE93D8', tab: 'tenants',  loadFn: 'loadTenants' },
     ];
 
     $('metrics-row').innerHTML = cards.map(c => `
-      <div class="metric-card">
+      <div class="metric-card metric-card--link" data-tab="${c.tab}" data-loadfn="${c.loadFn}" title="Ver ${esc(c.label)}" style="cursor:pointer">
         <div class="metric-icon" style="color:${c.color}">${c.icon}</div>
         <div class="metric-value" style="color:${c.color}">${c.value}</div>
-        <div class="metric-label">${c.label}</div>
+        <div class="metric-label">${esc(c.label)}</div>
+        <div class="metric-arrow">→</div>
       </div>
     `).join('');
+
+    $('metrics-row').addEventListener('click', e => {
+      const card = e.target.closest('[data-tab]');
+      if (!card) return;
+      const tab    = card.dataset.tab;
+      const loadFn = card.dataset.loadfn;
+      const fn = { loadTenants, loadOverdue, loadLeads }[loadFn];
+      goTab(tab, fn);
+    });
   }
 
   function renderTenants() { filterAndRender(); }
@@ -5036,10 +5046,14 @@
   .section-header h2 { font-size: 20px; font-weight: 700; flex: 1; letter-spacing: -0.3px; }
 
   /* ── Metric cards ──────────────────────────── */
-  .metric-card { background: var(--s2); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; position: relative; overflow: hidden; transition: border-color .2s; }
+  .metric-card { background: var(--s2); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; position: relative; overflow: hidden; transition: border-color .2s, transform .15s, box-shadow .15s; }
   .metric-card:hover { border-color: var(--border2); }
   .metric-card::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity:0; transition: opacity .3s; }
   .metric-card:hover::after { opacity:1; }
+  .metric-card--link:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.3); border-color: var(--accent); }
+  .metric-card--link:active { transform: translateY(0); }
+  .metric-arrow { position:absolute; top:12px; right:14px; font-size:14px; color:var(--text3); opacity:0; transition: opacity .2s, transform .2s; }
+  .metric-card--link:hover .metric-arrow { opacity:1; transform: translateX(3px); }
   .metric-icon { font-size: 20px; margin-bottom: 10px; }
   .metric-value { font-size: 28px; font-weight: 800; letter-spacing: -1.5px; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
   .metric-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
