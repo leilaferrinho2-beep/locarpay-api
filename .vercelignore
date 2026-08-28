@@ -1,2 +1,4 @@
-public/download/*.apk
-download/*.apk
+public/download/locarpay*.apk
+public/download/ilocarpay-v*.apk
+download/locarpay*.apk
+download/ilocarpay-v*.apk
