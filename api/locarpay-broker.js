@@ -1307,6 +1307,47 @@ async function handleWhatsappDisconnect(db, body) {
   return { ok: true };
 }
 
+async function handleWaKeepalive(db) {
+  // Lê todos os owners com whatsappConnected=true e evolutionInstance configurado
+  const snap = await db.collection('owners')
+    .where('whatsappConnected', '==', true)
+    .get();
+  const results = [];
+  await Promise.all(snap.docs.map(async (doc) => {
+    const owner = doc.data();
+    const ownerId = doc.id;
+    const { baseUrl, apiKey, instance } = getEvoConfig(owner, ownerId);
+    if (!baseUrl || !apiKey || !instance) return;
+    const evoFetch = makeEvoFetch(baseUrl, apiKey);
+    try {
+      const stateRes = await evoFetch(`instance/connectionState/${instance}`);
+      const stateData = await stateRes.json().catch(() => ({}));
+      const state = stateData?.instance?.state || stateData?.state || 'close';
+      if (state === 'open') {
+        results.push({ ownerId, instance, state: 'open' });
+      } else {
+        // Tenta reconectar (restaura sessão salva ou retorna QR)
+        await evoFetch(`instance/connect/${instance}`).catch(() => {});
+        // Aguarda 3s e verifica novamente
+        await new Promise(r => setTimeout(r, 3000));
+        const s2Res = await evoFetch(`instance/connectionState/${instance}`).catch(() => null);
+        const s2Data = s2Res ? await s2Res.json().catch(() => ({})) : {};
+        const state2 = s2Data?.instance?.state || s2Data?.state || 'close';
+        const nowConnected = state2 === 'open';
+        if (!nowConnected) {
+          // Marca como desconectado no Firestore para que o admin veja na UI
+          await db.collection('owners').doc(ownerId).update({ whatsappConnected: false }).catch(() => {});
+        }
+        results.push({ ownerId, instance, state: state2, wasDisconnected: true, nowConnected });
+        console.log(`[wa-keepalive] ${ownerId} ${instance} was=${state} now=${state2}`);
+      }
+    } catch (e) {
+      results.push({ ownerId, instance, error: e.message });
+    }
+  }));
+  return { ok: true, checked: results.length, results };
+}
+
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
 
 async function handleGetSignedReadUrl(body) {
@@ -1581,7 +1622,15 @@ async function handleCronRetryAssinafy(db) {
 }
 
   if (req.method === 'GET') {
-    const { view, contractId } = req.query || {};
+    const { view, contractId, step: getStep } = req.query || {};
+    if (getStep === 'wa-keepalive') {
+      try {
+        initFirebase();
+        const db = getFirestore();
+        const result = await handleWaKeepalive(db);
+        return res.status(200).json(result);
+      } catch (e) { return res.status(500).json({ error: e.message }); }
+    }
     if (view === 'contract' && contractId) {
       try {
         initFirebase();
@@ -1733,6 +1782,9 @@ async function handleCronRetryAssinafy(db) {
     }
     else if (step === 'whatsapp-disconnect') {
       result = await handleWhatsappDisconnect(db, req.body);
+    }
+    else if (step === 'wa-keepalive') {
+      result = await handleWaKeepalive(db);
     }
     else if (step === 'send-whatsapp-test') {
       const { phone, message } = req.body;
