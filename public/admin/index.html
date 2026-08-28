@@ -53,6 +53,10 @@
   window.openStorageDoc = openStorageDoc;
 
   // ── Sanitização XSS ───────────────────────────────────────────
+  function fmtCep(cep) {
+    const d = String(cep || '').replace(/\D/g, '');
+    return d.length === 8 ? `${d.slice(0,5)}-${d.slice(5)}` : d;
+  }
   function esc(str) {
     return String(str ?? '')
       .replace(/&/g, '&amp;')
@@ -2053,7 +2057,7 @@
         const histHtml = allContracts.length
           ? allContracts.map(c => `
               <tr style="border-bottom:1px solid #1a1d2e">
-                <td style="padding:7px 10px;font-size:12px">${esc(c.propertyCode || (() => { if (c.propertyLogradouro) { let a = c.propertyLogradouro; if (c.propertyNumero) a += `, ${c.propertyNumero}`; if (c.propertyBairro) a += `, ${c.propertyBairro}`; const cu = [c.propertyCidade, c.propertyEstado].filter(Boolean).join('/'); if (cu) a += `, ${cu}`; if (c.propertyCep) a += ` - CEP ${c.propertyCep}`; return a; } return c.propertyAddress || ''; })() || '—')}</td>
+                <td style="padding:7px 10px;font-size:12px">${esc(c.propertyCode || (() => { if (c.propertyLogradouro) { let a = c.propertyLogradouro; if (c.propertyNumero) a += `, ${c.propertyNumero}`; if (c.propertyBairro) a += `, ${c.propertyBairro}`; const cu = [c.propertyCidade, c.propertyEstado].filter(Boolean).join('/'); if (cu) a += `, ${cu}`; if (c.propertyCep) a += ` - CEP ${fmtCep(c.propertyCep)}`; return a; } return c.propertyAddress || ''; })() || '—')}</td>
                 <td style="padding:7px 10px;font-size:12px">${esc(c.tenantName || '—')}</td>
                 <td style="padding:7px 10px;font-size:12px;color:#4CAF50">${fmt(c.baseRent)}/mês</td>
                 <td style="padding:7px 10px;font-size:12px">${c.startDate || '—'}</td>
@@ -3013,7 +3017,7 @@
           if (contract.propertyBairro) a += `, ${contract.propertyBairro}`;
           if (contract.propertyCidade) a += `, ${contract.propertyCidade}`;
           if (contract.propertyEstado) a += `/${contract.propertyEstado}`;
-          if (contract.propertyCep)    a += ` - CEP ${contract.propertyCep}`;
+          if (contract.propertyCep)    a += ` - CEP ${fmtCep(contract.propertyCep)}`;
           return a;
         }
         return contract.propertyAddress || contract.propertyDescription || '—';

@@ -627,7 +627,7 @@ function buildLeadAddr(l) {
   const parts = [p.street, p.number, p.complement, p.neighborhood].filter(Boolean);
   const cityUf = [p.city, p.state].filter(Boolean).join('/');
   if (cityUf) parts.push(cityUf);
-  if (p.cep) parts.push(`CEP ${p.cep}`);
+  if (p.cep) { const d = String(p.cep).replace(/\D/g,''); parts.push(`CEP ${d.length===8?d.slice(0,5)+'-'+d.slice(5):d}`); }
   return parts.length ? parts.join(', ') : (l.propertyAddress || 'Imóvel não informado');
 }
 
