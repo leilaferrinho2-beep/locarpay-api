@@ -3510,7 +3510,19 @@
         createdAt:   new Date()
       });
       $('modal-avulsa').style.display = 'none';
-      showToast('Cobrança avulsa gerada com sucesso!', 'success');
+      showToast('Cobrança criada! Gerando PIX...', 'info');
+      // Gera PIX automaticamente para o inquilino não precisar interagir
+      try {
+        const r2 = await fetch('/api/locarpay-card', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ step: 'create-extra-pix', chargeId: chargeRef.id, tenantId: _avulsaTenantId, ownerId: currentOwnerId })
+        });
+        if (r2.ok) showToast('Cobrança avulsa gerada com PIX pronto!', 'success');
+        else showToast('Cobrança gerada — PIX será gerado ao abrir o app.', 'warning');
+      } catch(_) {
+        showToast('Cobrança gerada — PIX será gerado ao abrir o app.', 'warning');
+      }
     } catch(e) {
       $('av-error').textContent = 'Erro: ' + e.message;
     } finally {
