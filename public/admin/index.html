@@ -9,6 +9,7 @@
   import { getAuth, signInWithPopup, signInWithRedirect, signInWithCustomToken, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
   import { getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, increment, query, where, orderBy, limit, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
   import { getStorage, ref as storageRef, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+  import { getMessaging, getToken } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js';
 
   const MASTER_EMAIL = 'denisfelicio20@gmail.com';
 
@@ -5067,6 +5068,25 @@
     }
   }
 
+  async function initFcmWebPush() {
+    try {
+      if (!('serviceWorker' in navigator) || !('Notification' in window)) return;
+      const perm = Notification.permission === 'granted'
+        ? 'granted'
+        : await Notification.requestPermission();
+      if (perm !== 'granted') return;
+      const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      const messaging = getMessaging(app);
+      const token = await getToken(messaging, {
+        vapidKey: 'BM9xl9yKAvIuUQ9usK1tUWlwnPdaKExni8zZFfSQ4xWYAqp6O8cmr9AQkXkEBzKLepRQkAbq8vHKvdGGJ4Tbpm4',
+        serviceWorkerRegistration: reg
+      });
+      if (token && currentOwnerId) {
+        await updateDoc(doc(db, 'owners', currentOwnerId), { fcmToken: token });
+      }
+    } catch(e) { console.warn('FCM init:', e.message); }
+  }
+
   onAuthStateChanged(auth, async user => {
     if (!user) { showSection('login-section'); return; }
     localStorage.setItem('ilp_visited', '1');
@@ -5091,10 +5111,8 @@
     startLeadsBadge();
     if (currentOwnerId) startChamadosListener(currentOwnerId);
     startBrokerChatUnreadListener();
-    // Pede permissão para notificações nativas do browser
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
+    // Inicializa FCM Web Push e salva token do owner no Firestore
+    initFcmWebPush();
 
     showSection('dashboard-section');
     renderPlanBanner();
