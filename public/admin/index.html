@@ -3290,17 +3290,23 @@
     $('history-list').innerHTML = '<p style="color:#888;font-size:13px">Carregando...</p>';
     $('modal-history').style.display = 'flex';
 
+    const t2 = tenants.find(x => x.id === tenantId);
     const snap = await getDocs(query(
       collection(db, 'charges'),
       where('tenantId', '==', tenantId)
     ));
+    const snapEmail = t2?.email ? await getDocs(query(
+      collection(db, 'charges'),
+      where('tenantEmail', '==', t2.email)
+    )) : { docs: [] };
+    const allDocs = [...snap.docs, ...snapEmail.docs.filter(d => !snap.docs.find(s => s.id === d.id))];
 
     const fmt     = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const fmtDate = secs => secs ? new Date(secs * 1000).toLocaleDateString('pt-BR') : '—';
     const statusLabel = { pending: 'Pendente', overdue: 'Vencida', paid: 'Paga', cancelled: 'Cancelada' };
     const statusColor = { pending: '#aaa', overdue: '#ef5350', paid: '#4caf50', cancelled: '#555' };
 
-    const charges = snap.docs
+    const charges = allDocs
       .map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.dueDate?.seconds || 0) - (a.dueDate?.seconds || 0));
 
@@ -3318,12 +3324,13 @@
             <th style="text-align:right;padding:8px 6px;color:#888;font-weight:500">Total</th>
             <th style="text-align:center;padding:8px 6px;color:#888;font-weight:500">Status</th>
             <th style="text-align:center;padding:8px 6px;color:#888;font-weight:500">Recibo</th>
+            <th style="text-align:center;padding:8px 6px;color:#888;font-weight:500">Ações</th>
           </tr>
         </thead>
         <tbody>
           ${charges.map(c => `
-            <tr style="border-bottom:1px solid #1e2030">
-              <td style="padding:10px 6px">${c.monthRef || '—'}</td>
+            <tr id="charge-row-${c.id}" style="border-bottom:1px solid #1e2030">
+              <td style="padding:10px 6px">${c.monthRef || (c.description ? c.description.substring(0,20) : '—')}</td>
               <td style="padding:10px 6px">${fmtDate(c.dueDate?.seconds)}</td>
               <td style="padding:10px 6px;text-align:right">${fmt.format(c.totalAmount || c.baseRent || 0)}</td>
               <td style="padding:10px 6px;text-align:center;color:${statusColor[c.status]||'#aaa'}">${statusLabel[c.status] || c.status}</td>
@@ -3333,10 +3340,25 @@
                      <button class="btn-sm" style="color:#ef9a9a;border-color:#4a1a1a;margin-left:4px" onclick="estornarCobranca('${c.id}','${tenantId}')">↩ Estornar</button>`
                   : '—'}
               </td>
+              <td style="padding:10px 6px;text-align:center">
+                <button class="btn-sm" style="color:#ef5350;border-color:#4a1a1a;background:#1a0a0a" onclick="deleteCharge('${c.id}')">🗑 Excluir</button>
+              </td>
             </tr>`).join('')}
         </tbody>
       </table>`;
   }
+
+  window.deleteCharge = async function(chargeId) {
+    if (!confirm('Excluir esta cobrança? Esta ação não pode ser desfeita.')) return;
+    try {
+      await deleteDoc(doc(db, 'charges', chargeId));
+      const row = document.getElementById('charge-row-' + chargeId);
+      if (row) row.remove();
+      showToast('Cobrança excluída.', 'success');
+    } catch(e) {
+      showToast('Erro ao excluir: ' + e.message, 'error');
+    }
+  };
 
   window.sendReceipt = async (chargeId, tenantId, btn) => {
     btn.disabled = true; btn.textContent = 'Enviando...';
