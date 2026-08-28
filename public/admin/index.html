@@ -3040,7 +3040,7 @@
         <td style="white-space:nowrap">
           <button class="btn-sm" onclick="openEditTenant('${t.id}')">Editar</button>
 
-          <button class="btn-sm btn-sm-alt" onclick="openAvulsa('${t.id}','${(t.name||'').replace(/'/g,"\\'")}')" style="color:#FFD54F;border-color:#FFD54F">+Avulsa</button>
+          <button class="btn-sm btn-sm-alt" onclick="openAvulsa('${t.id}','${(t.name||'').replace(/'/g,"\\'")}','${(t.email||'').replace(/'/g,"\\'")}')" style="color:#FFD54F;border-color:#FFD54F">+Avulsa</button>
           <button class="btn-sm btn-sm-alt" onclick="openAviso('${t.id}','${(t.name||'').replace(/'/g,"\\'")}')" style="color:#80DEEA;border-color:#80DEEA">📢 Aviso</button>
           <button class="btn-sm" onclick="openHistory('${t.id}')">Histórico</button>
           ${(()=>{ if (!currentOwnerData?.creditAnalysisEnabled) return '';
@@ -3470,8 +3470,10 @@
 
   // ── Cobrança avulsa ───────────────────────────────────────────
   let _avulsaTenantId = null;
-  window.openAvulsa = function(tenantId, tenantName) {
-    _avulsaTenantId = tenantId;
+  let _avulsaTenantEmail = '';
+  window.openAvulsa = function(tenantId, tenantName, tenantEmail) {
+    _avulsaTenantId    = tenantId;
+    _avulsaTenantEmail = tenantEmail || '';
     $('avulsa-tenant-name').textContent = tenantName || tenantId;
     $('av-desc').value  = '';
     $('av-value').value = '';
@@ -3493,9 +3495,16 @@
       const contract = contracts.find(c => c.tenantId === _avulsaTenantId);
       const dueDate  = new Date(due + 'T12:00:00');
       const chargeRef = doc(collection(db, 'charges'));
+      // Garante tenantId como UID real: tenta buscar pelo email se disponível
+      let resolvedTenantId = _avulsaTenantId;
+      if (_avulsaTenantEmail) {
+        const tUser = tenants.find(u => u.email === _avulsaTenantEmail);
+        if (tUser) resolvedTenantId = tUser.id;
+      }
       await setDoc(chargeRef, {
         id:          chargeRef.id,
-        tenantId:    _avulsaTenantId,
+        tenantId:    resolvedTenantId,
+        tenantEmail: _avulsaTenantEmail,
         contractId:  contract?.id || '',
         ownerId:     currentOwnerId,
         description: desc,
