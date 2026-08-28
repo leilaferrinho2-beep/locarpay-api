@@ -773,8 +773,8 @@ async function createAssinafyContract(db, contractId, data) {
     method:  'virtual',
     message: `Por favor, assine o contrato de locação do imóvel ${data.propertyAddress || ''}.`.trim(),
     signers: [
-      { id: s1Id, step: 1, action: 'sign', verification_method: 'Facial', notification_methods: ['Email'] },
-      { id: s2Id, step: 2, action: 'sign', verification_method: 'Facial', notification_methods: ['Email'] }
+      { id: s1Id, step: 1, action: 'sign', verification_method: 'Facial', document_type: ['CNH', 'CIN', 'RG'], notification_methods: ['Email'] },
+      { id: s2Id, step: 2, action: 'sign', verification_method: 'Facial', document_type: ['CNH', 'CIN', 'RG'], notification_methods: ['Email'] }
     ]
   }, apiKey);
   const assignmentId = assignRes?.data?.id || assignRes?.id;
