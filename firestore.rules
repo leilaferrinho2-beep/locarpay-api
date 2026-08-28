@@ -70,7 +70,14 @@ service cloud.firestore {
          exists(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))) &&
          isOwnerOf(get(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))).data.get('ownerId','')))
       );
-      allow delete: if isAuth() && (isMaster() || isOwnerOf(resource.data.get('ownerId', '')));
+      allow delete: if isAuth() && (
+        isMaster() ||
+        isOwnerOf(resource.data.get('ownerId', '')) ||
+        (resource.data.get('ownerId', '') == '' &&
+         resource.data.get('tenantId', '') != '' &&
+         exists(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))) &&
+         isOwnerOf(get(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))).data.get('ownerId','')))
+      );
     }
 
     // ── cardVerifications ────────────────────────────────────────────────────
@@ -150,7 +157,14 @@ service cloud.firestore {
       match /messages/{msgId} {
         allow read:   if isAuth();
         allow create: if isAuth();
-        allow update, delete: if false;
+        allow update: if isAuth() && (
+          isMaster() ||
+          isOwnerOf(resource.data.get('chamadoOwnerId', get(/databases/$(database)/documents/maintenance/$(chamadoId)).data.get('ownerId',''))) ||
+          // Tenant pode marcar apenas readByTenant=true em mensagens do owner
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readByTenant','readAt']) &&
+           request.resource.data.readByTenant == true)
+        );
+        allow delete: if false;
       }
     }
 
