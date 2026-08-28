@@ -4186,6 +4186,16 @@
               const onChamadosTab = $('panel-chamados')?.style.display !== 'none';
               if (!onChamadosTab) {
                 showChatMsgToast(id, c);
+                // Notificação nativa do browser (funciona em background no celular)
+                if ('Notification' in window && Notification.permission === 'granted') {
+                  const n = new Notification('💬 ' + (c.tenantName || 'Inquilino'), {
+                    body: c.lastMessage || 'Nova mensagem',
+                    icon: '/logo.png',
+                    tag: 'chamado-' + id,
+                    renotify: true
+                  });
+                  n.onclick = () => { window.focus(); n.close(); };
+                }
               }
             }
           }
@@ -5081,6 +5091,10 @@
     startLeadsBadge();
     if (currentOwnerId) startChamadosListener(currentOwnerId);
     startBrokerChatUnreadListener();
+    // Pede permissão para notificações nativas do browser
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
 
     showSection('dashboard-section');
     renderPlanBanner();
