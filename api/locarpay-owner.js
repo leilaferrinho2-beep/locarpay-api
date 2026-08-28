@@ -779,6 +779,15 @@ async function handleSendNotification(db, body) {
   if (recipientType === 'tenant' && tenantId) {
     const snap = await db.collection('users').doc(tenantId).get();
     token = snap.data()?.fcmToken || null;
+    // Fallback: busca por email quando o doc não tem token (usuário duplicado)
+    if (!token) {
+      const email = snap.data()?.email || body.tenantEmail || null;
+      if (email) {
+        const byEmail = await db.collection('users')
+          .where('email', '==', email).where('fcmToken', '!=', '').limit(1).get();
+        token = byEmail.docs[0]?.data()?.fcmToken || null;
+      }
+    }
   } else if (recipientType === 'owner' && ownerId) {
     const ownerSnap = await db.collection('owners').doc(ownerId).get();
     token = ownerSnap.data()?.fcmToken || null;
