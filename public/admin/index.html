@@ -3066,7 +3066,7 @@
           <button class="btn-sm" onclick="openEditTenant('${t.id}')">Editar</button>
 
           <button class="btn-sm btn-sm-alt" onclick="openAvulsa('${t.id}','${(t.name||'').replace(/'/g,"\\'")}','${(t.email||'').replace(/'/g,"\\'")}')" style="color:#FFD54F;border-color:#FFD54F">+Avulsa</button>
-          <button class="btn-sm btn-sm-alt" onclick="openAviso('${t.id}','${(t.name||'').replace(/'/g,"\\'")}')" style="color:#80DEEA;border-color:#80DEEA">📢 Aviso</button>
+          <button class="btn-sm btn-sm-alt" onclick="openTenantChat('${t.id}','${(t.name||'').replace(/'/g,"\\'")}','${(contracts.find(x=>x.tenantId===t.id)?.id||'').replace(/'/g,"\\'")}');" style="color:#80DEEA;border-color:#80DEEA">💬 Avisos</button>
           <button class="btn-sm" onclick="openHistory('${t.id}')">Histórico</button>
           ${(()=>{ if (!currentOwnerData?.creditAnalysisEnabled) return '';
             const ca = t.creditAnalysis; const s = ca?.status||'pending';
@@ -4647,6 +4647,129 @@
     _bcdBrokerId = null; _bcdChatId = null;
   };
 
+  // ── Chat de Avisos com Inquilinos ─────────────────────────────────────────
+  let _tcdTenantId   = null;
+  let _tcdTenantName = null;
+  let _tcdContractId = null;
+  let _tcdListener   = null;
+
+  window.openTenantChat = function(tenantId, tenantName, contractId) {
+    _tcdTenantId   = tenantId;
+    _tcdTenantName = tenantName;
+    _tcdContractId = contractId || null;
+    document.getElementById('tcd-tenant-name').textContent = tenantName;
+    document.getElementById('tenant-chat-drawer').classList.add('open');
+    document.getElementById('tenant-chat-overlay').classList.add('open');
+    document.getElementById('tcd-msgs').innerHTML =
+      '<div style="text-align:center;color:#444;font-size:13px;padding:20px 0">Carregando…</div>';
+    if (_tcdListener) { _tcdListener(); _tcdListener = null; }
+    const db = getFirestore();
+    let q;
+    if (contractId) {
+      q = query(collection(db, 'messages'), where('contractId', '==', contractId), orderBy('createdAt', 'asc'));
+    } else {
+      q = query(collection(db, 'messages'), where('authorId', 'in', [currentOwnerId, tenantId]), orderBy('createdAt', 'asc'));
+    }
+    _tcdListener = onSnapshot(q, snap => {
+      _tcdRenderMsgs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    setTimeout(() => document.getElementById('tcd-input')?.focus(), 80);
+  };
+
+  window.closeTenantChat = function() {
+    document.getElementById('tenant-chat-drawer').classList.remove('open');
+    document.getElementById('tenant-chat-overlay').classList.remove('open');
+    if (_tcdListener) { _tcdListener(); _tcdListener = null; }
+    _tcdTenantId = _tcdTenantName = _tcdContractId = null;
+  };
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      const drawer = document.getElementById('tenant-chat-drawer');
+      if (drawer && drawer.classList.contains('open')) window.closeTenantChat();
+    }
+  });
+
+  function _tcdRenderMsgs(msgs) {
+    const el = document.getElementById('tcd-msgs');
+    if (!el) return;
+    if (!msgs.length) {
+      el.innerHTML = '<div style="text-align:center;color:#444;font-size:13px;padding:32px 0"><div style="font-size:36px;margin-bottom:8px">📢</div>Nenhum aviso ainda</div>';
+      return;
+    }
+    el.innerHTML = msgs.map(m => {
+      const isOwner = m.authorRole === 'owner';
+      const dt = m.createdAt?.toDate ? m.createdAt.toDate() : new Date((m.createdAt?.seconds || 0) * 1000);
+      const time = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) + ' ' +
+                   dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const bg  = isOwner ? '#1565c0' : '#252840';
+      const rad = isOwner ? '14px 14px 4px 14px' : '14px 14px 14px 4px';
+      const align = isOwner ? 'flex-end' : 'flex-start';
+
+      // Ticks — visíveis apenas para mensagens do owner
+      let tickHtml = '';
+      if (isOwner) {
+        const readByTenant  = m.readByTenant === true;
+        const delivered     = !!m.deliveredAt;
+        if (readByTenant) {
+          tickHtml = '<span style="font-size:11px;color:#69D369;margin-left:4px">✓✓</span>';
+        } else if (delivered) {
+          tickHtml = '<span style="font-size:11px;color:#888;margin-left:4px">✓✓</span>';
+        } else {
+          tickHtml = '<span style="font-size:11px;color:#888;margin-left:4px">✓</span>';
+        }
+      }
+
+      return `<div style="display:flex;flex-direction:column;align-items:${align}">
+        <div style="background:${bg};color:#fff;border-radius:${rad};padding:10px 14px;max-width:85%">
+          <span style="font-size:13px;line-height:1.45;word-break:break-word">${_esc(m.text)}</span>
+        </div>
+        <div style="display:flex;align-items:center;margin-top:3px">
+          <span style="font-size:10px;color:#555">${_esc(m.authorName || '')} · ${time}</span>
+          ${tickHtml}
+        </div>
+      </div>`;
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  window.tcdSendMsg = async function() {
+    if (!_tcdContractId && !_tcdTenantId) return;
+    const input  = document.getElementById('tcd-input');
+    const sendBtn = document.getElementById('tcd-send');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = ''; input.style.height = 'auto';
+    sendBtn.disabled = true; sendBtn.textContent = '…';
+    const db = getFirestore();
+    const ownerName = currentOwnerData?.companyName || currentOwnerData?.name || 'Imobiliária';
+    try {
+      await addDoc(collection(db, 'messages'), {
+        authorId:   currentOwnerId,
+        authorName: ownerName,
+        authorRole: 'owner',
+        contractId: _tcdContractId || null,
+        text,
+        createdAt:    serverTimestamp(),
+        readByTenant: false
+        // deliveredAt ausente = 1 tick cinza até o inquilino abrir o app
+      });
+      // Push FCM para o inquilino
+      fetch('/api/locarpay-owner', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step: 'send-notification', recipientType: 'tenant',
+          tenantId: _tcdTenantId,
+          title: `📢 ${ownerName}`,
+          body: text.slice(0, 100),
+          type: 'aviso'
+        })
+      }).catch(() => {});
+    } catch (e) { alert('Falha ao enviar: ' + e.message); }
+    sendBtn.disabled = false; sendBtn.textContent = 'Enviar';
+    input.focus();
+  };
+
   function _bcdRenderMsgs(msgs) {
     const el = document.getElementById('bcd-msgs');
     if (!el) return;
@@ -5213,26 +5336,26 @@
   .btn-sm-alt:hover { border-color: var(--accent2); color: var(--accent2); }
 
   /* ── Broker Chat Drawer ──────────────────── */
-  #broker-chat-drawer { position: fixed; top: 0; right: 0; width: 380px; height: 100vh; background: #12152a; border-left: 1px solid #2a2d3e; display: flex; flex-direction: column; z-index: 500; transform: translateX(100%); transition: transform .25s cubic-bezier(.4,0,.2,1); box-shadow: -8px 0 40px rgba(0,0,0,.5); }
-  #broker-chat-drawer.open { transform: translateX(0); }
-  #broker-chat-drawer .bcd-header { padding: 16px 18px; background: #1a1d2e; border-bottom: 1px solid #1e2138; flex-shrink: 0; display: flex; align-items: center; gap: 12px; }
-  #broker-chat-drawer .bcd-avatar { width: 38px; height: 38px; border-radius: 50%; background: #1565c033; border: 1px solid #1565c055; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
-  #broker-chat-drawer .bcd-info { flex: 1; min-width: 0; }
-  #broker-chat-drawer .bcd-name { font-size: 14px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #broker-chat-drawer .bcd-sub { font-size: 11px; color: #555; margin-top: 1px; }
-  #broker-chat-drawer .bcd-close { background: none; border: none; color: #555; cursor: pointer; font-size: 20px; padding: 4px; line-height: 1; transition: color .15s; flex-shrink: 0; }
-  #broker-chat-drawer .bcd-close:hover { color: #aaa; }
-  #broker-chat-drawer .bcd-msgs { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-  #broker-chat-drawer .bcd-msgs::-webkit-scrollbar { width: 4px; }
-  #broker-chat-drawer .bcd-msgs::-webkit-scrollbar-thumb { background: #2a2d3e; border-radius: 2px; }
-  #broker-chat-drawer .bcd-input-row { padding: 10px 12px; background: #1a1d2e; border-top: 1px solid #1e2138; flex-shrink: 0; display: flex; gap: 8px; align-items: flex-end; }
-  #bcd-input { flex: 1; background: #0d1017; border: 1px solid #2a2d3e; color: #e0e0e0; border-radius: 10px; padding: 9px 12px; font-size: 13px; outline: none; resize: none; line-height: 1.5; max-height: 80px; font-family: inherit; transition: border-color .15s; }
-  #bcd-input:focus { border-color: #1565c0; }
-  #bcd-send { background: #1565c0; color: #fff; border: none; border-radius: 10px; padding: 0 16px; height: 38px; font-size: 13px; font-weight: 600; cursor: pointer; flex-shrink: 0; transition: background .15s; }
-  #bcd-send:hover { background: #1976d2; }
-  #bcd-send:disabled { background: #2a2d3e; color: #555; cursor: not-allowed; }
-  #broker-chat-overlay { position: fixed; inset: 0; z-index: 499; display: none; }
-  #broker-chat-overlay.open { display: block; }
+  #broker-chat-drawer, #tenant-chat-drawer { position: fixed; top: 0; right: 0; width: 380px; height: 100vh; background: #12152a; border-left: 1px solid #2a2d3e; display: flex; flex-direction: column; z-index: 500; transform: translateX(100%); transition: transform .25s cubic-bezier(.4,0,.2,1); box-shadow: -8px 0 40px rgba(0,0,0,.5); }
+  #broker-chat-drawer.open, #tenant-chat-drawer.open { transform: translateX(0); }
+  #broker-chat-drawer .bcd-header, #tenant-chat-drawer .bcd-header { padding: 16px 18px; background: #1a1d2e; border-bottom: 1px solid #1e2138; flex-shrink: 0; display: flex; align-items: center; gap: 12px; }
+  #broker-chat-drawer .bcd-avatar, #tenant-chat-drawer .bcd-avatar { width: 38px; height: 38px; border-radius: 50%; background: #1565c033; border: 1px solid #1565c055; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+  #broker-chat-drawer .bcd-info, #tenant-chat-drawer .bcd-info { flex: 1; min-width: 0; }
+  #broker-chat-drawer .bcd-name, #tenant-chat-drawer .bcd-name { font-size: 14px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #broker-chat-drawer .bcd-sub, #tenant-chat-drawer .bcd-sub { font-size: 11px; color: #555; margin-top: 1px; }
+  #broker-chat-drawer .bcd-close, #tenant-chat-drawer .bcd-close { background: none; border: none; color: #555; cursor: pointer; font-size: 20px; padding: 4px; line-height: 1; transition: color .15s; flex-shrink: 0; }
+  #broker-chat-drawer .bcd-close:hover, #tenant-chat-drawer .bcd-close:hover { color: #aaa; }
+  #broker-chat-drawer .bcd-msgs, #tenant-chat-drawer .bcd-msgs { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  #broker-chat-drawer .bcd-msgs::-webkit-scrollbar, #tenant-chat-drawer .bcd-msgs::-webkit-scrollbar { width: 4px; }
+  #broker-chat-drawer .bcd-msgs::-webkit-scrollbar-thumb, #tenant-chat-drawer .bcd-msgs::-webkit-scrollbar-thumb { background: #2a2d3e; border-radius: 2px; }
+  #broker-chat-drawer .bcd-input-row, #tenant-chat-drawer .bcd-input-row { padding: 10px 12px; background: #1a1d2e; border-top: 1px solid #1e2138; flex-shrink: 0; display: flex; gap: 8px; align-items: flex-end; }
+  #bcd-input, #tcd-input { flex: 1; background: #0d1017; border: 1px solid #2a2d3e; color: #e0e0e0; border-radius: 10px; padding: 9px 12px; font-size: 13px; outline: none; resize: none; line-height: 1.5; max-height: 80px; font-family: inherit; transition: border-color .15s; }
+  #bcd-input:focus, #tcd-input:focus { border-color: #1565c0; }
+  #bcd-send, #tcd-send { background: #1565c0; color: #fff; border: none; border-radius: 10px; padding: 0 16px; height: 38px; font-size: 13px; font-weight: 600; cursor: pointer; flex-shrink: 0; transition: background .15s; }
+  #bcd-send:hover, #tcd-send:hover { background: #1976d2; }
+  #bcd-send:disabled, #tcd-send:disabled { background: #2a2d3e; color: #555; cursor: not-allowed; }
+  #broker-chat-overlay, #tenant-chat-overlay { position: fixed; inset: 0; z-index: 499; display: none; }
+  #broker-chat-overlay.open, #tenant-chat-overlay.open { display: block; }
 
   /* ── Chamados redesign ───────────────────── */
   .ch-filter-btn { background: transparent; border: 1px solid #2a2d3e; color: #666; border-radius: 20px; padding: 4px 11px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all .15s; white-space: nowrap; }
@@ -6680,6 +6803,28 @@
       <button class="btn-outline" type="button" onclick="document.getElementById('modal-edit-avulsa').style.display='none'">Cancelar</button>
       <button class="btn" id="ea-save" onclick="saveEditAvulsa()">Salvar</button>
     </div>
+  </div>
+</div>
+
+<!-- Tenant Chat Drawer (Mural de Avisos) -->
+<div id="tenant-chat-overlay" onclick="closeTenantChat()"></div>
+<div id="tenant-chat-drawer">
+  <div class="bcd-header">
+    <div class="bcd-avatar">📢</div>
+    <div class="bcd-info">
+      <div class="bcd-name" id="tcd-tenant-name">Inquilino</div>
+      <div class="bcd-sub">Mural de Avisos</div>
+    </div>
+    <button class="bcd-close" onclick="closeTenantChat()">×</button>
+  </div>
+  <div class="bcd-msgs" id="tcd-msgs">
+    <div style="text-align:center;color:#444;font-size:13px;padding:32px 0">Carregando…</div>
+  </div>
+  <div class="bcd-input-row">
+    <textarea id="tcd-input" rows="1" placeholder="Escreva um aviso… (Enter envia)"
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();tcdSendMsg()}"></textarea>
+    <button id="tcd-send" onclick="tcdSendMsg()">Enviar</button>
   </div>
 </div>
 
