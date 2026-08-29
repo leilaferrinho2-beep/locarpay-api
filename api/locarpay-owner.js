@@ -771,7 +771,7 @@ async function handleDeleteTenant(db, body, req) {
 // Envia push FCM para um inquilino (recipientType=tenant) ou para o owner (recipientType=owner)
 // body: { recipientType, tenantId?, ownerId?, chamadoId?, title, body, type }
 async function handleSendNotification(db, body) {
-  const { recipientType, tenantId, ownerId, brokerId, chamadoId, chatId, title, body: msgBody, type } = body;
+  const { recipientType, tenantId, ownerId, brokerId, chamadoId, chatId, contractId, title, body: msgBody, type } = body;
   if (!title || !msgBody) throw Object.assign(new Error('title e body obrigatórios'), { status: 400 });
 
   let token = null;
@@ -810,9 +810,10 @@ async function handleSendNotification(db, body) {
   // Envia notification + data: notification garante exibição em v5.33 (app fechado),
   // data.title/body garante leitura correta em v5.34+ (onMessageReceived prefere data).
   const data = { type: type || 'aviso', title: String(title), body: String(msgBody) };
-  if (chamadoId) data.chamadoId = chamadoId;
-  if (chatId)    data.chatId    = chatId;
-  if (brokerId)  data.brokerId  = brokerId;
+  if (chamadoId)  data.chamadoId  = chamadoId;
+  if (chatId)     data.chatId     = chatId;
+  if (brokerId)   data.brokerId   = brokerId;
+  if (contractId) data.contractId = contractId;
 
   await getMessaging().send({
     token,

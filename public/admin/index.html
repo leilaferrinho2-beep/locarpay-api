@@ -4710,7 +4710,7 @@
       let tickHtml = '';
       if (isOwner) {
         const readByTenant  = m.readByTenant === true;
-        const delivered     = !!m.deliveredAt;
+        const delivered     = m.delivered === true;
         if (readByTenant) {
           tickHtml = '<span style="font-size:11px;color:#69D369;margin-left:4px">✓✓</span>';
         } else if (delivered) {
@@ -4751,8 +4751,8 @@
         contractId: _tcdContractId || null,
         text,
         createdAt:    serverTimestamp(),
-        readByTenant: false
-        // deliveredAt ausente = 1 tick cinza até o inquilino abrir o app
+        readByTenant: false,
+        delivered:    false
       });
       // Push FCM para o inquilino
       fetch('/api/locarpay-owner', {
@@ -4762,7 +4762,8 @@
           tenantId: _tcdTenantId,
           title: `📢 ${ownerName}`,
           body: text.slice(0, 100),
-          type: 'aviso'
+          type: 'aviso',
+          contractId: _tcdContractId || null
         })
       }).catch(() => {});
     } catch (e) { alert('Falha ao enviar: ' + e.message); }
