@@ -5,7 +5,7 @@ admin.initializeApp({ credential: admin.credential.cert(sa) });
 const db = admin.firestore();
 const versionCode = 318;
 const versionName = '5.92';
-const url = 'https://www.ilocarpay.com.br/download/ilocarpay-v5.92.apk';
+const url = 'https://www.ilocarpay.com.br/download/ilocarpay.apk';
 (async () => {
   await db.collection('config').doc('app').set({ versionCode, versionName, url });
   const payload = JSON.stringify({ versionCode, versionName, url }, null, 2);
