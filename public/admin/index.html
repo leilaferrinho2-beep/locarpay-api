@@ -4710,8 +4710,11 @@
       let tickHtml = '';
       if (isOwner) {
         const readByTenant = m.readByTenant === true;
+        const delivered    = m.delivered === true;
         if (readByTenant) {
           tickHtml = '<span style="font-size:11px;color:#69D369;margin-left:4px">✓✓</span>';
+        } else if (delivered) {
+          tickHtml = '<span style="font-size:11px;color:#888;margin-left:4px">✓✓</span>';
         } else {
           tickHtml = '<span style="font-size:11px;color:#888;margin-left:4px">✓</span>';
         }
@@ -4748,7 +4751,8 @@
         contractId: _tcdContractId || null,
         text,
         createdAt:    serverTimestamp(),
-        readByTenant: false
+        readByTenant: false,
+        delivered:    false
       });
       // Push FCM para o inquilino
       fetch('/api/locarpay-owner', {
