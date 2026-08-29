@@ -2582,6 +2582,61 @@ async function handleMigrateTenantUid(db, body) {
   return { ok: true, migrated: true, oldId, chargesUpdated: chargesSnap.size, contractsUpdated: contractsSnap.size };
 }
 
+// Atualiza valor da cobrança no Firestore E no Asaas, regenerando o QR Code PIX
+async function handleUpdateChargeValue(db, body) {
+  const { chargeId, newBaseRent, newExtras, ownerId } = body;
+  if (!chargeId || newBaseRent == null) throw new Error('chargeId e newBaseRent são obrigatórios');
+
+  const chargeRef = db.collection('charges').doc(chargeId);
+  const doc = await chargeRef.get();
+  if (!doc.exists) throw new Error('Cobrança não encontrada');
+  const charge = doc.data();
+
+  const extrasArr = newExtras ?? charge.extras ?? [];
+  const extrasTotal = extrasArr.reduce((s, e) => s + ((e.value ?? e.valor) || 0), 0);
+  const totalAmount = Math.round((newBaseRent + extrasTotal) * 100) / 100;
+
+  // Atualiza Firestore primeiro
+  const updateData = { baseRent: newBaseRent, totalAmount };
+  if (newExtras != null) updateData.extras = newExtras;
+  await chargeRef.update(updateData);
+
+  const asaasId = charge.asaasChargeId;
+  if (!asaasId) {
+    // Sem charge no Asaas ainda — só Firestore atualizado
+    return { ok: true, totalAmount, qrRegenerated: false, reason: 'sem asaasChargeId' };
+  }
+
+  // Busca API key do owner
+  const resolvedOwnerId = ownerId || charge.ownerId || await getDefaultOwnerId(db);
+  const apiKey = await getAsaasKey(db, resolvedOwnerId);
+
+  // Verifica status atual no Asaas — não atualiza se já foi pago
+  let currentStatus;
+  try {
+    const current = await asaasReq('GET', `/payments/${asaasId}`, null, apiKey);
+    currentStatus = current.status;
+  } catch (_) { currentStatus = 'PENDING'; }
+
+  if (currentStatus === 'RECEIVED' || currentStatus === 'CONFIRMED') {
+    return { ok: true, totalAmount, qrRegenerated: false, reason: 'cobrança já paga no Asaas' };
+  }
+
+  // Atualiza valor no Asaas via PUT
+  await asaasReq('PUT', `/payments/${asaasId}`, { value: totalAmount }, apiKey);
+
+  // Regenera QR Code PIX
+  const pix = await asaasReq('GET', `/payments/${asaasId}/pixQrCode`, null, apiKey);
+
+  await chargeRef.update({
+    pixQrCode:        pix.encodedImage  || '',
+    pixCopyPaste:     pix.payload       || '',
+    pixGeneratedDate: new Date().toISOString().slice(0, 10)
+  });
+
+  return { ok: true, totalAmount, qrRegenerated: true, pixQrCode: pix.encodedImage, pixCopyPaste: pix.payload };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -2633,7 +2688,8 @@ export default async function handler(req, res) {
     if (step === 'cron-daily')           return res.status(200).json(await handleCronDaily(db, req));
     if (step === 'revoke-tenant')        return res.status(200).json(await handleRevokeTenant(db, req.body, req));
     if (step === 'create-extra-pix')     return res.status(200).json(await handleCreateExtraPix(db, req.body));
-    if (step === 'migrate-tenant-uid')   return res.status(200).json(await handleMigrateTenantUid(db, req.body));
+    if (step === 'migrate-tenant-uid')      return res.status(200).json(await handleMigrateTenantUid(db, req.body));
+    if (step === 'update-charge-value')     return res.status(200).json(await handleUpdateChargeValue(db, req.body));
 
     // Webhook Asaas sem step (evento direto da subconta)
     if (!step && req.body?.event && req.body?.payment) {

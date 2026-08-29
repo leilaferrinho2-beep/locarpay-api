@@ -3,8 +3,8 @@ const { readFileSync, writeFileSync } = require('fs');
 const sa = JSON.parse(readFileSync('C:/Users/denis/Downloads/locarpayapp-firebase-adminsdk-fbsvc-e92d24aa50.json', 'utf8'));
 admin.initializeApp({ credential: admin.credential.cert(sa) });
 const db = admin.firestore();
-const versionCode = 318;
-const versionName = '5.92';
+const versionCode = 319;
+const versionName = '5.93';
 const url = 'https://www.ilocarpay.com.br/download/ilocarpay.apk';
 (async () => {
   await db.collection('config').doc('app').set({ versionCode, versionName, url });
