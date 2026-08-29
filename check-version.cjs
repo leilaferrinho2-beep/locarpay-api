@@ -1,10 +1,9 @@
 const admin = require('firebase-admin');
-const { readFileSync } = require('fs');
-const sa = JSON.parse(readFileSync('C:/Users/denis/Downloads/locarpayapp-firebase-adminsdk-fbsvc-e92d24aa50.json', 'utf8'));
+const sa = JSON.parse(require('fs').readFileSync('C:/Users/denis/Downloads/locarpayapp-firebase-adminsdk-fbsvc-e92d24aa50.json', 'utf8'));
 admin.initializeApp({ credential: admin.credential.cert(sa) });
 const db = admin.firestore();
 (async () => {
-  const snap = await db.collection('config').doc('app').get();
-  console.log('config/app atual:', JSON.stringify(snap.data(), null, 2));
+  const doc = await db.collection('config').doc('app').get();
+  console.log('config/app:', JSON.stringify(doc.data(), null, 2));
   process.exit(0);
 })();
