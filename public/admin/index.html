@@ -4758,7 +4758,7 @@
     const db = getFirestore();
     const ownerName = currentOwnerData?.companyName || currentOwnerData?.name || 'Imobiliária';
     try {
-      await addDoc(collection(db, 'messages'), {
+      const msgRef = await addDoc(collection(db, 'messages'), {
         authorId:   currentOwnerId,
         authorName: ownerName,
         authorRole: 'owner',
@@ -4768,7 +4768,7 @@
         readByTenant: false,
         delivered:    false
       });
-      // Push FCM para o inquilino
+      // Push FCM — marca delivered:true se enviado com sucesso
       fetch('/api/locarpay-owner', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -4779,7 +4779,7 @@
           type: 'aviso',
           contractId: _tcdContractId || null
         })
-      }).catch(() => {});
+      }).then(r => { if (r.ok) updateDoc(msgRef, { delivered: true }); }).catch(() => {});
     } catch (e) { alert('Falha ao enviar: ' + e.message); }
     sendBtn.disabled = false; sendBtn.textContent = 'Enviar';
     input.focus();
