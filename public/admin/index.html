@@ -3357,7 +3357,7 @@
                   : '—'}
               </td>
               <td style="padding:10px 6px;text-align:center;white-space:nowrap">
-                ${c.description ? `<button class="btn-sm" style="color:#64b5f6;border-color:#1a2a4a;background:#0a1020;margin-right:4px" onclick="editAvulsa('${c.id}','${(c.description||'').replace(/'/g,"\\'")}',${c.totalAmount},'${c.dueDate?.seconds||0}')">✏ Editar</button>` : ''}
+                <button class="btn-sm" style="color:#64b5f6;border-color:#1a2a4a;background:#0a1020;margin-right:4px" onclick="editAvulsa('${c.id}','${(c.description||c.monthRef||'Aluguel').replace(/'/g,"\\'")}',${c.totalAmount||c.baseRent||0},'${c.dueDate?.seconds||0}')">✏ Editar</button>
                 <button class="btn-sm" style="color:#ef5350;border-color:#4a1a1a;background:#1a0a0a" onclick="deleteCharge('${c.id}')">🗑 Excluir</button>
               </td>
             </tr>`).join('')}
@@ -6796,7 +6796,7 @@
   <div class="modal-box" style="max-width:420px;position:relative">
     <button type="button" onclick="document.getElementById('modal-edit-avulsa').style.display='none'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#888;font-size:20px;cursor:pointer;line-height:1;padding:4px 8px" title="Fechar">✕</button>
     <h3>Editar Cobrança</h3>
-    <p style="font-size:12px;color:#666;margin-bottom:16px">Altere os dados da cobrança avulsa.</p>
+    <p style="font-size:12px;color:#666;margin-bottom:16px">Altere os dados da cobrança. A mudança reflete imediatamente no app do inquilino.</p>
     <div style="margin-bottom:14px">
       <label>Descrição</label>
       <input id="ea-desc" type="text" placeholder="Ex: Multa, Reparo, Taxa…">
