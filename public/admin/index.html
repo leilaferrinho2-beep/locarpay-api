@@ -2506,7 +2506,7 @@
       const dueDate = new Date(now.getFullYear(), now.getMonth(), dueDay);
       if (dueDate < now) dueDate.setMonth(dueDate.getMonth() + 1);
 
-      const propAddress = [street, num, compl, bairro, city, uf].filter(Boolean).join(', ');
+      const propAddress = [street, num, compl, bairro, city, uf].filter(Boolean).join(', ') + (cep ? ` - CEP ${fmtCep(cep)}` : '');
       const contractRef = doc(collection(db, 'contracts'));
       await setDoc(contractRef, {
         id:                  contractRef.id,
@@ -2523,6 +2523,12 @@
         propertyDescription: prop,
         propertyAddress:     propAddress,
         address:             propAddress,
+        propertyCep:         cep,
+        propertyLogradouro:  street,
+        propertyNumero:      num,
+        propertyBairro:      bairro,
+        propertyCidade:      city,
+        propertyEstado:      uf,
         propertyPurpose:     purpose || 'Residencial',
         baseRent:            rent,
         condoValue:          isNaN(condoVal) ? 0 : condoVal,
@@ -2848,16 +2854,25 @@
           const codeConflict = newCode && contracts.some(x => x.ownerId === currentOwnerId && x.id !== c.id && (x.propertyCode || '').toUpperCase() === newCode);
           if (codeConflict) { showToast(`Código "${newCode}" já está em uso`, 'error'); return; }
           const rentChanged = rent !== c.baseRent;
+          const _eCep  = $('et-cep').value.replace(/\D/g,'');
+          const _eRua  = $('et-logradouro').value.trim();
+          const _eNum  = $('et-numero').value.trim();
+          const _eBai  = $('et-bairro').value.trim();
+          const _eCid  = $('et-cidade').value.trim();
+          const _eUf   = $('et-estado').value.trim().toUpperCase();
+          const _eAddr = [_eRua, _eNum, _eBai, _eCid, _eUf].filter(Boolean).join(', ') + (_eCep ? ` - CEP ${fmtCep(_eCep)}` : '');
           const contractEdits = {
             baseRent: rent, dueDay: due,
             propertyDescription: $('et-property').value.trim(),
             propertyCode: newCode,
-            propertyCep:        $('et-cep').value.replace(/\D/g,''),
-            propertyLogradouro: $('et-logradouro').value.trim(),
-            propertyNumero:     $('et-numero').value.trim(),
-            propertyBairro:     $('et-bairro').value.trim(),
-            propertyCidade:     $('et-cidade').value.trim(),
-            propertyEstado:     $('et-estado').value.trim().toUpperCase(),
+            propertyCep:        _eCep,
+            propertyLogradouro: _eRua,
+            propertyNumero:     _eNum,
+            propertyBairro:     _eBai,
+            propertyCidade:     _eCid,
+            propertyEstado:     _eUf,
+            propertyAddress:    _eAddr,
+            address:            _eAddr,
           };
           const startVal = $('et-contract-start').value;
           const endVal   = $('et-contract-end').value;
