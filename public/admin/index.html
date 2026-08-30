@@ -3402,10 +3402,14 @@
         dueDate:     new Date(due + 'T12:00:00')
       });
       $('modal-edit-avulsa').style.display = 'none';
-      // Atualiza linha na tabela
+      // Atualiza linha na tabela imediatamente (sem reload)
       const row = document.getElementById('charge-row-' + _editChargeId);
-      if (row) { row.cells[0].textContent = desc.substring(0,20); row.cells[2].textContent = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value); }
-      showToast('Cobrança atualizada.', 'success');
+      if (row) {
+        row.cells[0].textContent = desc.substring(0,20);
+        row.cells[1].textContent = new Date(due + 'T12:00:00').toLocaleDateString('pt-BR');
+        row.cells[2].textContent = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value);
+      }
+      showToast('Cobrança atualizada. O app do inquilino reflete a mudança em tempo real.', 'success');
     } catch(e) { $('ea-error').textContent = 'Erro: ' + e.message; }
     btn.disabled = false; btn.textContent = 'Salvar';
   };
