@@ -168,6 +168,20 @@ service cloud.firestore {
       }
     }
 
+    // ── messages (mural de avisos owner→inquilino) ───────────────────────────
+    match /messages/{msgId} {
+      // Inquilino lê as mensagens do seu contrato; owner escreve
+      allow read: if isAuth();
+      allow create: if isAuth();
+      // Inquilino pode marcar readByTenant=true nas mensagens do owner
+      allow update: if isAuth() && (
+        isMaster() ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readByTenant','readAt']) &&
+         request.resource.data.readByTenant == true)
+      );
+      allow delete: if isMaster();
+    }
+
     // ── _rateLimits ───────────────────────────────────────────────────────────
     match /_rateLimits/{docId} {
       allow read, write: if false;
