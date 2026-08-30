@@ -3390,11 +3390,21 @@
     if (!value || value <= 0) { $('ea-error').textContent = 'Informe um valor válido.'; return; }
     const btn = $('ea-save'); btn.disabled = true; btn.textContent = 'Salvando...';
     try {
+      const dueDate = new Date(due + 'T12:00:00');
+      const juros = await calcJurosRetroativo(value, dueDate);
       await updateDoc(doc(db, 'charges', _editChargeId), {
-        description: desc,
-        baseRent:    value,
-        totalAmount: value,
-        dueDate:     new Date(due + 'T12:00:00')
+        description:    desc,
+        baseRent:       value,
+        totalAmount:    juros.totalAmount,
+        multaAplicada:  juros.multaAplicada,
+        jurosAplicado:  juros.jurosAplicado,
+        diasAtraso:     juros.diasAtraso,
+        status:         juros.status,
+        dueDate:        dueDate,
+        asaasChargeId:  null,
+        pixCopyPaste:   null,
+        pixQrCode:      null,
+        pixGeneratedDate: null
       });
       $('modal-edit-avulsa').style.display = 'none';
       // Atualiza linha na tabela imediatamente (sem reload)
@@ -3402,9 +3412,12 @@
       if (row) {
         row.cells[0].textContent = desc.substring(0,20);
         row.cells[1].textContent = new Date(due + 'T12:00:00').toLocaleDateString('pt-BR');
-        row.cells[2].textContent = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value);
+        row.cells[2].textContent = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(juros.totalAmount);
       }
-      showToast('Cobrança atualizada. O app do inquilino reflete a mudança em tempo real.', 'success');
+      const jurosMsg = juros.diasAtraso > 0
+        ? ` (+multa/juros por ${juros.diasAtraso} dia(s) de atraso)`
+        : '';
+      showToast('Cobrança atualizada' + jurosMsg + '. O app do inquilino reflete a mudança em tempo real.', 'success');
     } catch(e) { $('ea-error').textContent = 'Erro: ' + e.message; }
     btn.disabled = false; btn.textContent = 'Salvar';
   };
@@ -3563,6 +3576,29 @@
     }, { danger: true, okText: 'Encerrar' });
   }
 
+  // ── Calcula juros+multa para cobranças com data retroativa ────
+  // Retorna { multaAplicada, jurosAplicado, totalAmount, status, diasAtraso }
+  async function calcJurosRetroativo(baseRent, dueDate) {
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    const due  = new Date(dueDate); due.setHours(0,0,0,0);
+    if (hoje <= due) return { multaAplicada: 0, jurosAplicado: 0, totalAmount: baseRent, status: 'pending', diasAtraso: 0 };
+    const diasAtraso = Math.max(1, Math.round((hoje - due) / 86400000));
+    // Lê config de juros do Firestore (multaPercent, jurosPercent, ipcaMensalPercent)
+    let multaPercent = 10, jurosMensal = 1, ipcaMensal = 0.38;
+    try {
+      const cfgSnap = await getDoc(doc(db, 'config', 'juros'));
+      if (cfgSnap.exists()) {
+        multaPercent = cfgSnap.data().multaPercent ?? 10;
+        jurosMensal  = cfgSnap.data().jurosPercent ?? 1;
+        ipcaMensal   = cfgSnap.data().ipcaMensalPercent ?? 0.38;
+      }
+    } catch(_) {}
+    const multa  = Math.round(baseRent * multaPercent / 100 * 100) / 100;
+    const juros  = Math.round(baseRent * (jurosMensal + ipcaMensal) / 100 / 30 * diasAtraso * 100) / 100;
+    const total  = Math.round((baseRent + multa + juros) * 100) / 100;
+    return { multaAplicada: multa, jurosAplicado: juros, totalAmount: total, status: 'overdue', diasAtraso };
+  }
+
   // ── Cobrança avulsa ───────────────────────────────────────────
   let _avulsaTenantId = null;
   let _avulsaTenantEmail = '';
@@ -3596,6 +3632,7 @@
         const tUser = tenants.find(u => u.email === _avulsaTenantEmail);
         if (tUser) resolvedTenantId = tUser.id;
       }
+      const juros = await calcJurosRetroativo(value, dueDate);
       await setDoc(chargeRef, {
         id:          chargeRef.id,
         tenantId:    resolvedTenantId,
@@ -3605,9 +3642,12 @@
         description: desc,
         baseRent:    value,
         extras:      [],
-        totalAmount: value,
+        multaAplicada:  juros.multaAplicada,
+        jurosAplicado:  juros.jurosAplicado,
+        diasAtraso:     juros.diasAtraso,
+        totalAmount: juros.totalAmount,
         dueDate:     dueDate,
-        status:      'pending',
+        status:      juros.status,
         asaasChargeId: '',
         pixCopyPaste:  '',
         pixQrCode:     '',
