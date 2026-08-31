@@ -5389,16 +5389,60 @@
   #owner-selector-wrap select { background: var(--s3); border: 1px solid var(--border); color: var(--text1); border-radius: var(--r-sm); padding: 5px 10px; font-size: 12px; font-family: inherit; }
 
   /* ── Sidebar ── */
-  .tabs { position: fixed; top: var(--header-h); left: 0; width: var(--sidebar-w); height: calc(100vh - var(--header-h)); background: var(--s1); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 14px 0 28px; overflow-y: auto; z-index: 100; }
-  .tab { display: flex; align-items: center; gap: 10px; padding: 9px 14px; margin: 1px 10px; border-radius: var(--r-sm); font-size: 13px; font-weight: 500; color: var(--text3); cursor: pointer; transition: background .15s, color .15s; user-select: none; border: none; white-space: nowrap; position: relative; }
-  .tab:hover { background: rgba(255,255,255,0.04); color: var(--text2); }
-  .tab.active { background: var(--accent-bg); color: var(--accent3); font-weight: 600; box-shadow: inset 0 0 0 1px rgba(16,185,129,0.15); }
-  .tab.active::before { content: ''; position: absolute; left: 0; top: 20%; bottom: 20%; width: 3px; border-radius: 0 3px 3px 0; margin-left: -10px; background: var(--accent2); }
-  .tab-icon { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.5; transition: opacity .15s; display: flex; align-items: center; justify-content: center; }
-  .tab:hover .tab-icon, .tab.active .tab-icon { opacity: 1; }
-  .tab-icon svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
-  .sidebar-sep { height: 1px; background: var(--border); margin: 10px 18px; }
-  .sidebar-label { font-size: 9.5px; font-weight: 700; color: var(--text3); letter-spacing: 1.2px; text-transform: uppercase; padding: 10px 24px 6px; }
+  .tabs {
+    position: fixed; top: var(--header-h); left: 0;
+    width: var(--sidebar-w); height: calc(100vh - var(--header-h));
+    background: var(--s1); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 20px 0 32px; overflow-y: auto; z-index: 100;
+  }
+  .tab {
+    display: flex; align-items: center; gap: 11px;
+    padding: 10px 16px; margin: 2px 12px;
+    border-radius: 10px; font-size: 13px; font-weight: 500;
+    color: var(--text3); cursor: pointer;
+    transition: background .18s, color .18s, box-shadow .18s;
+    user-select: none; border: none; white-space: nowrap;
+    position: relative; line-height: 1;
+  }
+  .tab:hover { background: rgba(255,255,255,0.05); color: var(--text2); }
+  .tab.active {
+    background: linear-gradient(135deg, rgba(16,185,129,0.14) 0%, rgba(5,150,105,0.07) 100%);
+    color: #34d399; font-weight: 600;
+    box-shadow: inset 0 0 0 1px rgba(52,211,153,0.18),
+                0 2px 12px rgba(16,185,129,0.08);
+  }
+  .tab.active::after {
+    content: ''; position: absolute;
+    left: -12px; top: 50%; transform: translateY(-50%);
+    width: 3px; height: 60%; border-radius: 0 3px 3px 0;
+    background: linear-gradient(180deg, #34d399, #059669);
+    box-shadow: 0 0 8px rgba(52,211,153,0.5);
+  }
+  .tab-icon {
+    width: 18px; height: 18px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0.4; transition: opacity .18s;
+  }
+  .tab:hover .tab-icon { opacity: 0.75; }
+  .tab.active .tab-icon { opacity: 1; }
+  .tab-label { flex: 1; }
+  .tab-icon svg {
+    width: 16px; height: 16px; stroke: currentColor; fill: none;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    display: block;
+  }
+  .tab-badge {
+    background: #ef4444; color: #fff; border-radius: 10px;
+    padding: 1px 7px; font-size: 10px; font-weight: 700;
+    margin-left: auto; flex-shrink: 0; line-height: 16px;
+  }
+  .sidebar-sep { height: 1px; background: var(--border); margin: 14px 18px; }
+  .sidebar-label {
+    font-size: 9px; font-weight: 800; color: var(--text3);
+    letter-spacing: 1.6px; text-transform: uppercase;
+    padding: 8px 28px 4px; opacity: 0.6;
+  }
 
   /* ── Content ── */
   #dashboard-section { display: none; flex-direction: column; margin-left: var(--sidebar-w); margin-top: var(--header-h); min-height: calc(100vh - var(--header-h)); }
@@ -5680,18 +5724,61 @@
 <section id="dashboard-section">
   <nav class="tabs">
     <div class="sidebar-label">Principal</div>
-    <div class="tab active" id="tab-overview"><span class="tab-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Visão Geral</div>
-    <div class="tab" id="tab-tenants"><span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Inquilinos</div>
-    <div class="tab" id="tab-leads" style="display:none"><span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span> Leads</div>
-    <div class="tab" id="tab-brokers" style="display:none"><span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span> Corretores <span id="brokers-chat-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:auto">0</span></div>
-    <div class="tab" id="tab-overdue"><span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> Inadimplentes</div>
-    <div class="tab" id="tab-chamados"><span class="tab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span> Chamados <span id="chamados-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:auto">0</span></div>
+
+    <div class="tab active" id="tab-overview">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
+      <span class="tab-label">Visão Geral</span>
+    </div>
+
+    <div class="tab" id="tab-tenants">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+      <span class="tab-label">Inquilinos</span>
+    </div>
+
+    <div class="tab" id="tab-leads" style="display:none">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+      <span class="tab-label">Leads</span>
+    </div>
+
+    <div class="tab" id="tab-brokers" style="display:none">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><circle cx="19" cy="7" r="2"/><path d="M19 5v4M17 7h4"/></svg></span>
+      <span class="tab-label">Corretores</span>
+      <span class="tab-badge" id="brokers-chat-badge" style="display:none">0</span>
+    </div>
+
+    <div class="tab" id="tab-overdue">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+      <span class="tab-label">Inadimplentes</span>
+    </div>
+
+    <div class="tab" id="tab-chamados">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span>
+      <span class="tab-label">Chamados</span>
+      <span class="tab-badge" id="chamados-badge" style="display:none">0</span>
+    </div>
+
     <div class="sidebar-sep"></div>
     <div class="sidebar-label">Admin</div>
-    <div class="tab" id="tab-owners" style="display:none"><span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span> Imobiliárias</div>
-    <div class="tab" id="tab-licenses" style="display:none"><span class="tab-icon"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> Licenças</div>
-    <div class="tab" id="tab-config" style="display:none"><span class="tab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Configurações</div>
-    <div class="tab" id="tab-plano" style="display:none"><span class="tab-icon"><svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span> Meu Plano</div>
+
+    <div class="tab" id="tab-owners" style="display:none">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+      <span class="tab-label">Imobiliárias</span>
+    </div>
+
+    <div class="tab" id="tab-licenses" style="display:none">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+      <span class="tab-label">Licenças</span>
+    </div>
+
+    <div class="tab" id="tab-config" style="display:none">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+      <span class="tab-label">Configurações</span>
+    </div>
+
+    <div class="tab" id="tab-plano" style="display:none">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
+      <span class="tab-label">Meu Plano</span>
+    </div>
   </nav>
 
   <!-- Painel: Visão Geral -->
