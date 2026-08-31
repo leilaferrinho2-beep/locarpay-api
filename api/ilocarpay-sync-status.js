@@ -9,7 +9,7 @@ const ASSINAFY = 'https://api.assinafy.com.br/v1';
 
 function initAdmin() {
   if (getApps().length > 0) return;
-  initializeApp({ credential: cert(JSON.parse(process.env.IILOCARPAY_SERVICE_ACCOUNT)) });
+  initializeApp({ credential: cert(JSON.parse(process.env.ILOCARPAY_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT)) });
 }
 
 async function assinafyGet(apiKey, path) {

@@ -36,7 +36,7 @@ async function sendWhatsApp(phone, text) {
 function initAdmin() {
   if (getApps().length > 0) return;
   initializeApp({
-    credential: cert(JSON.parse(process.env.IILOCARPAY_SERVICE_ACCOUNT)),
+    credential: cert(JSON.parse(process.env.ILOCARPAY_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT)),
     storageBucket: BUCKET
   });
 }

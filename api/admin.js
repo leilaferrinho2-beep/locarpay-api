@@ -15,8 +15,8 @@ const SUPER_ADMIN_EMAIL = 'denisfelicio20@gmail.com';
 
 function initFirebase() {
   if (getApps().length) return;
-  const sa = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.IILOCARPAY_SERVICE_ACCOUNT;
-  if (!sa) throw new Error('ENV: service account não configurada (IILOCARPAY_SERVICE_ACCOUNT / FIREBASE_SERVICE_ACCOUNT)');
+  const sa = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.ILOCARPAY_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT;
+  if (!sa) throw new Error('ENV: service account não configurada (ILOCARPAY_SERVICE_ACCOUNT / FIREBASE_SERVICE_ACCOUNT)');
   initializeApp({ credential: cert(JSON.parse(sa)) });
 }
 

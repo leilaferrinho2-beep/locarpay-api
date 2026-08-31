@@ -10,7 +10,7 @@ import { rateLimit, rateLimitReset, sanitizeString, isValidEmail, getClientIp } 
 
 function initAdmin() {
   if (getApps().length > 0) return;
-  const serviceAccount = JSON.parse(process.env.IILOCARPAY_SERVICE_ACCOUNT);
+  const serviceAccount = JSON.parse(process.env.ILOCARPAY_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT);
   initializeApp({ credential: cert(serviceAccount) });
 }
 

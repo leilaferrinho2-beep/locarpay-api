@@ -18,7 +18,7 @@ import { PDFDocument as PdfLib, rgb, StandardFonts } from 'pdf-lib';
 
 function initFirebase() {
   if (getApps().length) return;
-  initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.IILOCARPAY_SERVICE_ACCOUNT)) });
+  initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.ILOCARPAY_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT)) });
 }
 
 const ASSINAFY_BASE = 'https://api.assinafy.com.br/v1';
@@ -1710,7 +1710,7 @@ async function handleCronRetryAssinafy(db) {
   try {
     initFirebase();
     const db   = getFirestore();
-    const sa   = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.IILOCARPAY_SERVICE_ACCOUNT || '{}');
+    const sa   = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.ILOCARPAY_SERVICE_ACCOUNT || '{}');
     req._storageBucket = 'transgu-web-6d50f.firebasestorage.app';
     const { step } = req.body || {};
     let result;
