@@ -55,9 +55,10 @@
   }
   .nav-brand {
     display: flex; align-items: center; gap: 10px;
-    font-size: 1.25rem; font-weight: 800; color: var(--accent);
+    font-size: 1.25rem; font-weight: 800; color: #fff;
     letter-spacing: -0.5px; text-decoration: none;
   }
+  .nav-brand .pay { color: var(--accent); }
   .nav-brand svg { width: 28px; height: 28px; }
   .nav-links { display: flex; gap: 32px; align-items: center; }
   .nav-links a { color: var(--text-dim); text-decoration: none; font-size: 0.9rem; transition: color .2s; }
@@ -370,7 +371,7 @@
 <nav>
   <a class="nav-brand" href="#">
     <img src="/logo.webp" alt="iLocarPay" style="width:32px;height:32px;object-fit:contain;border-radius:8px">
-    iLocarPay
+    iLocar<span class="pay">Pay</span>
   </a>
   <div class="nav-links">
     <a href="#features">Recursos</a>
@@ -572,14 +573,14 @@
 <!-- FOOTER -->
 <footer>
   <div>
-    <strong style="color:var(--accent)">iLocarPay</strong> &nbsp;·&nbsp;
+    <strong>iLocar<span style="color:#10b981">Pay</span></strong> &nbsp;·&nbsp;
     Gestão de aluguéis para imobiliárias
   </div>
   <div style="display:flex;gap:24px">
     <a href="admin" target="_blank">Painel Admin</a>
     <a href="mailto:contatotransgu@gmail.com">Contato</a>
   </div>
-  <div>© 2025 iLocarPay. Todos os direitos reservados.</div>
+  <div>© 2025 iLocar<span style="color:#10b981">Pay</span>. Todos os direitos reservados.</div>
 </footer>
 
 <!-- MODAL -->
