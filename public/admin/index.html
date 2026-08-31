@@ -2745,29 +2745,62 @@
 
     const upgradeArea = $('plano-upgrade-area');
     if (isPaid) {
-      upgradeArea.innerHTML = `<p style="color:#aaa;font-size:13px;margin-top:8px">Para trocar de plano ou cancelar, entre em contato com o suporte.</p>`;
+      const planName = (o.plan || 'basic').charAt(0).toUpperCase() + (o.plan||'basic').slice(1);
+      const daysLeft = Math.ceil((activeUntil - now) / 86400000);
+      upgradeArea.innerHTML = `
+        <div style="display:grid;gap:10px;margin-top:16px">
+          <div style="background:var(--s3);border:1px solid var(--border);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:14px">
+            <div style="width:40px;height:40px;border-radius:10px;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <svg width="18" height="18" viewBox="0 0 24 24" stroke="var(--accent3)" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--text1)">Plano ${planName} ativo</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px">Renova em ${daysLeft} dia${daysLeft!==1?'s':''} · ${new Date(activeUntil).toLocaleDateString('pt-BR')}</div>
+            </div>
+          </div>
+          <p style="color:var(--text3);font-size:12px;text-align:center;margin:4px 0">Para trocar de plano ou cancelar, entre em contato com o suporte.</p>
+        </div>
+      `;
     } else {
       upgradeArea.innerHTML = `
-        <div style="display:flex;gap:12px;margin-top:24px">
-          <div onclick="upgSelectPlanCard('basic')" id="card-basic" style="flex:1;border:2px solid #4CAF50;border-radius:12px;padding:16px;cursor:pointer;background:#0f2a0f;transition:all .2s">
-            <div style="font-weight:700;font-size:15px;color:#4CAF50">Basic</div>
-            <div style="font-size:22px;font-weight:800;color:#fff;margin:4px 0">R$49<span style="font-size:13px;font-weight:400;color:#aaa">/mês</span></div>
-            <div style="font-size:12px;color:#aaa">até 10 inquilinos</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:20px">
+          <div onclick="upgSelectPlanCard('basic')" id="plano-card-basic" style="border:1px solid var(--border);border-radius:12px;padding:16px 12px;cursor:pointer;background:var(--s3);transition:all .2s;position:relative">
+            <div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Basic</div>
+            <div style="font-size:24px;font-weight:800;color:var(--text1);letter-spacing:-1px;line-height:1">49<sup style="font-size:13px;font-weight:500;color:var(--text3)">R$/mês</sup></div>
+            <div style="font-size:11px;color:var(--text3);margin-top:8px">10 inquilinos</div>
           </div>
-          <div onclick="upgSelectPlanCard('pro')" id="card-pro" style="flex:1;border:2px solid #2a4a2a;border-radius:12px;padding:16px;cursor:pointer;background:#132213;transition:all .2s">
-            <div style="font-weight:700;font-size:15px;color:#aaa">Pro ⭐</div>
-            <div style="font-size:22px;font-weight:800;color:#fff;margin:4px 0">R$99<span style="font-size:13px;font-weight:400;color:#aaa">/mês</span></div>
-            <div style="font-size:12px;color:#aaa">até 30 inquilinos</div>
+          <div onclick="upgSelectPlanCard('pro')" id="plano-card-pro" style="border:2px solid var(--accent2);border-radius:12px;padding:16px 12px;cursor:pointer;background:var(--accent-bg);transition:all .2s;position:relative">
+            <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:9px;font-weight:800;padding:2px 10px;border-radius:20px;white-space:nowrap;letter-spacing:.5px">MAIS POPULAR</div>
+            <div style="font-size:10px;font-weight:800;color:var(--accent3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Pro</div>
+            <div style="font-size:24px;font-weight:800;color:var(--text1);letter-spacing:-1px;line-height:1">99<sup style="font-size:13px;font-weight:500;color:var(--text3)">R$/mês</sup></div>
+            <div style="font-size:11px;color:var(--text3);margin-top:8px">50 inquilinos</div>
+          </div>
+          <div onclick="upgSelectPlanCard('enterprise')" id="plano-card-enterprise" style="border:1px solid var(--border);border-radius:12px;padding:16px 12px;cursor:pointer;background:var(--s3);transition:all .2s;position:relative">
+            <div style="font-size:10px;font-weight:800;color:#c4b5fd;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Enterprise</div>
+            <div style="font-size:24px;font-weight:800;color:var(--text1);letter-spacing:-1px;line-height:1">199<sup style="font-size:13px;font-weight:500;color:var(--text3)">R$/mês</sup></div>
+            <div style="font-size:11px;color:var(--text3);margin-top:8px">200 inquilinos</div>
           </div>
         </div>
-        <button onclick="openUpgradeModal()" style="margin-top:16px;width:100%;padding:14px;background:#4CAF50;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">Ativar via PIX ou Cartão</button>
-        <p style="color:#666;font-size:12px;margin-top:10px;text-align:center">Pagamento seguro via Asaas · Cancele quando quiser</p>
+        <button onclick="openUpgradeModal()" style="margin-top:16px;width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s" onmouseover="this.style.background='#047857'" onmouseout="this.style.background='var(--accent)'">
+          Ativar via PIX ou Cartão →
+        </button>
+        <p style="color:var(--text3);font-size:11px;margin-top:10px;text-align:center">Pagamento seguro via Asaas · Cancele quando quiser</p>
       `;
+      // highlight selected plan
+      ['basic','pro','enterprise'].forEach(p => {
+        const el = $('plano-card-' + p);
+        if (!el) return;
+        const isSel = upgState.plan === p;
+        el.style.borderColor = isSel ? 'var(--accent2)' : p==='pro' ? 'var(--accent2)' : 'var(--border)';
+        el.style.background  = isSel || p==='pro' ? 'var(--accent-bg)' : 'var(--s3)';
+      });
     }
   }
 
   window.upgSelectPlanCard = (plan) => {
+    upgState.plan = plan;
     upgSelectPlan(plan);
+    openUpgradeModal();
   };
 
   function renderPlanBanner() {
@@ -2790,7 +2823,7 @@
     if (trialEnd && trialEnd > now) {
       const days = Math.ceil((trialEnd - now) / 86400000);
       if (days <= 5) {
-        showBanner('warning', `⚠ Seu trial expira em ${days} dia${days !== 1 ? 's' : ''}. Ative um plano para continuar usando o iiLocarPay.`);
+        showBanner('warning', `⚠ Seu trial expira em ${days} dia${days !== 1 ? 's' : ''}. Ative um plano para continuar usando o iLocarPay.`);
         notifyTrialByEmail();
       } else {
         banner.style.display = 'none';
@@ -3883,23 +3916,25 @@
 
   window.upgSelectPlan = (plan) => {
     upgState.plan = plan;
-    ['basic','pro'].forEach(p => {
+    ['basic','pro','enterprise'].forEach(p => {
       const el = $('upg-plan-' + p);
       if (!el) return;
-      el.style.borderColor = p === plan ? '#4CAF50' : '#2A4A2A';
-      el.style.background  = p === plan ? '#1A2E1A' : '#132213';
+      const isActive = p === plan;
+      el.style.borderColor = isActive ? 'var(--accent2)' : 'var(--border)';
+      el.style.background  = isActive ? 'var(--accent-bg)' : 'var(--s3)';
+      el.style.transform   = isActive ? 'translateY(-2px)' : 'none';
+      el.style.boxShadow   = isActive ? '0 4px 20px rgba(16,185,129,0.15)' : 'none';
     });
-    // Cartão disponível apenas no Pro e fora do trial
     const isTrial  = !currentOwnerData?.plan || currentOwnerData?.status === 'trial' || currentOwnerData?.plan === 'trial';
-    const allowCard = plan === 'pro' && !isTrial;
+    const allowCard = (plan === 'pro' || plan === 'enterprise') && !isTrial;
     const cardBtn  = $('upg-card-btn');
     const cardNote = $('upg-card-note');
     if (!allowCard) {
       if (cardBtn)  { cardBtn.style.display = 'none'; }
       if (cardNote) {
         cardNote.textContent = plan === 'basic'
-          ? '💳 Cartão de crédito disponível apenas no plano Pro.'
-          : '💳 Pagamento por cartão disponível ao renovar o Pro após o trial.';
+          ? '💳 Cartão de crédito disponível apenas nos planos Pro e Enterprise.'
+          : '💳 Pagamento por cartão disponível ao renovar após o trial.';
         cardNote.style.display = 'block';
       }
       upgSelectMethod('pix');
@@ -5715,6 +5750,7 @@
     <select id="my-plan-select" style="background:#0f1117;color:#e0e0e0;border:1px solid #3a3d52;border-radius:6px;padding:5px 8px;font-size:12px">
       <option value="basic">Basic — R$49/mês</option>
       <option value="pro">Pro — R$99/mês</option>
+      <option value="enterprise">Enterprise — R$199/mês</option>
     </select>
     <button id="my-plan-btn" class="btn" style="padding:7px 16px;font-size:13px" onclick="activateMyPlan()">Ativar Plano</button>
   </div>
@@ -6407,6 +6443,11 @@
         </div>
         <div class="plan-opt" id="upg-plan-pro" onclick="upgSelectPlan('pro')" style="flex:1;border:2px solid #2A4A2A;border-radius:12px;padding:14px;cursor:pointer;transition:all .2s">
           <div style="font-weight:700;color:#E4F0E4">Pro</div>
+          <div onclick="upgSelectPlan('enterprise')" id="upg-plan-enterprise" style="flex:1;border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;background:var(--s3);transition:all .2s;min-width:120px">
+            <div style="font-size:10px;font-weight:800;color:#c4b5fd;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Enterprise</div>
+            <div style="font-size:20px;font-weight:800;color:var(--text1);letter-spacing:-0.5px">R$199<span style="font-size:11px;font-weight:400;color:var(--text3)">/mês</span></div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px">200 inquilinos</div>
+          </div>
           <div style="font-size:22px;font-weight:800;color:#69D369;margin:4px 0">R$99<span style="font-size:13px;color:#8FAF8F">/mês</span></div>
           <div style="font-size:11px;color:#8FAF8F">Até 50 inquilinos</div>
         </div>

@@ -12,9 +12,10 @@ import { getStorage }                     from 'firebase-admin/storage';
 import nodemailer                         from 'nodemailer';
 
 const PLANS = {
-  trial: { maxTenants: 3,  maxProperties: 2,  monthlyPrice: 0   },
-  basic: { maxTenants: 10, maxProperties: 5,  monthlyPrice: 49  },
-  pro:   { maxTenants: 30, maxProperties: 20, monthlyPrice: 99  },
+  trial:      { maxTenants: 3,   maxProperties: 2,   monthlyPrice: 0   },
+  basic:      { maxTenants: 10,  maxProperties: 5,   monthlyPrice: 49  },
+  pro:        { maxTenants: 50,  maxProperties: 30,  monthlyPrice: 99  },
+  enterprise: { maxTenants: 200, maxProperties: 100, monthlyPrice: 199 },
 };
 
 function initFirebase() {
@@ -182,17 +183,17 @@ async function handleRegister(db, body) {
       auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
     });
     await transporter.sendMail({
-      from:    'iiLocarPay <denis@dlftech.com.br>',
+      from:    'iLocarPay <denis@dlftech.com.br>',
       to:      email,
-      subject: `Bem-vindo ao iiLocarPay! Sua conta esta pronta`,
+      subject: `Bem-vindo ao iLocarPay! Sua conta esta pronta`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#fff">
           <div style="margin-bottom:24px">
-            <span style="display:inline-flex;align-items:center;gap:8px;font-weight:900;font-size:20px;color:#4CAF50;letter-spacing:-.5px;">&#9679;&nbsp;iiLocarPay</span>
+            <span style="display:inline-flex;align-items:center;gap:8px;font-weight:900;font-size:20px;color:#4CAF50;letter-spacing:-.5px;">&#9679;&nbsp;iLocarPay</span>
           </div>
           <h2 style="color:#1a1a1a;margin-bottom:8px">Sua conta esta pronta, ${name.split(' ')[0]}!</h2>
           <p style="color:#555;line-height:1.7;margin-bottom:20px">
-            Seu trial de <strong>30 dias gratis</strong> foi ativado. Voce tem acesso completo ao iiLocarPay ate <strong>${trialFmt}</strong>.
+            Seu trial de <strong>30 dias gratis</strong> foi ativado. Voce tem acesso completo ao iLocarPay ate <strong>${trialFmt}</strong>.
           </p>
           <div style="background:#f0f7f0;border-radius:10px;padding:20px;margin-bottom:24px">
             <h3 style="color:#2e7d32;font-size:14px;margin-bottom:12px">Primeiros passos</h3>
@@ -398,7 +399,7 @@ async function handleActivatePlan(db, body) {
       value,
       nextDueDate: nextDueDateStr,
       cycle:       'MONTHLY',
-      description: `iiLocarPay ${plan.charAt(0).toUpperCase() + plan.slice(1)} â€" ${ownerData.name}`
+      description: `iLocarPay ${plan.charAt(0).toUpperCase() + plan.slice(1)} â€" ${ownerData.name}`
     })
   });
   const sub = await subResp.json();
@@ -470,7 +471,7 @@ async function handleSetupWebhook(db, body) {
   const createResp = await fetch('https://api.asaas.com/v3/webhooks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': masterKey },
-    body: JSON.stringify({ name: 'iiLocarPay Billing', url: webhookUrl, email: 'contatotransgu@gmail.com', enabled: true, interrupted: false, type: 'PAYMENT', sendType: 'NON_SEQUENTIALLY', events })
+    body: JSON.stringify({ name: 'iLocarPay Billing', url: webhookUrl, email: 'contatotransgu@gmail.com', enabled: true, interrupted: false, type: 'PAYMENT', sendType: 'NON_SEQUENTIALLY', events })
   });
   const created = await createResp.json();
   if (!createResp.ok) throw new Error(`Asaas webhook create: ${JSON.stringify(created)}`);
@@ -516,7 +517,7 @@ async function handleNotifyTrial(db, body) {
     : `Seu periodo de trial expira em <strong>${daysLeft} dia${daysLeft !== 1 ? 's' : ''}</strong>. Ative um plano para nao perder o acesso.`;
 
   await transporter.sendMail({
-    from: 'iiLocarPay <denis@dlftech.com.br>',
+    from: 'iLocarPay <denis@dlftech.com.br>',
     to: d.email,
     subject,
     html: `
@@ -551,6 +552,47 @@ async function handleNotifyTrial(db, body) {
 
   await snap.ref.update({ trialNotifiedAt: Timestamp.now() });
   return { ok: true, notified: true, email: d.email };
+}
+
+async function handleNotifyRenewal(db, body) {
+  const { ownerId, daysLeft } = body;
+  const snap = await db.collection('owners').doc(ownerId).get();
+  if (!snap.exists) return { ok: true, skipped: true };
+  const d = snap.data();
+  if (!d.email) return { ok: true, skipped: true };
+
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.hostinger.com', port: 465, secure: true,
+    auth: { user: 'denis@dlftech.com.br', pass: process.env.SMTP_PASS }
+  });
+
+  const planName = (d.plan || 'basic').charAt(0).toUpperCase() + (d.plan || 'basic').slice(1);
+  const subject  = daysLeft <= 1
+    ? `⚠ Seu plano iLocarPay vence amanhã`
+    : `⚠ Seu plano iLocarPay vence em ${daysLeft} dias`;
+
+  await transporter.sendMail({
+    from: 'iLocarPay <denis@dlftech.com.br>',
+    to:   d.email,
+    subject,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
+        <div style="background:#059669;padding:20px 28px;border-radius:12px 12px 0 0">
+          <h1 style="color:#fff;margin:0;font-size:20px">iLocarPay — Renovação</h1>
+        </div>
+        <div style="background:#0a0d16;padding:28px;border-radius:0 0 12px 12px;color:#e8edf5">
+          <p>Olá, <strong>${d.name || 'parceiro'}</strong>!</p>
+          <p>Seu plano <strong>${planName}</strong> vence em <strong>${daysLeft} dia${daysLeft!==1?'s':''}</strong>.</p>
+          <p>Para garantir a continuidade do serviço sem interrupções, renove seu plano acessando o painel:</p>
+          <div style="text-align:center;margin:24px 0">
+            <a href="https://www.ilocarpay.com.br/ilocarpay/admin" style="background:#059669;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Renovar Plano</a>
+          </div>
+          <p style="color:#7a8fa6;font-size:12px">Dúvidas? Responda este e-mail.</p>
+        </div>
+      </div>
+    `
+  });
+  return { ok: true, sent: true, email: d.email };
 }
 
 // â"€â"€ CRON DIÃRIO â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
@@ -594,7 +636,7 @@ async function handleSetupPaymentWebhook(db, body) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
     body: JSON.stringify({
-      name: 'iiLocarPay Pagamentos',
+      name: 'iLocarPay Pagamentos',
       url: webhookUrl,
       email: ownerSnap.data().email,
       enabled: true,
@@ -666,7 +708,26 @@ async function handleCronDaily(db) {
       ops.push(post(BASE, { step: 'monthly-report', ownerId, month: monthStr }));
     }
 
-    // 5. Notifica trial expirando (a cada ate 20h, controlado internamente)
+    // 4b. Auto-expire plano pago vencido
+    if (d.planActiveUntil && d.status === 'active') {
+      const activeUntilMs = d.planActiveUntil?.seconds
+        ? d.planActiveUntil.seconds * 1000
+        : new Date(d.planActiveUntil).getTime();
+      const daysUntilExpiry = Math.ceil((activeUntilMs - now.getTime()) / 86400000);
+
+      if (daysUntilExpiry <= 0) {
+        // Expirou: suspender e avisar
+        ops.push(
+          ownerDoc.ref.update({ status: 'suspended', billingStatus: 'expired', updatedAt: new Date() })
+            .then(() => ({ suspended: true, ownerId }))
+        );
+      } else if (daysUntilExpiry <= 5) {
+        // Expirando em breve: enviar lembrete de renovação
+        ops.push(post(OWNER_URL, { step: 'notify-renewal', ownerId, daysLeft: daysUntilExpiry }));
+      }
+    }
+
+        // 5. Notifica trial expirando (a cada ate 20h, controlado internamente)
     if (d.status === 'trial' || !d.status) {
       ops.push(post(OWNER_URL, { step: 'notify-trial', ownerId }));
     }
@@ -864,6 +925,7 @@ export default async function handler(req, res) {
     if (step === 'activate-plan')  return res.status(200).json(await handleActivatePlan(db, body));
     if (step === 'billing-status') return res.status(200).json(await handleBillingStatus(db, body));
     if (step === 'notify-trial')   return res.status(200).json(await handleNotifyTrial(db, body));
+    if (step === 'notify-renewal') return res.status(200).json(await handleNotifyRenewal(db, body));
     if (step === 'setup-webhook')          return res.status(200).json(await handleSetupWebhook(db, body));
     if (step === 'setup-payment-webhook')  return res.status(200).json(await handleSetupPaymentWebhook(db, body));
     if (step === 'delete-tenant')        return res.status(200).json(await handleDeleteTenant(db, body, req));

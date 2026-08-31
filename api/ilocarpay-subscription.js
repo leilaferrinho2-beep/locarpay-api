@@ -1,5 +1,5 @@
 // POST /api/ilocarpay-subscription
-// Pagamento de assinatura iiLocarPay para imobiliárias (owners)
+// Pagamento de assinatura iLocarPay para imobiliárias (owners)
 // step:"pix"          → { ownerId, plan } → cria PIX, retorna copyPaste + qrCode
 // step:"check-pix"    → { paymentId, ownerId, plan } → verifica se pago, ativa plano
 // step:"card-init"    → { ownerId, plan, card } → micro-cobrança R$1-9, retorna verificationId
@@ -15,8 +15,9 @@ function initFirebase() {
 }
 
 const PLANS = {
-  basic: { name: 'Basic', price: 49.00 },
-  pro:   { name: 'Pro',   price: 99.00 }
+  basic:      { name: 'Basic',      price:  49.00 },
+  pro:        { name: 'Pro',        price:  99.00 },
+  enterprise: { name: 'Enterprise', price: 199.00 }
 };
 
 async function getMainAsaasKey(db) {
@@ -56,11 +57,13 @@ async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
 async function activatePlan(db, ownerId, plan) {
   const until = new Date();
   until.setDate(until.getDate() + 30);
+  const maxTenants = plan === 'enterprise' ? 200 : plan === 'pro' ? 50 : 10;
   await db.collection('owners').doc(ownerId).update({
     status:          'active',
     plan,
     planActiveUntil: until,
     billingStatus:   'active',
+    maxTenants,
     updatedAt:       FieldValue.serverTimestamp()
   });
 }
@@ -95,7 +98,7 @@ async function handlePix(db, body) {
     billingType: 'PIX',
     value:       PLANS[plan].price,
     dueDate,
-    description: `iiLocarPay — Plano ${PLANS[plan].name}`
+    description: `iLocarPay — Plano ${PLANS[plan].name}`
   }, apiKey);
 
   // Busca QR code
@@ -153,7 +156,7 @@ async function handleCardInit(db, body) {
     billingType: 'CREDIT_CARD',
     value:       microAmount,
     dueDate,
-    description: 'Verificação de cartão iiLocarPay',
+    description: 'Verificação de cartão iLocarPay',
     creditCard: {
       holderName,
       number:      number.replace(/\D/g, ''),
@@ -252,7 +255,7 @@ async function handleCardConfirm(db, body) {
     realChargeBody = {
       customer:    ver.customerId, billingType: 'CREDIT_CARD',
       value:       ver.realValue, dueDate,
-      description: `iiLocarPay — Plano ${PLANS[ver.plan]?.name || ver.plan}`,
+      description: `iLocarPay — Plano ${PLANS[ver.plan]?.name || ver.plan}`,
       creditCardToken: ver.cardToken,
       creditCardHolderInfo: {
         name: ver.holderName, email: ver.email, cpfCnpj: ver.holderDocument,
@@ -263,7 +266,7 @@ async function handleCardConfirm(db, body) {
     realChargeBody = {
       customer:    ver.customerId, billingType: 'CREDIT_CARD',
       value:       ver.realValue, dueDate,
-      description: `iiLocarPay — Plano ${PLANS[ver.plan]?.name || ver.plan}`,
+      description: `iLocarPay — Plano ${PLANS[ver.plan]?.name || ver.plan}`,
       creditCard: {
         holderName: ver.holderName, number: ver.cardFallback.number,
         expiryMonth: ver.expiryMonth, expiryYear: ver.expiryYear, ccv: ver.cardFallback.ccv
