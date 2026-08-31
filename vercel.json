@@ -10,7 +10,9 @@
     { "source": "/superadmin",                   "destination": "/superadmin/index.html" },
     { "source": "/superadmin/",                  "destination": "/superadmin/index.html" },
     { "source": "/api/version",                  "destination": "/version.json" },
-    { "source": "/api/locarpay-reassign-contract","destination": "/api/locarpay-fix-contract" },
+    { "source": "/api/locarpay-send-otp",           "destination": "/api/locarpay-otp?action=send" },
+    { "source": "/api/locarpay-verify-otp",         "destination": "/api/locarpay-otp?action=verify" },
+    { "source": "/api/locarpay-reassign-contract",  "destination": "/api/locarpay-fix-contract" },
     { "source": "/download",                     "destination": "/download/index.html" },
     { "source": "/download/",                    "destination": "/download/index.html" }
   ],
