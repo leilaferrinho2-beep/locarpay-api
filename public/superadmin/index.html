@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>iiLocarPay &mdash; Super Admin</title>
+<title>iLocarPay &mdash; Super Admin</title>
 <script>
   document.addEventListener('DOMContentLoaded', async function() {
 
@@ -13,11 +13,11 @@
 
   function getToken() { return sessionStorage.getItem('sa_token') || ''; }
 
-  // Inicialização
+  // InicializaÃ§Ã£o
   if (getToken()) { showDashboard(); loadOwners(); }
   else { showLogin(); }
 
-  // Etapa 1: verifica senha → pede OTP por email
+  // Etapa 1: verifica senha â†’ pede OTP por email
   window.doLogin = async () => {
     const pwd = $('pin-input').value.trim();
     if (!pwd) return;
@@ -36,7 +36,7 @@
         $('pin-input').value = '';
         return;
       }
-      // Senha ok → salva e mostra campo OTP
+      // Senha ok â†’ salva e mostra campo OTP
       sessionStorage.setItem('sa_pwd_pending', pwd);
       $('step-pwd').style.display = 'none';
       $('step-otp').style.display = 'block';
@@ -48,7 +48,7 @@
     }
   };
 
-  // Etapa 2: verifica código OTP
+  // Etapa 2: verifica cÃ³digo OTP
   window.doVerifyOtp = async () => {
     const code = $('otp-input').value.trim();
     if (!code) return;
@@ -63,7 +63,7 @@
       });
       const d = await r.json();
       if (!r.ok) {
-        $('otp-err').textContent = d.error || 'Código incorreto.';
+        $('otp-err').textContent = d.error || 'CÃ³digo incorreto.';
         $('otp-input').value = '';
         return;
       }
@@ -158,7 +158,7 @@
     return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
   function fmtDate(iso) {
-    if (!iso) return '—';
+    if (!iso) return 'â€”';
     return new Date(iso).toLocaleDateString('pt-BR');
   }
   function statusBadge(s) {
@@ -170,16 +170,16 @@
   function renderTable() {
     const tbody = $('tbody');
     if (!filtered.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">Nenhuma imobiliária encontrada.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">Nenhuma imobiliÃ¡ria encontrada.</td></tr>';
       return;
     }
     tbody.innerHTML = filtered.map(o => {
       const asaasCell = o.asaasConfigured
         ? '<span class="chip chip-ok">&#10003;&nbsp;OK</span>'
-        : '<span class="chip chip-warn" title="' + esc(o.asaasWarning||'Não criada no cadastro') + '">&#9888;&nbsp;Pendente</span>';
-      const price = o.monthlyPrice ? 'R$ ' + o.monthlyPrice : '—';
+        : '<span class="chip chip-warn" title="' + esc(o.asaasWarning||'NÃ£o criada no cadastro') + '">&#9888;&nbsp;Pendente</span>';
+      const price = o.monthlyPrice ? 'R$Â ' + o.monthlyPrice : 'â€”';
       return '<tr data-id="' + esc(o.ownerId) + '">'
-        + '<td class="td-name"><span class="name-text">' + esc(o.name||'—') + '</span>'
+        + '<td class="td-name"><span class="name-text">' + esc(o.name||'â€”') + '</span>'
         + '<span class="email-text">' + esc(o.email||'') + '</span></td>'
         + '<td>' + statusBadge(o.status) + '</td>'
         + '<td class="td-plan">' + esc(o.plan||'trial') + '</td>'
@@ -192,7 +192,7 @@
         + '<button class="act act-edit" onclick="editOwner(\'' + esc(o.ownerId) + '\')">Editar</button>'
         + (o.status !== 'active'    ? '<button class="act act-ok"   onclick="activateOwner(\'' + esc(o.ownerId) + '\')">Ativar</button>' : '')
         + (o.status !== 'suspended' ? '<button class="act act-warn" onclick="suspendOwner(\'' + esc(o.ownerId) + '\')">Suspender</button>' : '')
-        + (!o.asaasConfigured ? ((o.cpfCnpj||'').replace(/\D/g,'').length===14 ? '<button class="act act-blue" onclick="setupAsaas(\'' + esc(o.ownerId) + '\')">Criar Asaas</button>' : '<span title="Asaas requer CNPJ" style="color:#f90;font-size:12px;padding:4px 8px;">⚠ Sem CNPJ</span>') : '')
+        + (!o.asaasConfigured ? ((o.cpfCnpj||'').replace(/\D/g,'').length===14 ? '<button class="act act-blue" onclick="setupAsaas(\'' + esc(o.ownerId) + '\')">Criar Asaas</button>' : '<span title="Asaas requer CNPJ" style="color:#f90;font-size:12px;padding:4px 8px;">âš  Sem CNPJ</span>') : '')
         + '<button class="act act-del" onclick="deleteOwner(\'' + esc(o.ownerId) + '\',\'' + esc(o.name) + '\')">Excluir</button>'
         + '</td></tr>';
     }).join('');
@@ -202,17 +202,17 @@
     const o = owners.find(x => x.ownerId === id);
     if (!o) return;
     const rows = [
-      ['Nome', o.name], ['E-mail', o.email], ['Telefone', o.phone||'—'],
-      ['CPF/CNPJ', o.cpfCnpj||'—'], ['Status', o.status||'trial'],
+      ['Nome', o.name], ['E-mail', o.email], ['Telefone', o.phone||'â€”'],
+      ['CPF/CNPJ', o.cpfCnpj||'â€”'], ['Status', o.status||'trial'],
       ['Plano', o.plan||'trial'],
-      ['Valor/mês', o.monthlyPrice ? 'R$ '+o.monthlyPrice : '—'],
+      ['Valor/mÃªs', o.monthlyPrice ? 'R$ '+o.monthlyPrice : 'â€”'],
       ['Trial expira', fmtDate(o.trialEndsAt)],
       ['Plano ativo ate', fmtDate(o.planActiveUntil)],
       ['Asaas', o.asaasConfigured ? 'Configurado' : ('Pendente' + (o.asaasWarning ? ' - ' + o.asaasWarning : ''))],
-      ['Assinafy', o.assinafyConfigured ? 'Configurado' : '—'],
+      ['Assinafy', o.assinafyConfigured ? 'Configurado' : 'â€”'],
       ['Assinatura', o.subscriptionId ? ('Ativa - ID: ' + o.subscriptionId) : 'Sem assinatura'],
-      ['Cobranca', o.billingStatus || '—'],
-      ['Max. inquilinos', o.maxTenants||'—'],
+      ['Cobranca', o.billingStatus || 'â€”'],
+      ['Max. inquilinos', o.maxTenants||'â€”'],
       ['Cadastro', fmtDate(o.createdAt)], ['ID', o.ownerId],
     ];
     $('modal-rows').innerHTML = rows.map(([l,v]) =>
@@ -226,12 +226,12 @@
     + '<button class="act act-blue" onclick="createSubscription(\''+eid+'\');closeModal()">&#128179;&nbsp;Cobrar assinatura</button>'
     + (o.subscriptionId ? '<button class="act act-warn" onclick="cancelSubscription(\''+eid+'\');closeModal()">Cancelar assinatura</button>' : '')
     + '<button class="act act-del"  onclick="deleteOwner(\''+eid+'\',\''+nm+'\');closeModal()">Excluir conta</button>';
-    $('modal-name').textContent = o.name || 'Imobiliária';
+    $('modal-name').textContent = o.name || 'ImobiliÃ¡ria';
     $('modal').classList.add('open');
   };
   window.closeModal = () => $('modal').classList.remove('open');
 
-  // Modal de data com máscara
+  // Modal de data com mÃ¡scara
   let _modalDateResolve = null;
   window.modalDateResolve = (val) => {
     $('modal-date').style.display = 'none';
@@ -270,7 +270,7 @@
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
-      toast(d.message || 'Operação realizada.', 'ok');
+      toast(d.message || 'OperaÃ§Ã£o realizada.', 'ok');
       loadOwners();
     } catch(e) { toast('Erro: ' + e.message, 'error'); }
   }
@@ -382,12 +382,12 @@
     'Cancelar assinatura e suspender imobiliaria?');
 
   window.addOwner = async () => {
-    const name      = prompt('Nome da imobiliária:');        if (!name) return;
+    const name      = prompt('Nome da imobiliÃ¡ria:');        if (!name) return;
     const email     = prompt('E-mail:');                     if (!email) return;
     const phone     = prompt('Telefone (opcional):') || '';
     const cpfCnpj   = prompt('CPF ou CNPJ (opcional):') || '';
     const birthDate = cpfCnpj.replace(/\D/g,'').length === 11
-      ? prompt('Data de nascimento do responsável (DD/MM/AAAA):') || ''
+      ? prompt('Data de nascimento do responsÃ¡vel (DD/MM/AAAA):') || ''
       : '';
     try {
       const r = await fetch('/api/ilocarpay-owner', {
@@ -397,7 +397,7 @@
       });
       const d = await r.json();
       if (!r.ok && r.status !== 409) throw new Error(d.error);
-      toast('Imobiliária cadastrada!', 'ok');
+      toast('ImobiliÃ¡ria cadastrada!', 'ok');
       loadOwners();
     } catch(e) { toast('Erro: ' + e.message, 'error'); }
   };
@@ -456,7 +456,7 @@ body {
     radial-gradient(ellipse 40% 30% at 10% 80%, rgba(16,185,129,.03) 0%, transparent 60%);
 }
 
-/* ── LOGIN ──────────────────────────────────── */
+/* â”€â”€ LOGIN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #login-screen {
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
   background:
@@ -496,10 +496,10 @@ body {
 .btn-continue:active { transform: translateY(0); }
 .login-err { margin-top: 10px; font-size: 12px; color: var(--red); min-height: 16px; }
 
-/* ── APP SHELL ───────────────────────────────── */
+/* â”€â”€ APP SHELL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #app { display: none; flex-direction: column; min-height: 100vh; }
 
-/* ── TOPBAR ──────────────────────────────────── */
+/* â”€â”€ TOPBAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .topbar {
   position: sticky; top: 0; z-index: 50; height: 56px;
   background: rgba(4,5,7,.85); backdrop-filter: blur(20px) saturate(180%);
@@ -522,10 +522,10 @@ body {
 }
 .btn-logout:hover { color: var(--red); border-color: rgba(244,63,94,.4); background: rgba(244,63,94,.05); }
 
-/* ── CONTENT ─────────────────────────────────── */
+/* â”€â”€ CONTENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .content { flex: 1; max-width: 1520px; width: 100%; margin: 0 auto; padding: 32px 28px 56px; }
 
-/* ── STAT CARDS ──────────────────────────────── */
+/* â”€â”€ STAT CARDS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .stats { display: grid; grid-template-columns: repeat(5,1fr); gap: 14px; margin-bottom: 32px; }
 @media (max-width: 960px) { .stats { grid-template-columns: repeat(2,1fr); } }
 
@@ -567,7 +567,7 @@ body {
 .stat.c-susp   .stat-value { color: var(--red); }
 .stat.c-rev    .stat-value { color: #818cf8; font-size: 22px; letter-spacing: -.5px; }
 
-/* ── TOOLBAR ─────────────────────────────────── */
+/* â”€â”€ TOOLBAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .search {
   flex: 1; min-width: 220px;
@@ -603,7 +603,7 @@ body {
 }
 .btn-add:hover { opacity: .9; transform: translateY(-1px); }
 
-/* ── TABLE ───────────────────────────────────── */
+/* â”€â”€ TABLE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .table-wrap {
   background: var(--surf);
   border: 1px solid var(--bdr);
@@ -635,7 +635,7 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 .td-date { font-size: 11.5px; color: var(--txt2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .td-actions { white-space: nowrap; }
 
-/* ── BADGES ──────────────────────────────────── */
+/* â”€â”€ BADGES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .badge {
   display: inline-block; font-size: 10.5px; font-weight: 700;
   padding: 3px 10px; border-radius: 100px; letter-spacing: .02em;
@@ -647,7 +647,7 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 .chip-ok   { background: var(--green-b); color: var(--green); }
 .chip-warn { background: var(--amber-b); color: var(--amber); }
 
-/* ── ACTION BUTTONS ──────────────────────────── */
+/* â”€â”€ ACTION BUTTONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .act {
   border: none; border-radius: 7px; font-size: 11px; font-weight: 700; font-family: var(--font);
   padding: 5px 12px; cursor: pointer; margin-right: 4px; margin-bottom: 3px;
@@ -662,7 +662,7 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 .act-blue { background: var(--blue-b);  color: #818cf8; border: 1px solid rgba(99,102,241,.2); }
 .act-del  { background: var(--red-b);   color: var(--red); border: 1px solid rgba(244,63,94,.18); }
 
-/* ── MODAL (slide-in) ────────────────────────── */
+/* â”€â”€ MODAL (slide-in) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #modal { display: none; position: fixed; inset: 0; z-index: 100; }
 #modal.open { display: flex; }
 .modal-backdrop {
@@ -699,7 +699,7 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 .mval { color: var(--txt); text-align: right; word-break: break-all; font-size: 13px; font-weight: 600; }
 .modal-footer { padding: 18px 26px 26px; border-top: 1px solid var(--bdr); display: flex; gap: 8px; flex-wrap: wrap; }
 
-/* ── LOADING ─────────────────────────────────── */
+/* â”€â”€ LOADING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #loading {
   display: none; position: fixed; inset: 0; background: rgba(4,5,7,.75);
   z-index: 200; align-items: center; justify-content: center;
@@ -711,7 +711,7 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── TOAST ───────────────────────────────────── */
+/* â”€â”€ TOAST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .toast {
   position: fixed; bottom: 28px; right: 28px; z-index: 300;
   background: var(--surf2); border: 1px solid var(--bdr2); border-radius: 14px;
@@ -724,7 +724,7 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 .toast.ok    { border-color: rgba(16,185,129,.3); color: var(--green); background: rgba(16,185,129,.06); }
 .toast.error { border-color: rgba(244,63,94,.3);  color: var(--red);   background: rgba(244,63,94,.06); }
 
-/* ── EDIT MODAL (inline overrides → CSS) ─────── */
+/* â”€â”€ EDIT MODAL (inline overrides â†’ CSS) â”€â”€â”€â”€â”€â”€â”€ */
 #modal-edit {
   display: none; position: fixed; inset: 0; z-index: 9999;
   background: rgba(0,0,0,.7); align-items: center; justify-content: center;
@@ -784,8 +784,8 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 <div id="login-screen">
   <div class="login-card">
     <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:4px;">
-      <img src="/logo.webp" alt="iiLocarPay" style="width:38px;height:38px;border-radius:10px;object-fit:contain;">
-      <span style="color:#4CAF50;font-weight:900;font-size:26px;letter-spacing:-1px;">iiLocarPay</span>
+      <img src="/logo.webp" alt="iLocarPay" style="width:38px;height:38px;border-radius:10px;object-fit:contain;">
+      <span style="color:#4CAF50;font-weight:900;font-size:26px;letter-spacing:-1px;">iLocarPay</span>
     </div>
     <div class="login-chip">Super Admin</div>
     <p class="login-sub">Acesso restrito ao administrador do sistema</p>
@@ -797,11 +797,11 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
       <button id="btn-continuar" class="btn-continue" onclick="doLogin()">Continuar</button>
       <div id="pin-err" class="login-err"></div>
     </div>
-    <!-- Etapa 2: código OTP por email -->
+    <!-- Etapa 2: cÃ³digo OTP por email -->
     <div id="step-otp" style="display:none;">
       <p style="font-size:13px;color:var(--txt2);margin-bottom:16px;text-align:center;line-height:1.5;">
-        📧 Código enviado para<br><strong>denisfelicio20@gmail.com</strong><br>
-        <span style="font-size:11px;color:var(--txt3);">Válido por 5 minutos</span>
+        ðŸ“§ CÃ³digo enviado para<br><strong>denisfelicio20@gmail.com</strong><br>
+        <span style="font-size:11px;color:var(--txt3);">VÃ¡lido por 5 minutos</span>
       </p>
       <input id="otp-input" type="text" inputmode="numeric" maxlength="6" class="login-input"
         placeholder="000000" autocomplete="one-time-code"
@@ -809,7 +809,7 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
         onkeydown="if(event.key==='Enter')doVerifyOtp()">
       <button id="btn-verificar" class="btn-continue" onclick="doVerifyOtp()">Verificar</button>
       <div id="otp-err" class="login-err"></div>
-      <button style="width:100%;background:none;border:none;color:var(--txt3);font-size:12px;cursor:pointer;margin-top:8px;" onclick="cancelOtp()">← Voltar</button>
+      <button style="width:100%;background:none;border:none;color:var(--txt3);font-size:12px;cursor:pointer;margin-top:8px;" onclick="cancelOtp()">â† Voltar</button>
     </div>
   </div>
 </div>
@@ -818,8 +818,8 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 <div id="app">
   <header class="topbar">
     <a style="display:flex;align-items:center;gap:8px;text-decoration:none;">
-      <img src="/logo.webp" alt="iiLocarPay" style="width:30px;height:30px;border-radius:8px;object-fit:contain;">
-      <span style="color:#4CAF50;font-weight:800;font-size:17px;letter-spacing:-.3px;">iiLocarPay</span>
+      <img src="/logo.webp" alt="iLocarPay" style="width:30px;height:30px;border-radius:8px;object-fit:contain;">
+      <span style="color:#4CAF50;font-weight:800;font-size:17px;letter-spacing:-.3px;">iLocarPay</span>
     </a>
     <span class="top-chip">Super Admin</span>
     <div class="topbar-gap"></div>
@@ -868,7 +868,7 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 <div id="modal-edit">
   <div class="edit-panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
-      <span class="edit-title">Editar Imobiliária</span>
+      <span class="edit-title">Editar ImobiliÃ¡ria</span>
       <button class="edit-close" onclick="closeEditModal()">&#215;</button>
     </div>
     <input type="hidden" id="edit-id">
@@ -887,11 +887,11 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
       </label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
         <label>
-          <span class="edit-field-label">Endereço</span>
+          <span class="edit-field-label">EndereÃ§o</span>
           <input id="edit-address" type="text" class="edit-input">
         </label>
         <label>
-          <span class="edit-field-label">Número</span>
+          <span class="edit-field-label">NÃºmero</span>
           <input id="edit-number" type="text" class="edit-input">
         </label>
       </div>
@@ -932,3 +932,4 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 
 </body>
 </html>
+
