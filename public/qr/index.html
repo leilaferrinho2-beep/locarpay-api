@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WhatsApp QR — iLocarPay</title>
+<title>WhatsApp QR — iiLocarPay</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: #111; color: #fff; font-family: Arial, sans-serif;
@@ -29,7 +29,7 @@
 </style>
 </head>
 <body>
-<h1>📱 WhatsApp — iLocarPay</h1>
+<h1>📱 WhatsApp — iiLocarPay</h1>
 <p class="sub">WhatsApp → Menu (⋮) → Dispositivos conectados → Conectar dispositivo</p>
 
 <div id="main">
@@ -58,7 +58,7 @@ async function fetchQr() {
   timerEl.textContent = '--';
 
   try {
-    const r = await fetch('/api/locarpay-broker', {
+    const r = await fetch('/api/ilocarpay-broker', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ step: 'whatsapp-qr' })

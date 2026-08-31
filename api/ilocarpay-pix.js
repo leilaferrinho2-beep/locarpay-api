@@ -1,4 +1,4 @@
-// POST /api/locarpay-pix
+// POST /api/ilocarpay-pix
 // { tenantId, chargeId }
 // Lê CPF/nome do Firestore, cria cliente+cobrança no Asaas, salva QR no Firestore
 
@@ -237,7 +237,7 @@ export default async function handler(req, res) {
     const planCheck = await checkOwnerPlanActive(db, ownerId);
     if (!planCheck.active) {
       return res.status(402).json({
-        error: 'Plano expirado. Acesse o painel LocarPay para renovar a assinatura.',
+        error: 'Plano expirado. Acesse o painel iLocarPay para renovar a assinatura.',
         reason: planCheck.reason
       });
     }
@@ -445,7 +445,7 @@ export default async function handler(req, res) {
     });
 
   } catch (e) {
-    console.error('locarpay-pix error:', e.message);
+    console.error('ilocarpay-pix error:', e.message);
     return res.status(500).json({ error: e.message });
   }
 }

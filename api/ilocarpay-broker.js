@@ -1,5 +1,5 @@
-// POST /api/locarpay-broker — Fluxo completo do corretor
-// GET  /api/locarpay-broker?view=contract&contractId=xxx — HTML do contrato (para Assinafy)
+// POST /api/ilocarpay-broker — Fluxo completo do corretor
+// GET  /api/ilocarpay-broker?view=contract&contractId=xxx — HTML do contrato (para Assinafy)
 //
 // Steps POST:
 //   register-broker   → { ownerId, name, email, phone }         → cadastra corretor
@@ -18,7 +18,7 @@ import { PDFDocument as PdfLib, rgb, StandardFonts } from 'pdf-lib';
 
 function initFirebase() {
   if (getApps().length) return;
-  initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT)) });
+  initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.IILOCARPAY_SERVICE_ACCOUNT)) });
 }
 
 const ASSINAFY_BASE = 'https://api.assinafy.com.br/v1';
@@ -103,7 +103,7 @@ async function generateContractPdf(data) {
 
   // Cabeçalho
   write('CONTRATO DE LOCAÇÃO RESIDENCIAL', { bold: true, size: 16, gap: 4 });
-  write(`Emitido por iLocarPay — ${new Date().toLocaleDateString('pt-BR')}`, { size: 9, gap: 14 });
+  write(`Emitido por iiLocarPay — ${new Date().toLocaleDateString('pt-BR')}`, { size: 9, gap: 14 });
 
   section('1. DAS PARTES');
   field('Locador / Proprietário', data.ownerName);
@@ -191,7 +191,7 @@ async function sendEmail(to, subject, html, attachments) {
     host: 'smtp.titan.email', port: 465, secure: true,
     auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
   });
-  await transporter.sendMail({ from: 'iLocarPay <denis@dlftech.com.br>', to, subject, html, attachments });
+  await transporter.sendMail({ from: 'iiLocarPay <denis@dlftech.com.br>', to, subject, html, attachments });
 }
 
 async function sendContractEmail({ landlordName, landlordEmail, tenantName, tenantEmail, propAddr, pdfData }) {
@@ -199,7 +199,7 @@ async function sendContractEmail({ landlordName, landlordEmail, tenantName, tena
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
       <div style="background:#1a1a1a;padding:32px;text-align:center">
-        <h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1>
+        <h1 style="color:#4CAF50;margin:0;font-size:28px">iiLocarPay</h1>
         <p style="color:#ccc;margin:8px 0 0">Gestão inteligente de aluguéis</p>
       </div>
       <div style="padding:32px">
@@ -209,10 +209,10 @@ async function sendContractEmail({ landlordName, landlordEmail, tenantName, tena
         ${addrLine}
         <p style="color:#444">Por favor, revise o contrato. Em breve você receberá o link para assinatura digital.</p>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-        <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay • <a href="https://www.ilocarpay.com.br" style="color:#4CAF50">ilocarpay.com.br</a></p>
+        <p style="color:#aaa;font-size:12px;text-align:center">Equipe iiLocarPay • <a href="https://www.ilocarpay.com.br" style="color:#4CAF50">ilocarpay.com.br</a></p>
       </div>
     </div>`;
-  await sendEmail(landlordEmail, '📄 Contrato de Locação — iLocarPay', html, [
+  await sendEmail(landlordEmail, '📄 Contrato de Locação — iiLocarPay', html, [
     { filename: `contrato_${(tenantName || tenantEmail).replace(/\s+/g, '_')}.pdf`, content: pdfData, contentType: 'application/pdf' }
   ]);
 }
@@ -267,7 +267,7 @@ function generateContractHtml(data) {
 </head>
 <body>
 <h1>CONTRATO DE LOCAÇÃO RESIDENCIAL</h1>
-<p style="text-align:center;color:#888;font-size:12px">Emitido por iLocarPay — ${new Date().toLocaleDateString('pt-BR')}</p>
+<p style="text-align:center;color:#888;font-size:12px">Emitido por iiLocarPay — ${new Date().toLocaleDateString('pt-BR')}</p>
 
 <h2>1. Das Partes</h2>
 <div class="parties">
@@ -370,16 +370,16 @@ async function sendWelcomeBrokerEmail({ brokerName, brokerEmail, ownerName }) {
     `
     <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;padding:32px 24px;background:#fff">
       <div style="margin-bottom:20px">
-        <span style="font-weight:900;font-size:20px;color:#4CAF50">● iLocarPay</span>
+        <span style="font-weight:900;font-size:20px;color:#4CAF50">● iiLocarPay</span>
       </div>
       <h2 style="color:#1a1a1a;margin-bottom:8px;font-size:20px">Olá, ${firstName}! 👋</h2>
       <p style="color:#555;line-height:1.7;margin-bottom:20px">
-        Você foi cadastrado como <strong>corretor</strong> na imobiliária <strong>${ownerName}</strong> na plataforma iLocarPay.
+        Você foi cadastrado como <strong>corretor</strong> na imobiliária <strong>${ownerName}</strong> na plataforma iiLocarPay.
       </p>
       <div style="background:#f0f7f0;border-radius:10px;padding:20px;margin-bottom:24px">
         <h3 style="color:#2e7d32;font-size:14px;margin-bottom:12px;margin-top:0">Como acessar o app</h3>
         <ol style="color:#555;line-height:2;padding-left:20px;margin:0">
-          <li>Baixe o app <strong>iLocarPay</strong> para Android</li>
+          <li>Baixe o app <strong>iiLocarPay</strong> para Android</li>
           <li>Na tela de login, informe seu e-mail: <strong>${brokerEmail}</strong></li>
           <li>Você receberá um código de acesso por e-mail</li>
           <li>Digite o código e pronto — você já está dentro!</li>
@@ -391,7 +391,7 @@ async function sendWelcomeBrokerEmail({ brokerName, brokerEmail, ownerName }) {
       <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
       <p style="color:#aaa;font-size:12px;margin:0">
         Dúvidas? Entre em contato com <strong>${ownerName}</strong>.<br>
-        Este convite foi enviado automaticamente pela plataforma iLocarPay.
+        Este convite foi enviado automaticamente pela plataforma iiLocarPay.
       </p>
     </div>
     `
@@ -651,7 +651,7 @@ async function handleApproveLead(db, body) {
     try {
       const adminPhone = process.env.ADMIN_WHATSAPP || '5514996270111';
       await sendWhatsApp(adminPhone,
-        `⚠️ iLocarPay: falha ao enviar contrato ${contractId} ao Assinafy.\nErro: ${e.message}\nAcesse o painel e clique em "Reenviar ao Assinafy".`
+        `⚠️ iiLocarPay: falha ao enviar contrato ${contractId} ao Assinafy.\nErro: ${e.message}\nAcesse o painel e clique em "Reenviar ao Assinafy".`
       ).catch(() => {});
     } catch (_) {}
   }
@@ -684,10 +684,10 @@ async function handleApproveLead(db, body) {
     // E-mail boas-vindas ao inquilino
     (async () => {
       try {
-        await sendEmail(tenantEmail, '🎉 Sua locação foi aprovada — iLocarPay', `
+        await sendEmail(tenantEmail, '🎉 Sua locação foi aprovada — iiLocarPay', `
           <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
             <div style="background:#1a1a1a;padding:32px;text-align:center">
-              <h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1>
+              <h1 style="color:#4CAF50;margin:0;font-size:28px">iiLocarPay</h1>
               <p style="color:#ccc;margin:8px 0 0">Gestão inteligente de aluguéis</p>
             </div>
             <div style="padding:32px">
@@ -698,12 +698,12 @@ async function handleApproveLead(db, body) {
               <div style="text-align:center;margin:28px 0">
                 <a href="https://www.ilocarpay.com.br/download"
                    style="background:#4CAF50;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
-                  📱 Baixar app iLocarPay
+                  📱 Baixar app iiLocarPay
                 </a>
               </div>
               <p style="color:#888;font-size:13px">Após instalar, entre com o e-mail <strong>${tenantEmail}</strong> para acessar seu contrato e acompanhar as cobranças.</p>
               <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-              <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay • <a href="https://www.ilocarpay.com.br" style="color:#4CAF50">ilocarpay.com.br</a></p>
+              <p style="color:#aaa;font-size:12px;text-align:center">Equipe iiLocarPay • <a href="https://www.ilocarpay.com.br" style="color:#4CAF50">ilocarpay.com.br</a></p>
             </div>
           </div>
         `);
@@ -713,25 +713,25 @@ async function handleApproveLead(db, body) {
 
     // WhatsApp proprietário
     landlordPhone ? sendWhatsApp(landlordPhone,
-      `Olá, ${landlordName}! 🏠\n\nA locação do imóvel *${propAddrWa}* foi aprovada pela imobiliária.\n\nVocê receberá um e-mail com o PDF do contrato e um link para assinatura digital. Verifique sua caixa de entrada (${landlordEmail}).\n\n— iLocarPay`,
+      `Olá, ${landlordName}! 🏠\n\nA locação do imóvel *${propAddrWa}* foi aprovada pela imobiliária.\n\nVocê receberá um e-mail com o PDF do contrato e um link para assinatura digital. Verifique sua caixa de entrada (${landlordEmail}).\n\n— iiLocarPay`,
       owner, lead.ownerId
     ).catch(e => console.warn('[approve-lead] whatsapp landlord:', e.message)) : Promise.resolve(),
 
     // WhatsApp inquilino
     lead.tenant.phone ? sendWhatsApp(lead.tenant.phone,
-      `Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉\n\nSua locação do imóvel *${propAddrWa}* foi aprovada!\n\nO contrato será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o link no seu e-mail (${tenantEmail}).\n\n📲 *Baixe o app iLocarPay:*\nhttps://www.ilocarpay.com.br/download`,
+      `Parabéns, ${lead.tenant.name || 'inquilino'}! 🎉\n\nSua locação do imóvel *${propAddrWa}* foi aprovada!\n\nO contrato será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o link no seu e-mail (${tenantEmail}).\n\n📲 *Baixe o app iiLocarPay:*\nhttps://www.ilocarpay.com.br/download`,
       owner, lead.ownerId
     ).catch(e => console.warn('[approve-lead] whatsapp tenant:', e.message)) : Promise.resolve(),
 
     // E-mail ao corretor
-    lead.brokerEmail ? sendEmail(lead.brokerEmail, '✅ Lead aprovado — iLocarPay', `
+    lead.brokerEmail ? sendEmail(lead.brokerEmail, '✅ Lead aprovado — iiLocarPay', `
       <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px">
-        <h2 style="color:#4CAF50">iLocarPay</h2>
+        <h2 style="color:#4CAF50">iiLocarPay</h2>
         <p>Olá, <strong>${lead.brokerName || lead.brokerEmail}</strong>!</p>
         <p>O lead <strong>${lead.tenant.name}</strong> foi <strong style="color:#4CAF50">aprovado</strong>.</p>
         <p>O contrato foi enviado para assinatura digital. Após a assinatura de ambas as partes, as chaves poderão ser entregues.</p>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-        <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay</p>
+        <p style="color:#aaa;font-size:12px;text-align:center">Equipe iiLocarPay</p>
       </div>
     `).catch(e => console.warn('[approve-lead] broker email:', e.message)) : Promise.resolve(),
   ]);
@@ -796,10 +796,10 @@ async function createAssinafyContract(db, contractId, data) {
            </div>
            <p style="color:#888;font-size:13px">Após sua assinatura, o contrato será enviado ao inquilino para assinatura.</p>`
         : `<p style="color:#444">Você receberá o e-mail da <strong>Assinafy</strong> com o link de assinatura digital. Verifique também sua caixa de spam.</p>`;
-      await sendEmail(data.ownerEmail, '📝 Contrato aguarda sua assinatura — iLocarPay', `
+      await sendEmail(data.ownerEmail, '📝 Contrato aguarda sua assinatura — iiLocarPay', `
         <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
           <div style="background:#1a1a1a;padding:32px;text-align:center">
-            <h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1>
+            <h1 style="color:#4CAF50;margin:0;font-size:28px">iiLocarPay</h1>
           </div>
           <div style="padding:32px">
             <p>Olá, <strong>${data.ownerName || 'Proprietário'}</strong>!</p>
@@ -822,10 +822,10 @@ async function createAssinafyContract(db, contractId, data) {
             </a>
            </div>`
         : `<p style="color:#444;margin:12px 0">O proprietário assina primeiro. Assim que ele concluir, você receberá o link de assinatura no seu e-mail automaticamente.</p>`;
-      await sendEmail(data.tenantEmail, '📋 Seu contrato foi gerado — iLocarPay', `
+      await sendEmail(data.tenantEmail, '📋 Seu contrato foi gerado — iiLocarPay', `
         <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
           <div style="background:#1a1a1a;padding:32px;text-align:center">
-            <h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1>
+            <h1 style="color:#4CAF50;margin:0;font-size:28px">iiLocarPay</h1>
             <p style="color:#aaa;margin:6px 0 0;font-size:14px">Gestão inteligente de aluguéis</p>
           </div>
           <div style="padding:32px">
@@ -833,11 +833,11 @@ async function createAssinafyContract(db, contractId, data) {
             <p style="color:#444">O contrato de locação do imóvel <strong>${data.propertyAddress || ''}</strong> foi gerado com sucesso.</p>
             ${signSection}
             <hr style="border:none;border-top:1px solid #ddd;margin:24px 0">
-            <p style="font-weight:700;margin-bottom:8px">📱 Acompanhe tudo pelo app iLocarPay</p>
+            <p style="font-weight:700;margin-bottom:8px">📱 Acompanhe tudo pelo app iiLocarPay</p>
             <p style="color:#444;font-size:14px;margin-bottom:16px">Baixe o app para acompanhar cobranças, contrato e enviar chamados de manutenção.</p>
             <div style="text-align:center;margin:20px 0">
               <a href="https://www.ilocarpay.com.br/download" style="background:#2E7D32;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
-                📲 Baixar app iLocarPay
+                📲 Baixar app iiLocarPay
               </a>
             </div>
             <div style="background:#f0f7f0;border-radius:8px;padding:14px;font-size:13px;color:#444">
@@ -847,7 +847,7 @@ async function createAssinafyContract(db, contractId, data) {
               3. Digite o código que chegará neste e-mail
             </div>
             <hr style="border:none;border-top:1px solid #ddd;margin:24px 0">
-            <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay • <a href="https://www.ilocarpay.com.br" style="color:#4CAF50">ilocarpay.com.br</a></p>
+            <p style="color:#aaa;font-size:12px;text-align:center">Equipe iiLocarPay • <a href="https://www.ilocarpay.com.br" style="color:#4CAF50">ilocarpay.com.br</a></p>
           </div>
         </div>
       `);
@@ -963,7 +963,7 @@ async function handleGenerateContract(db, body) {
   const addr = c.propertyAddress || c.address || c.propertyCode || 'o imóvel';
   if (landlordPhone) {
     await sendWhatsApp(landlordPhone,
-      `Olá, ${landlordName}! 🏠\n\nUm contrato de locação do imóvel *${addr}* foi gerado e enviado para o seu e-mail (${landlordEmail}) para assinatura digital.\n\nPor favor, verifique sua caixa de entrada e assine o contrato para concluir a locação.\n\n— iLocarPay`,
+      `Olá, ${landlordName}! 🏠\n\nUm contrato de locação do imóvel *${addr}* foi gerado e enviado para o seu e-mail (${landlordEmail}) para assinatura digital.\n\nPor favor, verifique sua caixa de entrada e assine o contrato para concluir a locação.\n\n— iiLocarPay`,
       owner, c.ownerId
     );
   }
@@ -971,7 +971,7 @@ async function handleGenerateContract(db, body) {
   // WhatsApp ao inquilino informando que o contrato vai ao proprietário primeiro
   if (tenantPhone) {
     await sendWhatsApp(tenantPhone,
-      `Olá, ${tenantName}! 🎉\n\nO contrato de locação do imóvel *${addr}* foi gerado. Ele será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o contrato no seu e-mail (${c.tenantEmail}) para assinar digitalmente.\n\n— iLocarPay`,
+      `Olá, ${tenantName}! 🎉\n\nO contrato de locação do imóvel *${addr}* foi gerado. Ele será assinado primeiro pelo proprietário. Assim que ele assinar, você receberá o contrato no seu e-mail (${c.tenantEmail}) para assinar digitalmente.\n\n— iiLocarPay`,
       owner, c.ownerId
     );
   }
@@ -1030,9 +1030,9 @@ async function handleCheckContractStatus(db, body) {
     const tenantUrl   = signingUrls.find(u => u.signer_id === signerId2)?.url || null;
     if (tenantUrl && c.tenantEmail) {
       try {
-        await sendEmail(c.tenantEmail, '📝 Contrato aguarda sua assinatura — iLocarPay', `
+        await sendEmail(c.tenantEmail, '📝 Contrato aguarda sua assinatura — iiLocarPay', `
           <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
-            <div style="background:#1a1a1a;padding:32px;text-align:center"><h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1></div>
+            <div style="background:#1a1a1a;padding:32px;text-align:center"><h1 style="color:#4CAF50;margin:0;font-size:28px">iiLocarPay</h1></div>
             <div style="padding:32px">
               <p>Olá, <strong>${c.tenantName || 'Inquilino'}</strong>!</p>
               <p>O proprietário assinou o contrato. Agora é a sua vez!</p>
@@ -1127,14 +1127,14 @@ async function handleRejectLead(db, body) {
 
   if (lead.brokerEmail) {
     try {
-      await sendEmail(lead.brokerEmail, '❌ Lead não aprovado — iLocarPay', `
+      await sendEmail(lead.brokerEmail, '❌ Lead não aprovado — iiLocarPay', `
         <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px">
-          <h2 style="color:#ef5350">iLocarPay</h2>
+          <h2 style="color:#ef5350">iiLocarPay</h2>
           <p>Olá, <strong>${lead.brokerName || lead.brokerEmail}</strong>!</p>
           <p>O lead <strong>${lead.tenant?.name}</strong> não foi aprovado pela imobiliária.</p>
           ${reason ? `<p><strong>Motivo:</strong> ${reason}</p>` : ''}
           <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-          <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay</p>
+          <p style="color:#aaa;font-size:12px;text-align:center">Equipe iiLocarPay</p>
         </div>
       `);
     } catch (_) {}
@@ -1153,7 +1153,7 @@ async function handleRejectLead(db, body) {
   // WhatsApp ao inquilino — neutro, sem expor motivo
   if (tenant.phone) {
     await sendWhatsApp(tenant.phone,
-      `Olá, ${tenant.name || 'inquilino'}.\n\nInformamos que sua proposta de locação para o imóvel *${addr}* não foi aprovada neste momento.\n\nPara mais informações, entre em contato com a imobiliária responsável.\n\n— iLocarPay`,
+      `Olá, ${tenant.name || 'inquilino'}.\n\nInformamos que sua proposta de locação para o imóvel *${addr}* não foi aprovada neste momento.\n\nPara mais informações, entre em contato com a imobiliária responsável.\n\n— iiLocarPay`,
       rejectOwnerData, lead.ownerId
     );
   }
@@ -1161,7 +1161,7 @@ async function handleRejectLead(db, body) {
   // WhatsApp ao proprietário
   if (lead.landlordPhone) {
     await sendWhatsApp(lead.landlordPhone,
-      `Olá! Informamos que a proposta de locação do imóvel *${addr}* não foi aprovada pela imobiliária neste momento.\n\n— iLocarPay`,
+      `Olá! Informamos que a proposta de locação do imóvel *${addr}* não foi aprovada pela imobiliária neste momento.\n\n— iiLocarPay`,
       rejectOwnerData, lead.ownerId
     );
   }
@@ -1478,7 +1478,7 @@ export default async function handler(req, res) {
       const instance = process.env.EVOLUTION_INSTANCE;
       const adminPhone = process.env.ADMIN_WHATSAPP || '5514996270111';
       if (baseUrl && apiKey && instance) {
-        const msg = `⚠️ *iLocarPay* - WhatsApp desconectado!\n\nInstância "${instance}" status: *${state}*.\n\nAcesse o painel para reconectar via QR code.`;
+        const msg = `⚠️ *iiLocarPay* - WhatsApp desconectado!\n\nInstância "${instance}" status: *${state}*.\n\nAcesse o painel para reconectar via QR code.`;
         fetch(`${baseUrl}/message/sendText/${instance}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', apikey: apiKey },
@@ -1544,9 +1544,9 @@ export default async function handler(req, res) {
                 const signingUrls  = assignDetail?.data?.signing_urls || assignDetail?.signing_urls || [];
                 const tenantUrl    = signingUrls.find(u => u.signer_id === contractData.assinafySignerId2)?.url || null;
                 if (tenantUrl && contractData.tenantEmail) {
-                  await sendEmail(contractData.tenantEmail, '📝 Contrato aguarda sua assinatura — iLocarPay', `
+                  await sendEmail(contractData.tenantEmail, '📝 Contrato aguarda sua assinatura — iiLocarPay', `
                     <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;background:#f9f9f9;border-radius:12px;overflow:hidden">
-                      <div style="background:#1a1a1a;padding:32px;text-align:center"><h1 style="color:#4CAF50;margin:0;font-size:28px">iLocarPay</h1></div>
+                      <div style="background:#1a1a1a;padding:32px;text-align:center"><h1 style="color:#4CAF50;margin:0;font-size:28px">iiLocarPay</h1></div>
                       <div style="padding:32px">
                         <p>Olá, <strong>${contractData.tenantName || 'Inquilino'}</strong>!</p>
                         <p>O proprietário assinou o contrato. Agora é a sua vez!</p>
@@ -1650,7 +1650,7 @@ async function handleCronRetryAssinafy(db) {
         return res.status(200).send(html);
       } catch (e) { return res.status(500).send(e.message); }
     }
-    return res.status(200).json({ ok: true, endpoint: 'locarpay-broker' });
+    return res.status(200).json({ ok: true, endpoint: 'ilocarpay-broker' });
   }
 
   // Cron: retentar contratos que falharam no Assinafy
@@ -1667,7 +1667,7 @@ async function handleCronRetryAssinafy(db) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // Webhook do Evolution API (POST /api/locarpay-broker?step=evolution-webhook)
+  // Webhook do Evolution API (POST /api/ilocarpay-broker?step=evolution-webhook)
   if (req.query?.step === 'evolution-webhook') {
     try {
       initFirebase();
@@ -1710,7 +1710,7 @@ async function handleCronRetryAssinafy(db) {
   try {
     initFirebase();
     const db   = getFirestore();
-    const sa   = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT || '{}');
+    const sa   = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.IILOCARPAY_SERVICE_ACCOUNT || '{}');
     req._storageBucket = 'transgu-web-6d50f.firebasestorage.app';
     const { step } = req.body || {};
     let result;
@@ -1743,7 +1743,7 @@ async function handleCronRetryAssinafy(db) {
       }
       const { baseUrl, apiKey, instance } = getEvoConfig(ownerData, ownerId);
       const evoFetch = makeEvoFetch(baseUrl, apiKey);
-      const webhookUrl = 'https://www.ilocarpay.com.br/api/locarpay-broker?step=evolution-webhook';
+      const webhookUrl = 'https://www.ilocarpay.com.br/api/ilocarpay-broker?step=evolution-webhook';
       const body = JSON.stringify({ webhook: { enabled: true, url: webhookUrl, webhook_by_events: true, events: ['MESSAGES_UPDATE', 'MESSAGES_UPSERT'] } });
       const r = await evoFetch(`webhook/set/${instance}`, { method: 'POST', body });
       const text = await r.text();
@@ -1789,13 +1789,13 @@ async function handleCronRetryAssinafy(db) {
     else if (step === 'send-whatsapp-test') {
       const { phone, message } = req.body;
       if (!phone) throw Object.assign(new Error('phone obrigatório'), { status: 400 });
-      await sendWhatsApp(phone, message || 'Teste iLocarPay\n\nhttps://www.ilocarpay.com.br');
+      await sendWhatsApp(phone, message || 'Teste iiLocarPay\n\nhttps://www.ilocarpay.com.br');
       result = { ok: true };
     }
     else if (step === 'test-email') {
       const { to } = req.body;
       if (!to) throw Object.assign(new Error('to obrigatório'), { status: 400 });
-      await sendEmail(to, '✅ Teste SMTP — iLocarPay', '<p>E-mail de teste enviado com sucesso!</p>');
+      await sendEmail(to, '✅ Teste SMTP — iiLocarPay', '<p>E-mail de teste enviado com sucesso!</p>');
       result = { ok: true, to, smtp: 'noreply@dlftech.com.br' };
     }
     else if (step === 'test-assinafy') {
@@ -1873,7 +1873,7 @@ async function handleCronRetryAssinafy(db) {
     else throw Object.assign(new Error('step inválido'), { status: 400 });
     res.status(200).json(result);
   } catch (e) {
-    console.error('[locarpay-broker]', e.message);
+    console.error('[ilocarpay-broker]', e.message);
     res.status(e.status || 500).json({ error: e.message });
   }
 }

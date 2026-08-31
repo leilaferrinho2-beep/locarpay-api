@@ -1,4 +1,4 @@
-// POST /api/locarpay-card
+// POST /api/ilocarpay-card
 // step:"init"           → { tenantId, chargeId, card }           → micro-cobrança no cartão, retorna { verificationId }
 // step:"verify-amount"  → { verificationId, userAmount }         → valida valor visto no banco; estorna micro se correto
 // step:"confirm"        → { verificationId, saveCard? }          → cobra aluguel real (exige amountVerified=true)
@@ -108,7 +108,7 @@ async function createPixForCharge(db, chargeId, tenantId, amount, dueDate, apiKe
     billingType: 'PIX',
     value:       parseFloat(amount.toFixed(2)),
     dueDate:     dueDateStr,
-    description: 'Aluguel iLocarPay',
+    description: 'Aluguel iiLocarPay',
     fine:     { value: fineVal },
     interest: { value: interestVal },
   };
@@ -310,7 +310,7 @@ async function handleInit(db, body, apiKey) {
       billingType:          'CREDIT_CARD',
       value:                microAmount,
       dueDate,
-      description:          'Verificação de cartão iLocarPay',
+      description:          'Verificação de cartão iiLocarPay',
       creditCardToken:      savedToken,
       creditCardHolderInfo: holderInfoBase
     };
@@ -320,7 +320,7 @@ async function handleInit(db, body, apiKey) {
       billingType:          'CREDIT_CARD',
       value:                microAmount,
       dueDate,
-      description:          'Verificação de cartão iLocarPay',
+      description:          'Verificação de cartão iiLocarPay',
       creditCard: {
         holderName,
         number:      number.replace(/\D/g, ''),
@@ -1060,13 +1060,13 @@ async function handleGenerateCharges(db, body) {
       const dueFmt = dueDate.toLocaleDateString('pt-BR');
       try {
         await transporter.sendMail({
-          from:    'iLocarPay <denis@dlftech.com.br>',
+          from:    'iiLocarPay <denis@dlftech.com.br>',
           to:      tenantEmail,
           subject: `Nova cobrança de aluguel — ${fmt.format(baseRent)}`,
           html: `
             <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#fff">
               <div style="background:#1B5E20;padding:20px 28px;border-radius:12px 12px 0 0">
-                <span style="color:#fff;font-weight:800;font-size:20px">iiLocarPay</span>
+                <span style="color:#fff;font-weight:800;font-size:20px">iiiLocarPay</span>
               </div>
               <div style="padding:28px 28px 8px">
                 <p style="color:#888;font-size:13px;margin:0 0 6px">NOVA COBRANÇA — ${monthStr.toUpperCase()}</p>
@@ -1088,11 +1088,11 @@ async function handleGenerateCharges(db, body) {
                   </table>
                 </div>
                 <div style="text-align:center;margin-bottom:24px">
-                  <p style="color:#444;font-size:14px;margin-bottom:12px">Abra o app iiLocarPay para gerar o QR Code PIX e pagar em segundos.</p>
-                  <span style="display:inline-block;background:#1B5E20;color:#fff;font-weight:700;font-size:15px;padding:12px 32px;border-radius:8px">Pagar via iiLocarPay</span>
+                  <p style="color:#444;font-size:14px;margin-bottom:12px">Abra o app iiiLocarPay para gerar o QR Code PIX e pagar em segundos.</p>
+                  <span style="display:inline-block;background:#1B5E20;color:#fff;font-weight:700;font-size:15px;padding:12px 32px;border-radius:8px">Pagar via iiiLocarPay</span>
                 </div>
                 <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-                <p style="color:#bbb;font-size:11px;text-align:center">Pague até ${dueFmt} para evitar multas e juros. Mensagem automática do iiLocarPay.</p>
+                <p style="color:#bbb;font-size:11px;text-align:center">Pague até ${dueFmt} para evitar multas e juros. Mensagem automática do iiiLocarPay.</p>
               </div>
             </div>
           `
@@ -1234,13 +1234,13 @@ async function handleAutoGenerateUpcoming(db, { ownerId, ownerData = {} }) {
       const dueFmt = dueDate.toLocaleDateString('pt-BR');
       try {
         await transporter.sendMail({
-          from:    'iLocarPay <denis@dlftech.com.br>',
+          from:    'iiLocarPay <denis@dlftech.com.br>',
           to:      tenantEmail,
           subject: `Nova cobrança de aluguel — ${fmt.format(baseRent)}`,
           html: `
             <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#fff">
               <div style="background:#1B5E20;padding:20px 28px;border-radius:12px 12px 0 0">
-                <span style="color:#fff;font-weight:800;font-size:20px">iLocarPay</span>
+                <span style="color:#fff;font-weight:800;font-size:20px">iiLocarPay</span>
               </div>
               <div style="padding:28px 28px 8px">
                 <p style="color:#888;font-size:13px;margin:0 0 6px">NOVA COBRANÇA — ${monthStr}</p>
@@ -1262,11 +1262,11 @@ async function handleAutoGenerateUpcoming(db, { ownerId, ownerData = {} }) {
                   </table>
                 </div>
                 <div style="text-align:center;margin-bottom:24px">
-                  <p style="color:#444;font-size:14px;margin-bottom:12px">Abra o app iLocarPay para gerar o QR Code PIX e pagar em segundos.</p>
-                  <span style="display:inline-block;background:#1B5E20;color:#fff;font-weight:700;font-size:15px;padding:12px 32px;border-radius:8px">Pagar via iLocarPay</span>
+                  <p style="color:#444;font-size:14px;margin-bottom:12px">Abra o app iiLocarPay para gerar o QR Code PIX e pagar em segundos.</p>
+                  <span style="display:inline-block;background:#1B5E20;color:#fff;font-weight:700;font-size:15px;padding:12px 32px;border-radius:8px">Pagar via iiLocarPay</span>
                 </div>
                 <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-                <p style="color:#bbb;font-size:11px;text-align:center">Pague até ${dueFmt} para evitar multas e juros. Mensagem automática do iLocarPay.</p>
+                <p style="color:#bbb;font-size:11px;text-align:center">Pague até ${dueFmt} para evitar multas e juros. Mensagem automática do iiLocarPay.</p>
               </div>
             </div>
           `
@@ -1359,13 +1359,13 @@ async function handleMarkOverdue(db, body) {
       const total = base + multa + juros;
       try {
         await transporter.sendMail({
-          from: 'iLocarPay <denis@dlftech.com.br>',
+          from: 'iiLocarPay <denis@dlftech.com.br>',
           to: email,
           subject: `⚠️ Cobrança vencida — regularize agora`,
           html: `
             <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#fff">
               <div style="background:#b71c1c;padding:20px 28px;border-radius:12px 12px 0 0">
-                <span style="color:#fff;font-weight:800;font-size:20px">iiLocarPay</span>
+                <span style="color:#fff;font-weight:800;font-size:20px">iiiLocarPay</span>
                 <span style="color:#ffcdd2;font-size:13px;margin-left:10px">⚠️ Cobrança Vencida</span>
               </div>
               <div style="padding:28px 28px 8px">
@@ -1396,10 +1396,10 @@ async function handleMarkOverdue(db, body) {
                   </table>
                 </div>
                 <div style="text-align:center;margin-bottom:24px">
-                  <span style="display:inline-block;background:#b71c1c;color:#fff;font-weight:700;font-size:15px;padding:12px 32px;border-radius:8px">Regularizar no iiLocarPay</span>
+                  <span style="display:inline-block;background:#b71c1c;color:#fff;font-weight:700;font-size:15px;padding:12px 32px;border-radius:8px">Regularizar no iiiLocarPay</span>
                 </div>
                 <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-                <p style="color:#bbb;font-size:11px;text-align:center">Os juros aumentam a cada dia de atraso. Mensagem automática do iiLocarPay.</p>
+                <p style="color:#bbb;font-size:11px;text-align:center">Os juros aumentam a cada dia de atraso. Mensagem automática do iiiLocarPay.</p>
               </div>
             </div>
           `
@@ -1459,7 +1459,7 @@ async function handleSendPush(db, body) {
 
     await getMessaging().send({
       token,
-      notification: { title: title || 'iiLocarPay', body: message || 'Você tem uma cobrança pendente.' },
+      notification: { title: title || 'iiiLocarPay', body: message || 'Você tem uma cobrança pendente.' },
       data: chargeId ? { chargeId, type: 'reminder' } : { type: 'reminder' },
       android: { priority: 'high' }
     });
@@ -1490,7 +1490,7 @@ async function handleSendPush(db, body) {
 
   if (tokens.length === 0) return { ok: true, sent: 0, reason: 'sem_tokens' };
 
-  const defaultTitle = title || 'iiLocarPay — Cobrança pendente';
+  const defaultTitle = title || 'iiiLocarPay — Cobrança pendente';
   const defaultBody  = message || 'Você tem uma cobrança de aluguel aguardando pagamento. Acesse o app para pagar.';
 
   // Envia em lotes de 500 (limite FCM multicast)
@@ -1621,14 +1621,14 @@ async function handleSendReceipt(db, body) {
   });
 
   await transporter.sendMail({
-    from: `iiLocarPay — ${ownerName} <denis@dlftech.com.br>`,
+    from: `iiiLocarPay — ${ownerName} <denis@dlftech.com.br>`,
     to: user.email,
     subject: `Recibo de pagamento — ${monthRef}`,
     html: `
       <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#fafafa">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
           <div style="background:#2D6A2D;border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff">L</div>
-          <span style="font-size:18px;font-weight:700;color:#1a1a1a">iiLocarPay</span>
+          <span style="font-size:18px;font-weight:700;color:#1a1a1a">iiiLocarPay</span>
         </div>
         <div style="background:#fff;border-radius:12px;padding:28px;border:1px solid #e8e8e8">
           <div style="text-align:center;margin-bottom:24px">
@@ -1649,7 +1649,7 @@ async function handleSendReceipt(db, body) {
             <tr><td style="padding:12px 0;font-weight:700;font-size:16px">Total pago</td>
                 <td style="padding:12px 0;text-align:right;font-weight:800;font-size:18px;color:#2D6A2D">${fmt.format(total)}</td></tr>
           </table>
-          <p style="color:#888;font-size:12px;text-align:center;margin:0">Pago em ${paidAt} • Gerado por iiLocarPay</p>
+          <p style="color:#888;font-size:12px;text-align:center;margin:0">Pago em ${paidAt} • Gerado por iiiLocarPay</p>
         </div>
         <p style="color:#aaa;font-size:11px;text-align:center;margin-top:20px">Este é um comprovante automático. Em caso de dúvidas, entre em contato com ${ownerName}.</p>
       </div>`
@@ -1783,14 +1783,14 @@ async function handleMonthlyReport(db, body) {
   });
 
   await transporter.sendMail({
-    from: 'iLocarPay <denis@dlftech.com.br>',
+    from: 'iiLocarPay <denis@dlftech.com.br>',
     to: owner.email,
-    subject: `Relatório de ${monthName} — iiLocarPay`,
+    subject: `Relatório de ${monthName} — iiiLocarPay`,
     html: `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;background:#fafafa">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
           <div style="background:#2D6A2D;border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff">L</div>
-          <span style="font-size:18px;font-weight:700;color:#1a1a1a">iiLocarPay</span>
+          <span style="font-size:18px;font-weight:700;color:#1a1a1a">iiiLocarPay</span>
         </div>
         <h2 style="color:#1a1a1a;margin-bottom:4px">Relatório de ${monthName}</h2>
         <p style="color:#888;margin-bottom:24px">${owner.name || owner.companyName || 'Proprietário'}</p>
@@ -1831,7 +1831,7 @@ async function handleMonthlyReport(db, body) {
         </div>
 
         <p style="color:#aaa;font-size:11px;text-align:center;margin-top:24px">
-          Relatório gerado automaticamente pelo iiiLocarPay — ${new Date().toLocaleDateString('pt-BR')}
+          Relatório gerado automaticamente pelo iiiiLocarPay — ${new Date().toLocaleDateString('pt-BR')}
         </p>
       </div>`
   });
@@ -1886,14 +1886,14 @@ async function handleAnnualRentAlert(db, body) {
     if (daysIn > 5) continue;
 
     await transporter.sendMail({
-      from: 'iLocarPay <denis@dlftech.com.br>',
+      from: 'iiLocarPay <denis@dlftech.com.br>',
       to: owner.email,
       subject: `📅 Reajuste anual do contrato — ${c.propertyDescription || 'Imóvel'}`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#fafafa">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
             <div style="background:#2D6A2D;border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff">L</div>
-            <span style="font-size:18px;font-weight:700;color:#1a1a1a">iiLocarPay</span>
+            <span style="font-size:18px;font-weight:700;color:#1a1a1a">iiiLocarPay</span>
           </div>
           <div style="background:#fff;border-radius:12px;padding:28px;border:1px solid #e8e8e8">
             <div style="text-align:center;margin-bottom:20px">
@@ -1913,10 +1913,10 @@ async function handleAnnualRentAlert(db, body) {
             </table>
             <div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-top:20px;font-size:13px;color:#555">
               💡 De acordo com a Lei do Inquilinato (Art. 18), o aluguel pode ser reajustado anualmente pelo índice acordado em contrato (IPCA, IGP-M ou INPC).
-              Acesse o app iiLocarPay → Ações rápidas → Reajuste para aplicar o novo valor.
+              Acesse o app iiiLocarPay → Ações rápidas → Reajuste para aplicar o novo valor.
             </div>
           </div>
-          <p style="color:#aaa;font-size:11px;text-align:center;margin-top:20px">iiLocarPay — ${new Date().toLocaleDateString('pt-BR')}</p>
+          <p style="color:#aaa;font-size:11px;text-align:center;margin-top:20px">iiiLocarPay — ${new Date().toLocaleDateString('pt-BR')}</p>
         </div>`
     });
 
@@ -2066,14 +2066,14 @@ async function handleNotifyContractExpiry(db, body) {
     // Email ao owner
     if (owner.email) {
       await transporter.sendMail({
-        from: 'iLocarPay <denis@dlftech.com.br>',
+        from: 'iiLocarPay <denis@dlftech.com.br>',
         to: owner.email,
         subject: `⚠️ Contrato vence em ${daysLeft} dia${daysLeft !== 1 ? 's' : ''} — ${tenantName}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#fafafa">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
               <div style="background:#2D6A2D;border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff">L</div>
-              <span style="font-size:18px;font-weight:700;color:#1a1a1a">iiLocarPay</span>
+              <span style="font-size:18px;font-weight:700;color:#1a1a1a">iiiLocarPay</span>
             </div>
             <div style="background:#fff;border-radius:12px;padding:28px;border:1px solid #e8e8e8">
               <div style="text-align:center;margin-bottom:20px">
@@ -2092,10 +2092,10 @@ async function handleNotifyContractExpiry(db, body) {
                     <td style="padding:8px 0;text-align:right;font-weight:800;font-size:20px;color:#e65100">${daysLeft} dia${daysLeft !== 1 ? 's' : ''}</td></tr>
               </table>
               <p style="color:#888;font-size:13px;margin-top:20px">
-                Acesse o iiLocarPay para renovar o contrato ou comunicar a saída do inquilino.
+                Acesse o iiiLocarPay para renovar o contrato ou comunicar a saída do inquilino.
               </p>
             </div>
-            <p style="color:#aaa;font-size:11px;text-align:center;margin-top:20px">iiLocarPay — ${new Date().toLocaleDateString('pt-BR')}</p>
+            <p style="color:#aaa;font-size:11px;text-align:center;margin-top:20px">iiiLocarPay — ${new Date().toLocaleDateString('pt-BR')}</p>
           </div>`
       });
     }
@@ -2210,14 +2210,14 @@ async function handleAnnualReceipt(db, body) {
     }).join('');
 
     await transporter.sendMail({
-      from: `iiLocarPay — ${ownerName} <denis@dlftech.com.br>`,
+      from: `iiiLocarPay — ${ownerName} <denis@dlftech.com.br>`,
       to: toEmail,
-      subject: `Comprovante anual de aluguéis ${year} — iiLocarPay`,
+      subject: `Comprovante anual de aluguéis ${year} — iiiLocarPay`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;background:#fafafa">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
             <div style="background:#2D6A2D;border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff">L</div>
-            <span style="font-size:18px;font-weight:700;color:#1a1a1a">iiLocarPay</span>
+            <span style="font-size:18px;font-weight:700;color:#1a1a1a">iiiLocarPay</span>
           </div>
           <div style="background:#fff;border-radius:12px;padding:28px;border:1px solid #e8e8e8">
             <div style="text-align:center;margin-bottom:24px">
@@ -2253,7 +2253,7 @@ async function handleAnnualReceipt(db, body) {
 
             <p style="color:#aaa;font-size:11px;text-align:center;margin-top:24px">
               Este documento comprova os pagamentos de aluguel realizados em ${year}.<br>
-              Gerado automaticamente por iiiLocarPay — ${new Date().toLocaleDateString('pt-BR')}
+              Gerado automaticamente por iiiiLocarPay — ${new Date().toLocaleDateString('pt-BR')}
             </p>
           </div>
           <p style="color:#aaa;font-size:11px;text-align:center;margin-top:16px">Em caso de dúvidas, entre em contato com ${ownerName}.</p>
@@ -2267,7 +2267,7 @@ async function handleAnnualReceipt(db, body) {
 
 // ── ASAAS PAYMENT WEBHOOK ────────────────────────────────────────────────────
 // Recebe eventos PAYMENT_RECEIVED / PAYMENT_CONFIRMED das subcontas dos owners
-// O Asaas envia para /api/locarpay-card com o corpo do evento
+// O Asaas envia para /api/ilocarpay-card com o corpo do evento
 async function handleAsaasPaymentWebhook(db, body) {
   const { event, payment } = body || {};
   if (!event || !payment) return { ok: true, ignored: true };
@@ -2371,7 +2371,7 @@ async function handleAsaasPaymentWebhook(db, body) {
 
 // ── HANDLER ──────────────────────────────────────────────────────────────────
 // ── SYNC SIGNATURES (Assinafy) ──────────────────────────────────────────────
-// Legado: POST /api/locarpay-sync-status → reescrito para /api/locarpay-card
+// Legado: POST /api/iilocarpay-sync-status → reescrito para /api/ilocarpay-card
 const _ASSINAFY_DONE    = ['completed','signed','finished','done','approved','executed','manual','concluded','closed','active','certificated'];
 const _ASSINAFY_SIGNED  = ['signed','completed','approved','finished','done','concluded','active'];
 
@@ -2517,7 +2517,7 @@ async function handleCreateExtraPix(db, body) {
     billingType: 'PIX',
     value:       parseFloat((charge.totalAmount || charge.baseRent || 0).toFixed(2)),
     dueDate:     dueDateStr,
-    description: charge.description || 'Extra iLocarPay',
+    description: charge.description || 'Extra iiLocarPay',
     fine:        { value: fineVal },
     interest:    { value: interestVal },
   };
@@ -2655,7 +2655,7 @@ export default async function handler(req, res) {
         const plan = await checkOwnerPlanActive(db, checkId);
         if (!plan.active) {
           return res.status(402).json({
-            error: 'Plano expirado. Acesse o painel iLocarPay para renovar a assinatura.',
+            error: 'Plano expirado. Acesse o painel iiLocarPay para renovar a assinatura.',
             reason: plan.reason
           });
         }
@@ -2703,7 +2703,7 @@ export default async function handler(req, res) {
       return res.status(200).json(await handleAsaasPaymentWebhook(db, req.body));
     }
 
-    // Rota legada: /api/locarpay-sync-status → verifica assinaturas Assinafy
+    // Rota legada: /api/iilocarpay-sync-status → verifica assinaturas Assinafy
     if (!step && (req.body?.tenantEmail || req.body?.contractId)) {
       return res.status(200).json(await handleSyncSignatures(db, req.body));
     }
@@ -2711,7 +2711,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'step inválido' });
 
   } catch (e) {
-    console.error('locarpay-card error:', e.message);
+    console.error('ilocarpay-card error:', e.message);
     return res.status(e.status || 500).json({ error: e.message });
   }
 }

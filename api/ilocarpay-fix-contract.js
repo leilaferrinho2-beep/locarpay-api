@@ -1,8 +1,8 @@
-// POST /api/locarpay-fix-contract  { contractId, tenantEmail }
-// POST /api/locarpay-fix-contract  { step:'set-owner-signed', contractId }
-// POST /api/locarpay-fix-contract  { step:'reassign', contractId, documentId, ownerEmail, ... }
-// GET  /api/locarpay-fix-contract?contractId=xxx  → proxia PDF via Assinafy
-// (/api/locarpay-reassign-contract redirecionado aqui via vercel rewrite)
+// POST /api/ilocarpay-fix-contract  { contractId, tenantEmail }
+// POST /api/ilocarpay-fix-contract  { step:'set-owner-signed', contractId }
+// POST /api/ilocarpay-fix-contract  { step:'reassign', contractId, documentId, ownerEmail, ... }
+// GET  /api/ilocarpay-fix-contract?contractId=xxx  → proxia PDF via Assinafy
+// (/api/ilocarpay-reassign-contract redirecionado aqui via vercel rewrite)
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -10,13 +10,13 @@ import { getStorage } from 'firebase-admin/storage';
 
 function initFirebase() {
   if (!getApps().length) initializeApp({
-    credential: cert(JSON.parse(process.env.LOCARPAY_SERVICE_ACCOUNT)),
+    credential: cert(JSON.parse(process.env.IILOCARPAY_SERVICE_ACCOUNT)),
     storageBucket: BUCKET
   });
 }
 
 const FB_PROJECT = 'locarpayapp';
-const FB_API_KEY = process.env.LOCARPAY_FIREBASE_API_KEY;
+const FB_API_KEY = process.env.IILOCARPAY_FIREBASE_API_KEY;
 const FS_BASE    = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`;
 const ASSINAFY   = 'https://api.assinafy.com.br/v1';
 const BUCKET     = `${FB_PROJECT}.appspot.com`;

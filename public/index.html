@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>iLocarPay — Gestão de Aluguéis para Imobiliárias</title>
+<title>iiLocarPay — Gestão de Aluguéis para Imobiliárias</title>
 <meta name="description" content="Plataforma completa de gestão de aluguéis: cobranças automáticas, contratos digitais e app para inquilinos. Teste grátis por 30 dias.">
 <meta property="og:type"        content="website">
 <meta property="og:url"         content="https://www.ilocarpay.com.br/">
-<meta property="og:title"       content="iLocarPay — Gestão de Aluguéis para Imobiliárias">
+<meta property="og:title"       content="iiLocarPay — Gestão de Aluguéis para Imobiliárias">
 <meta property="og:description" content="Plataforma completa de gestão de aluguéis: cobranças automáticas, contratos digitais e app para inquilinos. Teste grátis por 30 dias.">
 <meta property="og:image"       content="https://www.ilocarpay.com.br/og-image.png">
 <meta property="og:image:width"  content="1200">
@@ -369,8 +369,8 @@
 <!-- NAV -->
 <nav>
   <a class="nav-brand" href="#">
-    <img src="/logo.webp" alt="iLocarPay" style="width:32px;height:32px;object-fit:contain;border-radius:8px">
-    iLocarPay
+    <img src="/logo.webp" alt="iiLocarPay" style="width:32px;height:32px;object-fit:contain;border-radius:8px">
+    iiLocarPay
   </a>
   <div class="nav-links">
     <a href="#features">Recursos</a>
@@ -541,15 +541,15 @@
   </div>
   <div class="faq-item" onclick="toggleFaq(this)">
     <div class="faq-question"><h3>Preciso ter conta no Asaas?</h3><span class="faq-chevron">▾</span></div>
-    <div class="faq-answer">Não. Ao se cadastrar no iLocarPay, criamos automaticamente uma subconta no Asaas em seu nome. Os pagamentos dos seus inquilinos caem direto na sua conta, sem intermediação.</div>
+    <div class="faq-answer">Não. Ao se cadastrar no iiLocarPay, criamos automaticamente uma subconta no Asaas em seu nome. Os pagamentos dos seus inquilinos caem direto na sua conta, sem intermediação.</div>
   </div>
   <div class="faq-item" onclick="toggleFaq(this)">
     <div class="faq-question"><h3>O inquilino precisa criar conta em algum lugar?</h3><span class="faq-chevron">▾</span></div>
-    <div class="faq-answer">Não. O inquilino recebe um e-mail com código de acesso e entra pelo app iLocarPay. Não precisa criar senha nem baixar nada do zero — o app é disponibilizado pela sua imobiliária.</div>
+    <div class="faq-answer">Não. O inquilino recebe um e-mail com código de acesso e entra pelo app iiLocarPay. Não precisa criar senha nem baixar nada do zero — o app é disponibilizado pela sua imobiliária.</div>
   </div>
   <div class="faq-item" onclick="toggleFaq(this)">
     <div class="faq-question"><h3>Qual a taxa por transação?</h3><span class="faq-chevron">▾</span></div>
-    <div class="faq-answer">As taxas são cobradas diretamente pelo Asaas (tipicamente 1% a 3% dependendo da modalidade). O iLocarPay não cobra taxa adicional por transação — apenas a mensalidade do plano.</div>
+    <div class="faq-answer">As taxas são cobradas diretamente pelo Asaas (tipicamente 1% a 3% dependendo da modalidade). O iiLocarPay não cobra taxa adicional por transação — apenas a mensalidade do plano.</div>
   </div>
   <div class="faq-item" onclick="toggleFaq(this)">
     <div class="faq-question"><h3>Posso cancelar a qualquer momento?</h3><span class="faq-chevron">▾</span></div>
@@ -572,14 +572,14 @@
 <!-- FOOTER -->
 <footer>
   <div>
-    <strong style="color:var(--accent)">iLocarPay</strong> &nbsp;·&nbsp;
+    <strong style="color:var(--accent)">iiLocarPay</strong> &nbsp;·&nbsp;
     Gestão de aluguéis para imobiliárias
   </div>
   <div style="display:flex;gap:24px">
     <a href="admin" target="_blank">Painel Admin</a>
     <a href="mailto:contatotransgu@gmail.com">Contato</a>
   </div>
-  <div>© 2025 iLocarPay. Todos os direitos reservados.</div>
+  <div>© 2025 iiLocarPay. Todos os direitos reservados.</div>
 </footer>
 
 <!-- MODAL -->
@@ -689,7 +689,7 @@
           <span class="success-step-icon">📲</span>
           <span class="success-step-text">
             <strong>App para inquilinos</strong>
-            <span>Distribua o app iLocarPay para seus inquilinos acessarem cobranças e contratos</span>
+            <span>Distribua o app iiLocarPay para seus inquilinos acessarem cobranças e contratos</span>
           </span>
         </div>
         <div class="success-step" style="cursor:default" id="success-owner-id">
@@ -800,7 +800,7 @@
     const errEl = document.getElementById('success-otp-error');
     btn.textContent = 'Enviando…'; btn.disabled = true; errEl.textContent = '';
     try {
-      const r = await fetch('/api/locarpay-send-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email }) });
+      const r = await fetch('/api/ilocarpay-send-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email }) });
       const d = await r.json();
       if (!r.ok) { errEl.textContent = d.error || 'Erro ao enviar código'; btn.textContent = 'Enviar código por e-mail →'; btn.disabled = false; return; }
       document.getElementById('success-otp-email-step').style.display = 'none';
@@ -817,7 +817,7 @@
     if (!code) { errEl.textContent = 'Digite o código.'; return; }
     btn.textContent = 'Verificando…'; btn.disabled = true; errEl.textContent = '';
     try {
-      const r = await fetch('/api/locarpay-verify-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, otp: code }) });
+      const r = await fetch('/api/ilocarpay-verify-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, otp: code }) });
       const d = await r.json();
       if (!r.ok) { errEl.textContent = d.error || 'Código inválido'; btn.textContent = 'Entrar no painel'; btn.disabled = false; return; }
       sessionStorage.setItem('lp_custom_token', d.customToken);
@@ -858,7 +858,7 @@
     btn.textContent = 'Criando conta…';
 
     try {
-      const resp = await fetch('/api/locarpay-owner', {
+      const resp = await fetch('/api/ilocarpay-owner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,5 +1,5 @@
-// POST /api/locarpay-send-otp  { email }          → ?action=send  (via rewrite)
-// POST /api/locarpay-verify-otp { email, otp }    → ?action=verify (via rewrite)
+// POST /api/ilocarpay-send-otp  { email }          → ?action=send  (via rewrite)
+// POST /api/ilocarpay-verify-otp { email, otp }    → ?action=verify (via rewrite)
 
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
@@ -10,7 +10,7 @@ import { rateLimit, rateLimitReset, sanitizeString, isValidEmail, getClientIp } 
 
 function initAdmin() {
   if (getApps().length > 0) return;
-  const serviceAccount = JSON.parse(process.env.LOCARPAY_SERVICE_ACCOUNT);
+  const serviceAccount = JSON.parse(process.env.IILOCARPAY_SERVICE_ACCOUNT);
   initializeApp({ credential: cert(serviceAccount) });
 }
 
@@ -26,12 +26,12 @@ async function enviarEmail(email, otp) {
   });
 
   await transporter.sendMail({
-    from: 'iLocarPay <denis@dlftech.com.br>',
+    from: 'iiLocarPay <denis@dlftech.com.br>',
     to: email,
-    subject: 'Seu código de acesso ao LocarPay',
+    subject: 'Seu código de acesso ao iLocarPay',
     html: `
       <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:24px">
-        <h2 style="color:#1565C0">LocarPay</h2>
+        <h2 style="color:#1565C0">iLocarPay</h2>
         <p>Olá,</p>
         <p>Seu código de acesso é:</p>
         <div style="text-align:center;margin:32px 0">
@@ -42,7 +42,7 @@ async function enviarEmail(email, otp) {
         <p style="color:#888;font-size:13px">Este código expira em 1 hora e só pode ser usado uma vez.</p>
         <p style="color:#888;font-size:13px">Se você não solicitou este acesso, ignore este e-mail.</p>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-        <p style="color:#aaa;font-size:12px;text-align:center">Equipe LocarPay</p>
+        <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay</p>
       </div>
     `
   });

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>iLocarPay &mdash; Super Admin</title>
+<title>iiLocarPay &mdash; Super Admin</title>
 <script>
   document.addEventListener('DOMContentLoaded', async function() {
 
@@ -304,7 +304,7 @@
       postalCode:    $('edit-cep').value.replace(/\D/g,''),
     };
     try {
-      const r = await fetch('/api/locarpay-owner', {
+      const r = await fetch('/api/ilocarpay-owner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -347,7 +347,7 @@
   window.suspendOwner  = id  => adminAction('suspend-owner',  id, 'Suspender esta imobiliaria?');
   window.setupAsaas = async (id) => {
     try {
-      const r = await fetch('/api/locarpay-owner', {
+      const r = await fetch('/api/ilocarpay-owner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'setup-asaas', ownerId: id })
@@ -390,7 +390,7 @@
       ? prompt('Data de nascimento do responsável (DD/MM/AAAA):') || ''
       : '';
     try {
-      const r = await fetch('/api/locarpay-owner', {
+      const r = await fetch('/api/ilocarpay-owner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'register', name, email, phone, cpfCnpj, birthDate, plan: 'trial' })
@@ -784,8 +784,8 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 <div id="login-screen">
   <div class="login-card">
     <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:4px;">
-      <img src="/logo.webp" alt="iLocarPay" style="width:38px;height:38px;border-radius:10px;object-fit:contain;">
-      <span style="color:#4CAF50;font-weight:900;font-size:26px;letter-spacing:-1px;">iLocarPay</span>
+      <img src="/logo.webp" alt="iiLocarPay" style="width:38px;height:38px;border-radius:10px;object-fit:contain;">
+      <span style="color:#4CAF50;font-weight:900;font-size:26px;letter-spacing:-1px;">iiLocarPay</span>
     </div>
     <div class="login-chip">Super Admin</div>
     <p class="login-sub">Acesso restrito ao administrador do sistema</p>
@@ -818,8 +818,8 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 <div id="app">
   <header class="topbar">
     <a style="display:flex;align-items:center;gap:8px;text-decoration:none;">
-      <img src="/logo.webp" alt="iLocarPay" style="width:30px;height:30px;border-radius:8px;object-fit:contain;">
-      <span style="color:#4CAF50;font-weight:800;font-size:17px;letter-spacing:-.3px;">iLocarPay</span>
+      <img src="/logo.webp" alt="iiLocarPay" style="width:30px;height:30px;border-radius:8px;object-fit:contain;">
+      <span style="color:#4CAF50;font-weight:800;font-size:17px;letter-spacing:-.3px;">iiLocarPay</span>
     </a>
     <span class="top-chip">Super Admin</span>
     <div class="topbar-gap"></div>

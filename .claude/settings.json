@@ -19,7 +19,7 @@
       "Bash(Copy-Item *)",
       "Bash(Write-Host *)",
       "Bash(.\\gradlew *)",
-      "Bash(cd C:\\LocarPay*)",
+      "Bash(cd C:\\iLocarPay*)",
       "Bash(cd C:\\locarpay-api*)"
     ]
   }

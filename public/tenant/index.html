@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>iLocarPay — Área do Inquilino</title>
+<title>iiLocarPay — Área do Inquilino</title>
 <style>
 :root {
   --bg:       #07080d;
@@ -260,8 +260,8 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 <div class="screen active" id="screen-login">
   <div class="auth-bg"></div>
   <div class="auth-wrap fadein">
-    <div class="auth-logo" style="background:none;box-shadow:none;"><img src="/logo.webp" alt="iLocarPay" style="width:72px;height:72px;border-radius:22px;object-fit:contain;"></div>
-    <h1 class="auth-title">iLocarPay</h1>
+    <div class="auth-logo" style="background:none;box-shadow:none;"><img src="/logo.webp" alt="iiLocarPay" style="width:72px;height:72px;border-radius:22px;object-fit:contain;"></div>
+    <h1 class="auth-title">iiLocarPay</h1>
     <p class="auth-sub">Portal do Inquilino<br>Acesse suas cobranças e contrato</p>
     <div class="field-group">
       <label class="field-label" for="input-email">Seu e-mail</label>
@@ -298,7 +298,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 
   <div class="dash-header">
     <div class="dash-logo">
-      <img src="/logo.webp" alt="iLocarPay" style="width:36px;height:36px;border-radius:10px;object-fit:contain;">
+      <img src="/logo.webp" alt="iiLocarPay" style="width:36px;height:36px;border-radius:10px;object-fit:contain;">
       <span class="dash-logo-name">iLocar<span>Pay</span></span>
     </div>
     <div class="dash-user">
@@ -316,7 +316,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
         <a class="app-banner" href="/download/ilocarpay.apk" download style="text-decoration:none;color:inherit;margin-top:20px;display:flex">
           <span class="app-banner-icon">📱</span>
           <div class="app-banner-text">
-            <strong>Baixe o app iLocarPay</strong>
+            <strong>Baixe o app iiLocarPay</strong>
             <span>Pague, veja cobranças e contratos direto no celular</span>
           </div>
           <span class="btn-download">Baixar</span>
@@ -416,7 +416,7 @@ $('btn-send-otp').onclick = async () => {
   $('btn-send-otp').disabled = true;
   $('btn-send-otp').textContent = 'Enviando...';
   try {
-    const r = await fetch('/api/locarpay-send-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email }) });
+    const r = await fetch('/api/ilocarpay-send-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email }) });
     if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Erro'); }
     pendingEmail = email;
     $('otp-hint').textContent = `Código enviado para ${email}`;
@@ -440,7 +440,7 @@ async function verifyOtp() {
   $('btn-verify-otp').disabled = true;
   $('btn-verify-otp').textContent = 'Verificando...';
   try {
-    const r = await fetch('/api/locarpay-verify-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email:pendingEmail, otp }) });
+    const r = await fetch('/api/ilocarpay-verify-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email:pendingEmail, otp }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Código inválido');
     await signInWithCustomToken(auth, d.customToken);

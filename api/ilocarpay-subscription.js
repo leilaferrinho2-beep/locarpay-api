@@ -1,5 +1,5 @@
-// POST /api/locarpay-subscription
-// Pagamento de assinatura iLocarPay para imobiliárias (owners)
+// POST /api/ilocarpay-subscription
+// Pagamento de assinatura iiLocarPay para imobiliárias (owners)
 // step:"pix"          → { ownerId, plan } → cria PIX, retorna copyPaste + qrCode
 // step:"check-pix"    → { paymentId, ownerId, plan } → verifica se pago, ativa plano
 // step:"card-init"    → { ownerId, plan, card } → micro-cobrança R$1-9, retorna verificationId
@@ -95,7 +95,7 @@ async function handlePix(db, body) {
     billingType: 'PIX',
     value:       PLANS[plan].price,
     dueDate,
-    description: `iLocarPay — Plano ${PLANS[plan].name}`
+    description: `iiLocarPay — Plano ${PLANS[plan].name}`
   }, apiKey);
 
   // Busca QR code
@@ -153,7 +153,7 @@ async function handleCardInit(db, body) {
     billingType: 'CREDIT_CARD',
     value:       microAmount,
     dueDate,
-    description: 'Verificação de cartão iLocarPay',
+    description: 'Verificação de cartão iiLocarPay',
     creditCard: {
       holderName,
       number:      number.replace(/\D/g, ''),
@@ -252,7 +252,7 @@ async function handleCardConfirm(db, body) {
     realChargeBody = {
       customer:    ver.customerId, billingType: 'CREDIT_CARD',
       value:       ver.realValue, dueDate,
-      description: `iLocarPay — Plano ${PLANS[ver.plan]?.name || ver.plan}`,
+      description: `iiLocarPay — Plano ${PLANS[ver.plan]?.name || ver.plan}`,
       creditCardToken: ver.cardToken,
       creditCardHolderInfo: {
         name: ver.holderName, email: ver.email, cpfCnpj: ver.holderDocument,
@@ -263,7 +263,7 @@ async function handleCardConfirm(db, body) {
     realChargeBody = {
       customer:    ver.customerId, billingType: 'CREDIT_CARD',
       value:       ver.realValue, dueDate,
-      description: `iLocarPay — Plano ${PLANS[ver.plan]?.name || ver.plan}`,
+      description: `iiLocarPay — Plano ${PLANS[ver.plan]?.name || ver.plan}`,
       creditCard: {
         holderName: ver.holderName, number: ver.cardFallback.number,
         expiryMonth: ver.expiryMonth, expiryYear: ver.expiryYear, ccv: ver.cardFallback.ccv

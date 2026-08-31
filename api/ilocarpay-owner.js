@@ -1,4 +1,4 @@
-﻿// POST /api/locarpay-owner
+﻿// POST /api/ilocarpay-owner
 // step:"register"     â†' { name, email, phone?, cpfCnpj?, companyType?, address?, addressNumber?, province?, postalCode?, plan?, firebaseUid? }
 // step:"setup-asaas"  â†' { ownerId } â†' (re)cria subconta Asaas para owner existente
 // step:"migrate"      â†' { secret, ownerId } â†' backfill ownerId em docs legados (requer MIGRATE_SECRET)
@@ -182,17 +182,17 @@ async function handleRegister(db, body) {
       auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD }
     });
     await transporter.sendMail({
-      from:    'iLocarPay <denis@dlftech.com.br>',
+      from:    'iiLocarPay <denis@dlftech.com.br>',
       to:      email,
-      subject: `Bem-vindo ao iLocarPay! Sua conta esta pronta`,
+      subject: `Bem-vindo ao iiLocarPay! Sua conta esta pronta`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#fff">
           <div style="margin-bottom:24px">
-            <span style="display:inline-flex;align-items:center;gap:8px;font-weight:900;font-size:20px;color:#4CAF50;letter-spacing:-.5px;">&#9679;&nbsp;iLocarPay</span>
+            <span style="display:inline-flex;align-items:center;gap:8px;font-weight:900;font-size:20px;color:#4CAF50;letter-spacing:-.5px;">&#9679;&nbsp;iiLocarPay</span>
           </div>
           <h2 style="color:#1a1a1a;margin-bottom:8px">Sua conta esta pronta, ${name.split(' ')[0]}!</h2>
           <p style="color:#555;line-height:1.7;margin-bottom:20px">
-            Seu trial de <strong>30 dias gratis</strong> foi ativado. Voce tem acesso completo ao iLocarPay ate <strong>${trialFmt}</strong>.
+            Seu trial de <strong>30 dias gratis</strong> foi ativado. Voce tem acesso completo ao iiLocarPay ate <strong>${trialFmt}</strong>.
           </p>
           <div style="background:#f0f7f0;border-radius:10px;padding:20px;margin-bottom:24px">
             <h3 style="color:#2e7d32;font-size:14px;margin-bottom:12px">Primeiros passos</h3>
@@ -398,7 +398,7 @@ async function handleActivatePlan(db, body) {
       value,
       nextDueDate: nextDueDateStr,
       cycle:       'MONTHLY',
-      description: `iLocarPay ${plan.charAt(0).toUpperCase() + plan.slice(1)} â€" ${ownerData.name}`
+      description: `iiLocarPay ${plan.charAt(0).toUpperCase() + plan.slice(1)} â€" ${ownerData.name}`
     })
   });
   const sub = await subResp.json();
@@ -470,7 +470,7 @@ async function handleSetupWebhook(db, body) {
   const createResp = await fetch('https://api.asaas.com/v3/webhooks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': masterKey },
-    body: JSON.stringify({ name: 'iLocarPay Billing', url: webhookUrl, email: 'contatotransgu@gmail.com', enabled: true, interrupted: false, type: 'PAYMENT', sendType: 'NON_SEQUENTIALLY', events })
+    body: JSON.stringify({ name: 'iiLocarPay Billing', url: webhookUrl, email: 'contatotransgu@gmail.com', enabled: true, interrupted: false, type: 'PAYMENT', sendType: 'NON_SEQUENTIALLY', events })
   });
   const created = await createResp.json();
   if (!createResp.ok) throw new Error(`Asaas webhook create: ${JSON.stringify(created)}`);
@@ -508,22 +508,22 @@ async function handleNotifyTrial(db, body) {
   });
 
   const subject = daysLeft !== null && daysLeft <= 0
-    ? 'Seu trial LocarPay expirou â€" ative um plano'
-    : `Seu trial LocarPay expira em ${daysLeft} dia${daysLeft !== 1 ? 's' : ''}`;
+    ? 'Seu trial iLocarPay expirou â€" ative um plano'
+    : `Seu trial iLocarPay expira em ${daysLeft} dia${daysLeft !== 1 ? 's' : ''}`;
 
   const urgencyMsg = daysLeft !== null && daysLeft <= 0
-    ? 'Seu periodo de trial <strong>ja expirou</strong>. Para continuar usando o LocarPay e receber pagamentos dos seus inquilinos, ative um plano.'
+    ? 'Seu periodo de trial <strong>ja expirou</strong>. Para continuar usando o iLocarPay e receber pagamentos dos seus inquilinos, ative um plano.'
     : `Seu periodo de trial expira em <strong>${daysLeft} dia${daysLeft !== 1 ? 's' : ''}</strong>. Ative um plano para nao perder o acesso.`;
 
   await transporter.sendMail({
-    from: 'iLocarPay <denis@dlftech.com.br>',
+    from: 'iiLocarPay <denis@dlftech.com.br>',
     to: d.email,
     subject,
     html: `
       <div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;padding:32px 24px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px">
           <div style="background:#2D6A2D;border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff">L</div>
-          <span style="font-size:18px;font-weight:700;color:#1a1a1a">LocarPay</span>
+          <span style="font-size:18px;font-weight:700;color:#1a1a1a">iLocarPay</span>
         </div>
         <h2 style="color:#1a1a1a;font-size:22px;margin-bottom:12px">${subject}</h2>
         <p style="color:#555;line-height:1.7;margin-bottom:20px">Ola, <strong>${d.name || d.email}</strong>!</p>
@@ -594,7 +594,7 @@ async function handleSetupPaymentWebhook(db, body) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
     body: JSON.stringify({
-      name: 'iLocarPay Pagamentos',
+      name: 'iiLocarPay Pagamentos',
       url: webhookUrl,
       email: ownerSnap.data().email,
       enabled: true,
@@ -625,8 +625,8 @@ async function handleGetMany(db, body) {
 }
 
 async function handleCronDaily(db) {
-  const BASE = 'https://ilocarpay.com.br/api/locarpay-card';
-  const OWNER_URL = 'https://ilocarpay.com.br/api/locarpay-owner';
+  const BASE = 'https://ilocarpay.com.br/api/ilocarpay-card';
+  const OWNER_URL = 'https://ilocarpay.com.br/api/ilocarpay-owner';
 
   const post = (url, body) => fetch(url, {
     method: 'POST',
@@ -678,7 +678,7 @@ async function handleCronDaily(db) {
   // 6. Retentar contratos que falharam no Assinafy
   let retryResult = {};
   try {
-    const BROKER_URL = 'https://ilocarpay.com.br/api/locarpay-broker';
+    const BROKER_URL = 'https://ilocarpay.com.br/api/ilocarpay-broker';
     retryResult = await post(BROKER_URL, { step: 'cron-retry-assinafy' });
     if (retryResult.retried > 0) console.log('[cron] assinafy retry:', retryResult);
   } catch (_) {}
@@ -873,7 +873,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'step invalido' });
 
   } catch (e) {
-    console.error('locarpay-owner error:', e.message);
+    console.error('ilocarpay-owner error:', e.message);
     return res.status(e.status || 500).json({ error: e.message, ...(e.ownerId ? { ownerId: e.ownerId } : {}) });
   }
 }

@@ -15,8 +15,8 @@ const SUPER_ADMIN_EMAIL = 'denisfelicio20@gmail.com';
 
 function initFirebase() {
   if (getApps().length) return;
-  const sa = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.LOCARPAY_SERVICE_ACCOUNT;
-  if (!sa) throw new Error('ENV: service account não configurada (LOCARPAY_SERVICE_ACCOUNT / FIREBASE_SERVICE_ACCOUNT)');
+  const sa = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.IILOCARPAY_SERVICE_ACCOUNT;
+  if (!sa) throw new Error('ENV: service account não configurada (IILOCARPAY_SERVICE_ACCOUNT / FIREBASE_SERVICE_ACCOUNT)');
   initializeApp({ credential: cert(JSON.parse(sa)) });
 }
 
@@ -54,7 +54,7 @@ async function sendOtpEmail(otp) {
     auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD },
   });
   await transporter.sendMail({
-    from: '"iLocarPay" <denis@dlftech.com.br>',
+    from: '"iiLocarPay" <denis@dlftech.com.br>',
     to:   SUPER_ADMIN_EMAIL,
     subject: 'Código de acesso Super Admin',
     html: `<p>Seu código de acesso é: <strong style="font-size:24px;letter-spacing:4px;">${otp}</strong></p>
@@ -175,7 +175,7 @@ async function deleteTenant(db, tenantId) {
 }
 
 async function setupAsaas(db, ownerId) {
-  const r = await fetch('https://ilocarpay.com.br/api/locarpay-owner', {
+  const r = await fetch('https://ilocarpay.com.br/api/ilocarpay-owner', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ step: 'setup-asaas', ownerId })
@@ -268,7 +268,7 @@ async function createSubscription(db, ownerId, plan) {
     value:        planInfo.monthlyPrice,
     nextDueDate:  nextDueDate.toISOString().slice(0, 10),
     cycle:        'MONTHLY',
-    description:  `iLocarPay - Plano ${planInfo.label}`,
+    description:  `iiLocarPay - Plano ${planInfo.label}`,
   }, masterKey);
 
   // Atualiza Firestore

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>iLocarPay — Painel Admin</title>
+<title>iiLocarPay — Painel Admin</title>
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, signInWithPopup, signInWithRedirect, signInWithCustomToken, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
@@ -38,7 +38,7 @@
         // Já é um path relativo (não começa com http)
         else if (!urlOrPath.startsWith('http')) path = urlOrPath;
       }
-      const res = await fetch('/api/locarpay-broker', {
+      const res = await fetch('/api/ilocarpay-broker', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'get-signed-url', path, adminEmail: auth.currentUser?.email || '' })
@@ -241,7 +241,7 @@
     try {
       const { getAuth } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
       const token = await getAuth().currentUser?.getIdToken();
-      await fetch('/api/locarpay-broker', {
+      await fetch('/api/ilocarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ step: 'whatsapp-disconnect', ownerId: currentOwnerId })
       });
@@ -637,7 +637,7 @@
     const orig = btn.textContent;
     btn.disabled = true; btn.textContent = '…';
     try {
-      const r = await fetch('/api/locarpay-owner', {
+      const r = await fetch('/api/ilocarpay-owner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'setup-payment-webhook', ownerId })
@@ -669,7 +669,7 @@
     $('billing-error').textContent = '';
     btn.disabled = true; btn.textContent = 'Ativando...';
     try {
-      const resp = await fetch('/api/locarpay-owner', {
+      const resp = await fetch('/api/ilocarpay-owner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'activate-plan', ownerId, plan })
@@ -773,14 +773,14 @@
       const btn = $('btn-notify-all-overdue');
       btn.disabled = true; btn.textContent = 'Enviando...';
       try {
-        const r = await fetch('/api/locarpay-card', {
+        const r = await fetch('/api/ilocarpay-card', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             step: 'send-push',
             ownerId: currentOwnerId,
             title: 'Aluguel em atraso ⚠️',
-            message: 'Você possui uma cobrança vencida. Regularize agora pelo app iLocarPay.'
+            message: 'Você possui uma cobrança vencida. Regularize agora pelo app iiLocarPay.'
           })
         });
         const data = await r.json();
@@ -830,7 +830,7 @@
 
   window.sendOverduePush = async (tenantId) => {
     try {
-      const r = await fetch('/api/locarpay-card', {
+      const r = await fetch('/api/ilocarpay-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'send-push', tenantId, ownerId: currentOwnerId,
@@ -847,7 +847,7 @@
       `Estornar o pagamento de "${tenantNameOrId}"?\n\nO valor será devolvido via Asaas e a cobrança voltará para pendente.`,
       async () => {
         try {
-          const r = await fetch('/api/locarpay-card', {
+          const r = await fetch('/api/ilocarpay-card', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ step: 'refund', chargeId, ownerId: currentOwnerId })
@@ -969,7 +969,7 @@
     st.textContent = 'Salvando...'; st.style.color = '#888';
     try {
       const user = auth.currentUser;
-      const res  = await fetch('/api/locarpay-credit', {
+      const res  = await fetch('/api/ilocarpay-credit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'save-credentials', bureau, ownerId: currentOwnerId, clientId, clientSecret, callerEmail: user?.email })
@@ -995,7 +995,7 @@
     st.textContent = 'Testando conexão...'; st.style.color = '#FFD54F';
     const step = bureau === 'serasa' ? 'check-serasa' : 'check-boavista';
     try {
-      const res = await fetch('/api/locarpay-credit', {
+      const res = await fetch('/api/ilocarpay-credit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step, ownerId: currentOwnerId, tenantId: 'test', cpf: '11144477735' })
@@ -1049,7 +1049,7 @@
     btn.disabled = true; btn.textContent = '🔍 Consultando...';
     $(boxId).style.display = 'none';
     try {
-      const res = await fetch('/api/locarpay-credit', {
+      const res = await fetch('/api/ilocarpay-credit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step, ownerId: currentOwnerId, tenantId: creditTenantId, cpf: t.cpf })
@@ -1126,7 +1126,7 @@
     const st = $('assinafy-key-status');
     st.textContent = 'Salvando...'; st.style.color = '#888';
     try {
-      const res = await fetch('/api/locarpay-broker', {
+      const res = await fetch('/api/ilocarpay-broker', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'save-assinafy-key', apiKey: key, callerEmail: auth.currentUser?.email })
@@ -1146,7 +1146,7 @@
     const btn = event?.target;
     if (btn) { btn.disabled = true; btn.textContent = '🔄 Enviando...'; }
     try {
-      const res = await fetch('/api/locarpay-broker', {
+      const res = await fetch('/api/ilocarpay-broker', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'retry-assinafy', contractId })
@@ -1689,7 +1689,7 @@
     const mode = document.querySelector('input[name="approve-mode"]:checked')?.value || 'assinafy';
     btn.disabled = true; btn.textContent = 'Aprovando...';
     try {
-      const res = await fetch('/api/locarpay-broker', {
+      const res = await fetch('/api/ilocarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           step: 'approve-lead',
@@ -1785,7 +1785,7 @@
     const btn = $('reject-confirm-btn');
     btn.disabled = true; btn.textContent = 'Rejeitando...';
     try {
-      const res = await fetch('/api/locarpay-broker', {
+      const res = await fetch('/api/ilocarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'reject-lead', leadId, reason })
       });
@@ -1801,7 +1801,7 @@
   window.removeLead = async (leadId) => {
     showConfirm('Tem certeza que deseja remover este lead? Esta ação não pode ser desfeita.', async () => {
       try {
-        const res = await fetch('/api/locarpay-broker', {
+        const res = await fetch('/api/ilocarpay-broker', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ step: 'remove-lead', leadId })
         });
@@ -1817,7 +1817,7 @@
     if (!contractId || !tenantId) { showToast('Contrato ou inquilino não encontrado', 'error'); return; }
     showConfirm('Confirmar entrega das chaves? Isso ativa o inquilino no app.', async () => {
       try {
-        const res = await fetch('/api/locarpay-broker', {
+        const res = await fetch('/api/ilocarpay-broker', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ step: 'deliver-keys', contractId, tenantId })
         });
@@ -1833,7 +1833,7 @@
   window.markBothSigned = async (leadId) => {
     showConfirm('Confirmar que ambas as partes já assinaram o contrato? O corretor poderá entregar as chaves.', async () => {
       try {
-        const res = await fetch('/api/locarpay-broker', {
+        const res = await fetch('/api/ilocarpay-broker', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ step: 'mark-both-signed', leadId })
         });
@@ -1848,7 +1848,7 @@
   window.regenContract = async (contractId, btn) => {
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando...'; }
     try {
-      const res = await fetch('/api/locarpay-broker', {
+      const res = await fetch('/api/ilocarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'generate-contract', contractId })
       });
@@ -1862,7 +1862,7 @@
   window.generateContractForTenant = async (contractId, btn) => {
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando...'; }
     try {
-      const res = await fetch('/api/locarpay-broker', {
+      const res = await fetch('/api/ilocarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'generate-contract', contractId })
       });
@@ -1887,7 +1887,7 @@
     const btn = $('broker-save-btn');
     btn.disabled = true; btn.textContent = 'Cadastrando...';
     try {
-      const res = await fetch('/api/locarpay-broker', {
+      const res = await fetch('/api/ilocarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'register-broker', ownerId: currentOwnerId, name, email, phone })
       });
@@ -1925,7 +1925,7 @@
     const btn = $('bm-save-btn');
     btn.disabled = true; btn.textContent = 'Cadastrando...';
     try {
-      const res = await fetch('/api/locarpay-broker', {
+      const res = await fetch('/api/ilocarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'register-broker', ownerId: currentOwnerId, name, email, phone, commission })
       });
@@ -2016,7 +2016,7 @@
     const btn = $('edit-broker-save-btn');
     btn.disabled = true; btn.textContent = 'Salvando...';
     try {
-      const res = await fetch('/api/locarpay-broker', {
+      const res = await fetch('/api/ilocarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'update-broker', brokerId, name, phone, active, creci, commissionPct })
       });
@@ -2221,7 +2221,7 @@
     const pct = parseFloat(value);
     if (isNaN(pct) || pct < 0 || pct > 100) { showToast('Percentual inválido', 'error'); return; }
     try {
-      await fetch('/api/locarpay-broker', {
+      await fetch('/api/ilocarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'update-broker', brokerId, commission: pct })
       });
@@ -2232,7 +2232,7 @@
   window.deleteBroker = async (brokerId, name) => {
     if (!confirm(`Excluir o corretor "${name}"?\n\nEsta ação não pode ser desfeita.`)) return;
     try {
-      const res = await fetch('/api/locarpay-broker', {
+      const res = await fetch('/api/ilocarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'delete-broker', brokerId })
       });
@@ -2577,7 +2577,7 @@
 
       // 4. E-mail de convite (não bloqueia)
       const ownerName = currentOwnerData?.name || auth.currentUser?.displayName || 'Proprietário';
-      fetch('/api/locarpay-invite-tenant', {
+      fetch('/api/ilocarpay-invite-tenant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, tenantName: name, ownerName, propertyDescription: prop })
@@ -2591,7 +2591,7 @@
         await loadTenants();
         // Chama geração automática do contrato Assinafy
         try {
-          const res = await fetch('/api/locarpay-broker', {
+          const res = await fetch('/api/ilocarpay-broker', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ step: 'generate-contract', contractId: contractRef.id })
           });
@@ -2773,7 +2773,7 @@
     if (trialEnd && trialEnd > now) {
       const days = Math.ceil((trialEnd - now) / 86400000);
       if (days <= 5) {
-        showBanner('warning', `⚠ Seu trial expira em ${days} dia${days !== 1 ? 's' : ''}. Ative um plano para continuar usando o iLocarPay.`);
+        showBanner('warning', `⚠ Seu trial expira em ${days} dia${days !== 1 ? 's' : ''}. Ative um plano para continuar usando o iiLocarPay.`);
         notifyTrialByEmail();
       } else {
         banner.style.display = 'none';
@@ -2912,7 +2912,7 @@
                 // 2. Regenera QR imediatamente — listener em tempo real do app recebe na hora
                 showToast(`Atualizando QR Code de ${allDocs.length} cobrança(s)...`, 'info');
                 const regenPromises = allDocs.map(ch =>
-                  fetch('/api/locarpay-pix', {
+                  fetch('/api/ilocarpay-pix', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tenantId: editingTenantId, chargeId: ch.id })
@@ -3113,7 +3113,7 @@
     const btn = $('btn-notify-upcoming');
     btn.disabled = true; btn.textContent = 'Enviando...';
     try {
-      const r = await fetch('/api/locarpay-card', {
+      const r = await fetch('/api/ilocarpay-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'notify-upcoming', ownerId: currentOwnerId, daysAhead: 3 })
@@ -3164,7 +3164,7 @@
     _clearQrTimers();
     try {
       status.textContent = '⏳ Buscando QR Code...';
-      const res  = await fetch('/api/locarpay-broker', {
+      const res  = await fetch('/api/ilocarpay-broker', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'whatsapp-qr', ownerId: _qrOwnerId })
       });
@@ -3284,7 +3284,7 @@
     showConfirm(`Excluir "${tenantName || tenantId}" e todos os dados relacionados?\n\nEssa ação não pode ser desfeita.`, async () => {
       try {
         const token = await auth.currentUser.getIdToken();
-        const resp = await fetch('/api/locarpay-owner', {
+        const resp = await fetch('/api/ilocarpay-owner', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
           body: JSON.stringify({ step: 'delete-tenant', tenantId })
@@ -3425,7 +3425,7 @@
   window.sendReceipt = async (chargeId, tenantId, btn) => {
     btn.disabled = true; btn.textContent = 'Enviando...';
     try {
-      const r = await fetch('/api/locarpay-card', {
+      const r = await fetch('/api/ilocarpay-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'send-receipt', chargeId, tenantId })
@@ -3446,7 +3446,7 @@
     const btn = $('btn-notify-expiry');
     btn.disabled = true; btn.textContent = 'Verificando...';
     try {
-      const r = await fetch('/api/locarpay-card', {
+      const r = await fetch('/api/ilocarpay-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'notify-expiry', ownerId: currentOwnerId })
@@ -3468,7 +3468,7 @@
     const btn = $('btn-annual-receipt');
     btn.disabled = true; btn.textContent = 'Enviando...';
     try {
-      const r = await fetch('/api/locarpay-card', {
+      const r = await fetch('/api/ilocarpay-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'annual-receipt', ownerId: currentOwnerId, year: +year })
@@ -3489,7 +3489,7 @@
     try {
       const now = new Date();
       const monthRef = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const r = await fetch('/api/locarpay-card', {
+      const r = await fetch('/api/ilocarpay-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'monthly-report', ownerId: currentOwnerId, monthRef })
@@ -3529,7 +3529,7 @@
     showConfirm(`Aplicar ${pct > 0 ? '+' : ''}${pct}% em ${contracts.length} contrato(s) ativo(s)? Esta ação não pode ser desfeita.`, async () => {
     $('adjust-save').disabled = true; $('adjust-save').textContent = 'Aplicando...';
     try {
-      const r = await fetch('/api/locarpay-card', {
+      const r = await fetch('/api/ilocarpay-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'adjust-rent', ownerId: currentOwnerId, percentage: pct })
@@ -3557,7 +3557,7 @@
       const btn = $('et-close-contract');
       btn.disabled = true; btn.textContent = 'Encerrando...';
       try {
-        const r = await fetch('/api/locarpay-card', {
+        const r = await fetch('/api/ilocarpay-card', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ step: 'close-contract', contractId: c.id, tenantId: editingTenantId, ownerId: currentOwnerId })
@@ -3657,7 +3657,7 @@
       showToast('Cobrança criada! Gerando PIX...', 'info');
       // Gera PIX automaticamente para o inquilino não precisar interagir
       try {
-        const r2 = await fetch('/api/locarpay-card', {
+        const r2 = await fetch('/api/ilocarpay-card', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ step: 'create-extra-pix', chargeId: chargeRef.id, tenantId: _avulsaTenantId, ownerId: currentOwnerId })
@@ -3723,14 +3723,14 @@
     btn.textContent = 'Gerando...';
     try {
       // Gera mês atual
-      const r0 = await fetch('/api/locarpay-card', {
+      const r0 = await fetch('/api/ilocarpay-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'generate-charges', ownerId: currentOwnerId, monthOffset: 0 })
       });
       const d0 = await r0.json();
       // Gera próximo mês também (idempotente se já existir)
-      const r1 = await fetch('/api/locarpay-card', {
+      const r1 = await fetch('/api/ilocarpay-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'generate-charges', ownerId: currentOwnerId, monthOffset: 1 })
@@ -3753,7 +3753,7 @@
     btn.textContent = 'Processando...';
     try {
       // 1. Marca cobranças vencidas
-      const markResp = await fetch('/api/locarpay-card', {
+      const markResp = await fetch('/api/ilocarpay-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'mark-overdue', ownerId: currentOwnerId })
@@ -3762,7 +3762,7 @@
       const marked = markData.updated ?? 0;
 
       // 2. Envia push para inquilinos com cobranças pendentes/vencidas
-      const pushResp = await fetch('/api/locarpay-card', {
+      const pushResp = await fetch('/api/ilocarpay-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'send-push', ownerId: currentOwnerId })
@@ -3785,7 +3785,7 @@
 
   function notifyTrialByEmail() {
     if (!currentOwnerId) return;
-    fetch('/api/locarpay-owner', {
+    fetch('/api/ilocarpay-owner', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ step: 'notify-trial', ownerId: currentOwnerId })
@@ -3804,7 +3804,7 @@
     const btn  = $('my-plan-btn');
     btn.disabled = true; btn.textContent = 'Ativando...';
     try {
-      const resp = await fetch('/api/locarpay-owner', {
+      const resp = await fetch('/api/ilocarpay-owner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'activate-plan', ownerId: currentOwnerId, plan })
@@ -3938,7 +3938,7 @@
     const btn = document.querySelector('#upg-step-1 .btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando PIX…'; }
     try {
-      const resp = await fetch('/api/locarpay-subscription', {
+      const resp = await fetch('/api/ilocarpay-subscription', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'pix', ownerId: currentOwnerId, plan: upgState.plan, cpfCnpj: upgState.cpfCnpj })
       });
@@ -3970,7 +3970,7 @@
 
   async function upgPollPix() {
     try {
-      const resp = await fetch('/api/locarpay-subscription', {
+      const resp = await fetch('/api/ilocarpay-subscription', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'check-pix', paymentId: upgState.pixPaymentId, ownerId: currentOwnerId, plan: upgState.plan })
       });
@@ -4012,7 +4012,7 @@
 
     btn.disabled = true; btn.textContent = 'Processando…';
     try {
-      const resp = await fetch('/api/locarpay-subscription', {
+      const resp = await fetch('/api/ilocarpay-subscription', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           step: 'card-init', ownerId: currentOwnerId, plan: upgState.plan,
@@ -4041,7 +4041,7 @@
 
     btn.disabled = true; btn.textContent = 'Verificando…';
     try {
-      const resp = await fetch('/api/locarpay-subscription', {
+      const resp = await fetch('/api/ilocarpay-subscription', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'card-verify', verificationId: upgState.verificationId, userAmount: amount, ownerId: currentOwnerId })
       });
@@ -4067,7 +4067,7 @@
     $('upg-err-confirm').textContent = '';
     btn.disabled = true; btn.textContent = 'Processando…';
     try {
-      const resp = await fetch('/api/locarpay-subscription', {
+      const resp = await fetch('/api/ilocarpay-subscription', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ step: 'card-confirm', verificationId: upgState.verificationId, ownerId: currentOwnerId, plan: upgState.plan })
       });
@@ -4128,7 +4128,7 @@
     const btn = $('btn-send-otp');
     btn.textContent = 'Enviando...'; btn.disabled = true;
     try {
-      const r = await fetch('/api/locarpay-send-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email }) });
+      const r = await fetch('/api/ilocarpay-send-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email }) });
       const d = await r.json();
       if (!r.ok) { $('login-error').textContent = d.error || 'Erro ao enviar código'; return; }
       otpEmail = email;
@@ -4155,7 +4155,7 @@
     btn.textContent = 'Verificando...'; btn.disabled = true;
     $('login-error').textContent = '';
     try {
-      const r = await fetch('/api/locarpay-verify-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email: otpEmail, otp: code }) });
+      const r = await fetch('/api/ilocarpay-verify-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email: otpEmail, otp: code }) });
       const d = await r.json();
       if (!r.ok) { $('login-error').textContent = d.error || 'Código inválido'; return; }
       await signInWithCustomToken(auth, d.customToken);
@@ -4493,7 +4493,7 @@
       lastMessageSender: 'owner', lastMessageName: ownerName
     });
     if (tenantId) {
-      fetch('/api/locarpay-owner', {
+      fetch('/api/ilocarpay-owner', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           step: 'send-notification', recipientType: 'tenant', tenantId,
@@ -4534,7 +4534,7 @@
     const btn = document.getElementById('btn-save-aviso');
     btn.disabled = true; btn.textContent = 'Enviando...';
     try {
-      const r = await fetch('/api/locarpay-owner', {
+      const r = await fetch('/api/ilocarpay-owner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -4809,7 +4809,7 @@
         delivered:    false
       });
       // Push FCM — marca delivered:true se enviado com sucesso
-      fetch('/api/locarpay-owner', {
+      fetch('/api/ilocarpay-owner', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           step: 'send-notification', recipientType: 'tenant',
@@ -4895,7 +4895,7 @@
     const fill = document.getElementById('bcd-upload-fill');
     bar.style.display = 'block'; fill.style.width = '10%';
     // 1. Obter URL assinada
-    const urlResp = await fetch('/api/locarpay-broker', {
+    const urlResp = await fetch('/api/ilocarpay-broker', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ step: 'get-chat-upload-url', ownerId: currentOwnerId,
         chatId: _bcdChatId, fileName, contentType: fileType })
@@ -4910,7 +4910,7 @@
     if (!putResp.ok) throw new Error('Falha ao enviar arquivo');
     fill.style.width = '80%';
     // 3. Tornar público no servidor
-    await fetch('/api/locarpay-broker', {
+    await fetch('/api/ilocarpay-broker', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ step: 'confirm-chat-upload', path: uploadPath })
     });
@@ -4949,7 +4949,7 @@
         unreadBroker: increment(1), unreadOwner: 0
       }, { merge: true });
       // Push FCM para o corretor
-      fetch('/api/locarpay-owner', {
+      fetch('/api/ilocarpay-owner', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           step: 'send-notification', recipientType: 'broker', brokerId: _bcdBrokerId,
@@ -5557,7 +5557,7 @@
 
 <header>
   <div class="hd-left">
-    <div class="hd-logo"><img src="/logo.webp" alt="iLocarPay"></div>
+    <div class="hd-logo"><img src="/logo.webp" alt="iiLocarPay"></div>
     <span class="hd-brand">iLocar<span>Pay</span></span>
   </div>
   <div class="hd-right">
@@ -5572,7 +5572,7 @@
 <section id="login-section">
   <div class="login-left">
     <div class="ll-logo">
-      <img src="/logo.webp" alt="iLocarPay" style="width:36px;height:36px;object-fit:contain;border-radius:9px">
+      <img src="/logo.webp" alt="iiLocarPay" style="width:36px;height:36px;object-fit:contain;border-radius:9px">
       <div class="ll-logo-name">iLocar<span>Pay</span></div>
     </div>
     <div class="ll-headline">Gestão de aluguéis<br><em>sem complicação</em></div>
@@ -5935,7 +5935,7 @@
       <div style="margin-bottom:24px">
         <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#1a3a1a,#2D6A2D);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px">🤝</div>
         <h3 style="font-size:18px;font-weight:800;color:#f0f0f0;margin:0 0 4px">Cadastrar Corretor</h3>
-        <p style="font-size:13px;color:#666;margin:0">O corretor receberá acesso ao app iLocarPay.</p>
+        <p style="font-size:13px;color:#666;margin:0">O corretor receberá acesso ao app iiLocarPay.</p>
       </div>
       <div style="display:flex;flex-direction:column;gap:14px">
         <div>
@@ -6355,7 +6355,7 @@
         </div>
         <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">
           <div style="width:24px;height:24px;border-radius:50%;background:rgba(105,211,105,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:#69D369;font-weight:700">2</div>
-          <span style="font-size:13px;color:#E4F0E4">Procure a cobrança <strong>"iLocarPay"</strong> (valor entre R$1,00 e R$9,99)</span>
+          <span style="font-size:13px;color:#E4F0E4">Procure a cobrança <strong>"iiLocarPay"</strong> (valor entre R$1,00 e R$9,99)</span>
         </div>
         <div style="display:flex;align-items:flex-start;gap:10px">
           <div style="width:24px;height:24px;border-radius:50%;background:rgba(105,211,105,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:#69D369;font-weight:700">3</div>
@@ -6403,7 +6403,7 @@
 <section id="blocked-section" style="display:none;flex-direction:column;gap:12px">
   <div style="font-size:48px">🚫</div>
   <h2>Acesso negado</h2>
-  <p style="color:#888">Esta conta não está cadastrada como imobiliária na plataforma iLocarPay.</p>
+  <p style="color:#888">Esta conta não está cadastrada como imobiliária na plataforma iiLocarPay.</p>
   <button class="btn-outline" onclick="document.getElementById('btn-logout').click()">Sair</button>
 </section>
 

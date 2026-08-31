@@ -1,4 +1,4 @@
-// POST /api/locarpay-credit
+// POST /api/ilocarpay-credit
 // Consulta de crédito (Serasa Experian + Boa Vista SCPC) por imobiliária
 // step:"check-serasa"       → { ownerId, tenantId, cpf }
 // step:"check-boavista"     → { ownerId, tenantId, cpf }
@@ -213,7 +213,7 @@ export default async function handler(req, res) {
 
     res.status(200).json(result);
   } catch (e) {
-    console.error('[locarpay-credit]', e.message);
+    console.error('[ilocarpay-credit]', e.message);
     res.status(e.status || 500).json({ error: e.message });
   }
 }

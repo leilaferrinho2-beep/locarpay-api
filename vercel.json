@@ -1,8 +1,10 @@
 {
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/billing-webhook",              "destination": "/api/locarpay-owner" },
-    { "source": "/payment-webhook",              "destination": "/api/locarpay-card" },
+    { "source": "/billing-webhook",              "destination": "/api/ilocarpay-owner" },
+    { "source": "/payment-webhook",              "destination": "/api/ilocarpay-card" },
+    { "source": "/ilocarpay/admin",              "destination": "/admin" },
+    { "source": "/ilocarpay/admin/",             "destination": "/admin" },
     { "source": "/locarpay/admin",               "destination": "/admin" },
     { "source": "/locarpay/admin/",              "destination": "/admin" },
     { "source": "/broker",                       "destination": "/broker/index.html" },
@@ -10,9 +12,22 @@
     { "source": "/superadmin",                   "destination": "/superadmin/index.html" },
     { "source": "/superadmin/",                  "destination": "/superadmin/index.html" },
     { "source": "/api/version",                  "destination": "/version.json" },
-    { "source": "/api/locarpay-send-otp",           "destination": "/api/locarpay-otp?action=send" },
-    { "source": "/api/locarpay-verify-otp",         "destination": "/api/locarpay-otp?action=verify" },
-    { "source": "/api/locarpay-reassign-contract",  "destination": "/api/locarpay-fix-contract" },
+    { "source": "/api/ilocarpay-send-otp",           "destination": "/api/ilocarpay-otp?action=send" },
+    { "source": "/api/ilocarpay-verify-otp",         "destination": "/api/ilocarpay-otp?action=verify" },
+    { "source": "/api/ilocarpay-reassign-contract",  "destination": "/api/ilocarpay-fix-contract" },
+    { "source": "/api/locarpay-send-otp",            "destination": "/api/ilocarpay-otp?action=send" },
+    { "source": "/api/locarpay-verify-otp",          "destination": "/api/ilocarpay-otp?action=verify" },
+    { "source": "/api/locarpay-owner",               "destination": "/api/ilocarpay-owner" },
+    { "source": "/api/locarpay-card",                "destination": "/api/ilocarpay-card" },
+    { "source": "/api/locarpay-broker",              "destination": "/api/ilocarpay-broker" },
+    { "source": "/api/locarpay-pix",                 "destination": "/api/ilocarpay-pix" },
+    { "source": "/api/locarpay-credit",              "destination": "/api/ilocarpay-credit" },
+    { "source": "/api/locarpay-subscription",        "destination": "/api/ilocarpay-subscription" },
+    { "source": "/api/locarpay-sync-status",         "destination": "/api/ilocarpay-sync-status" },
+    { "source": "/api/locarpay-invite-tenant",       "destination": "/api/ilocarpay-invite-tenant" },
+    { "source": "/api/locarpay-fix-contract",        "destination": "/api/ilocarpay-fix-contract" },
+    { "source": "/api/locarpay-reassign-contract",   "destination": "/api/ilocarpay-fix-contract" },
+    { "source": "/api/locarpay-assinafy-webhook",    "destination": "/api/ilocarpay-assinafy-webhook" },
     { "source": "/download",                     "destination": "/download/index.html" },
     { "source": "/download/",                    "destination": "/download/index.html" }
   ],
@@ -45,11 +60,11 @@
     }
   ],
   "functions": {
-    "api/locarpay-broker.js": { "maxDuration": 300 }
+    "api/ilocarpay-broker.js": { "maxDuration": 300 }
   },
   "crons": [
-    { "path": "/api/locarpay-owner",                         "schedule": "0 11 * * *" },
-    { "path": "/api/locarpay-card?step=cron-daily",          "schedule": "0 13 * * *" },
-    { "path": "/api/locarpay-broker?step=wa-keepalive",      "schedule": "0 7 * * *" }
+    { "path": "/api/ilocarpay-owner",                         "schedule": "0 11 * * *" },
+    { "path": "/api/ilocarpay-card?step=cron-daily",          "schedule": "0 13 * * *" },
+    { "path": "/api/ilocarpay-broker?step=wa-keepalive",      "schedule": "0 7 * * *" }
   ]
 }

@@ -1,4 +1,4 @@
-// POST /api/locarpay-sync-status
+// POST /api/iilocarpay-sync-status
 // Consulta Assinafy e retorna status de assinaturas para o app do inquilino.
 // Body: { tenantEmail: string }
 
@@ -9,7 +9,7 @@ const ASSINAFY = 'https://api.assinafy.com.br/v1';
 
 function initAdmin() {
   if (getApps().length > 0) return;
-  initializeApp({ credential: cert(JSON.parse(process.env.LOCARPAY_SERVICE_ACCOUNT)) });
+  initializeApp({ credential: cert(JSON.parse(process.env.IILOCARPAY_SERVICE_ACCOUNT)) });
 }
 
 async function assinafyGet(apiKey, path) {
