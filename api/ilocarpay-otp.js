@@ -1,4 +1,4 @@
-// POST /api/ilocarpay-send-otp  { email }          → ?action=send  (via rewrite)
+﻿// POST /api/ilocarpay-send-otp  { email }          → ?action=send  (via rewrite)
 // POST /api/ilocarpay-verify-otp { email, otp }    → ?action=verify (via rewrite)
 
 import nodemailer from 'nodemailer';
@@ -26,7 +26,7 @@ async function enviarEmail(email, otp) {
   });
 
   await transporter.sendMail({
-    from: 'iiLocarPay <denis@dlftech.com.br>',
+    from: 'iLocarPay <denis@dlftech.com.br>',
     to: email,
     subject: 'Seu código de acesso ao iLocarPay',
     html: `

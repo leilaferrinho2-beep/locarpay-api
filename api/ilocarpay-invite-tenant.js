@@ -1,4 +1,4 @@
-// POST /api/ilocarpay-invite-tenant  { email, tenantName, ownerName, propertyDescription }
+﻿// POST /api/ilocarpay-invite-tenant  { email, tenantName, ownerName, propertyDescription }
 // Envia e-mail de boas-vindas para o inquilino recém-cadastrado
 
 import nodemailer from 'nodemailer';
@@ -15,7 +15,7 @@ async function enviarConvite({ email, tenantName, ownerName, propertyDescription
   });
 
   await transporter.sendMail({
-    from: 'iiLocarPay <denis@dlftech.com.br>',
+    from: 'iLocarPay <denis@dlftech.com.br>',
     to: email,
     subject: 'Você foi cadastrado no iLocarPay',
     html: `
@@ -24,10 +24,10 @@ async function enviarConvite({ email, tenantName, ownerName, propertyDescription
         <p>Olá, <strong>${tenantName || 'inquilino'}</strong>!</p>
         <p>${ownerName ? `<strong>${ownerName}</strong> cadastrou você` : 'Você foi cadastrado'} como inquilino no aplicativo iLocarPay.</p>
         ${propertyDescription ? `<p><strong>Imóvel:</strong> ${propertyDescription}</p>` : ''}
-        <p>Agora você pode acessar o app iiLocarPay para acompanhar cobranças, contratos e muito mais.</p>
+        <p>Agora você pode acessar o app iLocarPay para acompanhar cobranças, contratos e muito mais.</p>
         <div style="text-align:center;margin:28px 0">
           <a href="https://www.ilocarpay.com.br/download" style="background:#2E7D32;color:white;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:bold;text-decoration:none;display:inline-block">
-            📲 Baixar o app iiLocarPay
+            📲 Baixar o app iLocarPay
           </a>
         </div>
         <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin:24px 0">
@@ -39,7 +39,7 @@ async function enviarConvite({ email, tenantName, ownerName, propertyDescription
           </p>
         </div>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-        <p style="color:#aaa;font-size:12px;text-align:center">Equipe iiLocarPay</p>
+        <p style="color:#aaa;font-size:12px;text-align:center">Equipe iLocarPay</p>
       </div>
     `
   });

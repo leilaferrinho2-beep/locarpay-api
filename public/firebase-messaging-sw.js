@@ -1,4 +1,4 @@
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+﻿importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
 firebase.initializeApp({
@@ -12,7 +12,7 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(payload => {
-  const title = payload.data?.title || payload.notification?.title || 'iiLocarPay';
+  const title = payload.data?.title || payload.notification?.title || 'iLocarPay';
   const body  = payload.data?.body  || payload.notification?.body  || 'Nova notificação';
   self.registration.showNotification(title, {
     body,

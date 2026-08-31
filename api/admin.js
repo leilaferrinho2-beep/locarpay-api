@@ -1,4 +1,4 @@
-// GET  → serve admin HTML
+﻿// GET  → serve admin HTML
 // POST → superadmin API (requer x-admin-token do super admin)
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
@@ -54,7 +54,7 @@ async function sendOtpEmail(otp) {
     auth: { user: 'denis@dlftech.com.br', pass: process.env.TITAN_SMTP_PASSWORD },
   });
   await transporter.sendMail({
-    from: '"iiLocarPay" <denis@dlftech.com.br>',
+    from: '"iLocarPay" <denis@dlftech.com.br>',
     to:   SUPER_ADMIN_EMAIL,
     subject: 'Código de acesso Super Admin',
     html: `<p>Seu código de acesso é: <strong style="font-size:24px;letter-spacing:4px;">${otp}</strong></p>
@@ -268,7 +268,7 @@ async function createSubscription(db, ownerId, plan) {
     value:        planInfo.monthlyPrice,
     nextDueDate:  nextDueDate.toISOString().slice(0, 10),
     cycle:        'MONTHLY',
-    description:  `iiLocarPay - Plano ${planInfo.label}`,
+    description:  `iLocarPay - Plano ${planInfo.label}`,
   }, masterKey);
 
   // Atualiza Firestore

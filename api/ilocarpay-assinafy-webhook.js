@@ -1,4 +1,4 @@
-// POST /api/ilocarpay-assinafy-webhook
+﻿// POST /api/ilocarpay-assinafy-webhook
 // Recebe eventos da Assinafy quando um signatário assina ou o documento é concluído.
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
@@ -206,9 +206,9 @@ async function handleAsaasPayment(db, payment) {
   const billingTypeMap = { PIX: 'PIX', CREDIT_CARD: 'Cartão de crédito', DEBIT_CARD: 'Cartão de débito', BOLETO: 'Boleto' };
   const meio = billingTypeMap[payment.billingType] || payment.billingType || 'não informado';
 
-  const msgTenant  = `✅ *iiLocarPay* — Pagamento confirmado!\n\nRecebemos seu pagamento de *${valor}* via *${meio}* referente ao aluguel de *${periodo}* do imóvel ${endereco}.\n\nObrigado! 🏠`;
-  const msgOwner   = `💰 *iiLocarPay* — Aluguel recebido!\n\nO inquilino *${tenantName}* realizou o pagamento de *${valor}* via *${meio}* ref. ${periodo} — imóvel: ${endereco}.\n\nO repasse será processado em até 2 dias úteis.`;
-  const msgBroker  = `📋 *iiLocarPay* — Pagamento confirmado\n\n*Inquilino:* ${tenantName}\n*Valor:* ${valor}\n*Meio:* ${meio}\n*Período:* ${periodo}\n*Imóvel:* ${endereco}\n\nCobrança ID: ${chargeId}`;
+  const msgTenant  = `✅ *iLocarPay* — Pagamento confirmado!\n\nRecebemos seu pagamento de *${valor}* via *${meio}* referente ao aluguel de *${periodo}* do imóvel ${endereco}.\n\nObrigado! 🏠`;
+  const msgOwner   = `💰 *iLocarPay* — Aluguel recebido!\n\nO inquilino *${tenantName}* realizou o pagamento de *${valor}* via *${meio}* ref. ${periodo} — imóvel: ${endereco}.\n\nO repasse será processado em até 2 dias úteis.`;
+  const msgBroker  = `📋 *iLocarPay* — Pagamento confirmado\n\n*Inquilino:* ${tenantName}\n*Valor:* ${valor}\n*Meio:* ${meio}\n*Período:* ${periodo}\n*Imóvel:* ${endereco}\n\nCobrança ID: ${chargeId}`;
 
   await Promise.all([
     sendWhatsApp(tenantPhone,   msgTenant),
@@ -316,7 +316,7 @@ export default async function handler(req, res) {
         if (documentHash) updates.documentHash = documentHash;
 
         const endereco   = contractData.address    || contractData.endereco || 'o imóvel';
-        const msgConcluido = `🎉 *iiLocarPay*: Contrato de locação do imóvel ${endereco} assinado por todas as partes! Acesse o app para visualizar o documento.`;
+        const msgConcluido = `🎉 *iLocarPay*: Contrato de locação do imóvel ${endereco} assinado por todas as partes! Acesse o app para visualizar o documento.`;
         await Promise.all([
           sendWhatsApp(contractData.landlordPhone, msgConcluido),
           sendWhatsApp(contractData.brokerPhone || contractData.corretorPhone, msgConcluido),
@@ -361,7 +361,7 @@ export default async function handler(req, res) {
 
         const tenantName  = contractData.tenantName || contractData.inquilinoNome || 'Inquilino';
         const tenantEmail = contractData.tenantEmail || '';
-        const msgInquilino = `Olá, ${tenantName}! 📝\n\nO proprietário assinou o contrato de locação do imóvel *${endereco}*. O contrato agora está no seu e-mail (${tenantEmail}) aguardando a sua assinatura digital.\n\nPor favor, verifique sua caixa de entrada e assine para concluir a locação.\n\n— iiLocarPay`;
+        const msgInquilino = `Olá, ${tenantName}! 📝\n\nO proprietário assinou o contrato de locação do imóvel *${endereco}*. O contrato agora está no seu e-mail (${tenantEmail}) aguardando a sua assinatura digital.\n\nPor favor, verifique sua caixa de entrada e assine para concluir a locação.\n\n— iLocarPay`;
         await sendWhatsApp(contractData.tenantPhone || contractData.inquilinoPhone, msgInquilino);
 
       } else {
@@ -379,7 +379,7 @@ export default async function handler(req, res) {
         console.log(`[assinafy-webhook] inquilino assinou contrato ${contractId} → CONTRATO_ASSINADO`);
 
         const tenantName = contractData.tenantName || contractData.inquilinoNome || 'O inquilino';
-        const msg = `✅ *iiLocarPay*: ${tenantName} assinou o contrato de locação do imóvel *${endereco}*. Acesse o app para verificar.`;
+        const msg = `✅ *iLocarPay*: ${tenantName} assinou o contrato de locação do imóvel *${endereco}*. Acesse o app para verificar.`;
         await Promise.all([
           sendWhatsApp(contractData.landlordPhone, msg),
           sendWhatsApp(contractData.brokerPhone || contractData.corretorPhone, msg)

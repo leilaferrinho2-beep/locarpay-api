@@ -1,4 +1,4 @@
-// POST /api/iilocarpay-sync-status
+﻿// POST /api/iLocarPay-sync-status
 // Consulta Assinafy e retorna status de assinaturas para o app do inquilino.
 // Body: { tenantEmail: string }
 
