@@ -217,6 +217,7 @@
         o.status !== 'suspended' ? '<li class="mi-warn" onclick="suspendOwner(\''+eid+'\')">&#9646; Suspender</li>' : '',
         !o.asaasConfigured && (o.cpfCnpj||'').replace(/\D/g,'').length===14 ? '<li onclick="setupAsaas(\''+eid+'\')">&#9654; Criar Asaas</li>' : '',
         !o.asaasConfigured && (o.cpfCnpj||'').replace(/\D/g,'').length!==14 ? '<li class="mi-disabled" title="Asaas requer CNPJ">&#9888; Sem CNPJ</li>' : '',
+        !o.subscriptionId ? '<li class="mi-ok" onclick="createSubscription(\''+eid+'\')">&#128176; Criar assinatura</li>' : '',
         '<li class="mi-danger" onclick="deleteOwner(\''+eid+'\',\''+enm+'\')">&#128465; Excluir</li>',
       ].filter(Boolean).join('');
       return '<tr>'
@@ -276,6 +277,8 @@
     $('dv-kpi-sub').innerHTML = o.subscriptionId
       ? '<span class="chip chip-ok">Ativa</span>'
       : '<span class="chip chip-warn">Sem assinatura</span>';
+    const createSubRow = $('dv-create-sub-row');
+    if (createSubRow) createSubRow.style.display = o.subscriptionId ? 'none' : '';
 
     // Campos
     $('dv-f-name').textContent    = o.name    || '—';
@@ -476,21 +479,76 @@
   window.deleteOwner   = (id, name) => adminAction('delete-owner', id,
     'Excluir permanentemente "' + name + '"?\nEsta acao nao pode ser desfeita.');
 
-  window.createSubscription = async (id) => {
-    const plan = prompt('Plano (basic = R$49/mes | pro = R$99/mes):', 'basic');
-    if (!plan) return;
-    if (!['basic','pro'].includes(plan)) { toast('Plano invalido. Use basic ou pro.', 'error'); return; }
+  // ── CRIAR ASSINATURA — MODAL ──────────────────────────────────
+  let _subOwnerId = null;
+  let _subPlan = 'basic';
+  let _subSaving = false;
+
+  window.selectPlan = (plan) => {
+    _subPlan = plan;
+    ['basic','pro'].forEach(p => {
+      const el = $('plan-opt-' + p);
+      if (el) el.classList.toggle('selected', p === plan);
+    });
+  };
+
+  window.createSubscription = (id) => {
+    const o = owners.find(x => x.ownerId === id);
+    if (!o) { toast('Imobiliária não encontrada.', 'error'); return; }
+    _subOwnerId = id;
+    _subPlan = 'basic';
+    selectPlan('basic');
+    const nameEl = $('sub-ctx-name'), emailEl = $('sub-ctx-email');
+    if (nameEl) nameEl.textContent  = o.name  || '—';
+    if (emailEl) emailEl.textContent = o.email || '—';
+    const btn = $('sub-save-btn');
+    btn.disabled = false;
+    btn.innerHTML = 'Criar assinatura';
+    _subSaving = false;
+    $('modal-sub').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => { const el = $('plan-opt-basic'); if (el) el.focus(); }, 60);
+  };
+
+  window.closeSubModal = () => {
+    if (_subSaving) return;
+    $('modal-sub').style.display = 'none';
+    document.body.style.overflow = '';
+    _subOwnerId = null;
+  };
+
+  window.confirmSubModal = async () => {
+    if (_subSaving || !_subOwnerId) return;
+    const plan = _subPlan;
+    if (!['basic','pro'].includes(plan)) { toast('Selecione um plano válido.', 'error'); return; }
+    _subSaving = true;
+    const btn = $('sub-save-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner"></span>Criando…';
+    $('sub-close-btn').disabled  = true;
+    $('sub-cancel-btn').disabled = true;
     try {
       const r = await fetch('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-token': getToken() },
-        body: JSON.stringify({ step: 'create-subscription', ownerId: id, plan })
+        body: JSON.stringify({ step: 'create-subscription', ownerId: _subOwnerId, plan })
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error);
-      toast(d.message + ' Vencimento: ' + (d.nextDueDate || ''), 'ok');
+      if (!r.ok) throw new Error(d.error || 'Erro ao criar assinatura.');
+      toast((d.message || 'Assinatura criada com sucesso.') + (d.nextDueDate ? ' Vencimento: ' + d.nextDueDate : ''), 'ok');
+      $('modal-sub').style.display = 'none';
+      document.body.style.overflow = '';
+      _subOwnerId = null;
+      _subSaving  = false;
       loadOwners();
-    } catch(e) { toast('Erro: ' + e.message, 'error'); }
+    } catch(e) {
+      toast('Erro: ' + e.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = 'Criar assinatura';
+      $('sub-close-btn').disabled  = false;
+      $('sub-cancel-btn').disabled = false;
+      _subSaving = false;
+    }
   };
 
   window.cancelSubscription = (id) => adminAction('cancel-subscription', id,
@@ -619,6 +677,7 @@
   // ESC fecha modais
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
+    if ($('modal-sub').style.display  === 'flex') { closeSubModal(); return; }
     if ($('modal-add').style.display  === 'flex') { closeAddModal(); return; }
     if ($('modal-edit').style.display === 'flex') { closeEditModal(); return; }
     if ($('modal-date').style.display === 'flex') { modalDateResolve(null); }
@@ -956,6 +1015,8 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
   display: flex; align-items: center; gap: 8px; transition: background .12s, color .12s;
 }
 .row-menu li:hover { background: var(--surf3); color: var(--txt); }
+.row-menu .mi-ok { color: var(--green); }
+.row-menu .mi-ok:hover { background: var(--green-b); color: var(--green); }
 .row-menu .mi-warn { color: var(--amber); }
 .row-menu .mi-warn:hover { background: var(--amber-b); color: var(--amber); }
 .row-menu .mi-danger { color: var(--red); }
@@ -1193,6 +1254,56 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
   border-color: rgba(0,0,0,.18); border-top-color: rgba(0,0,0,.55);
 }
 
+/* ── SUBSCRIPTION MODAL ──────────────────────── */
+#modal-sub {
+  display: none; position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,.72); align-items: center; justify-content: center;
+  backdrop-filter: blur(6px);
+}
+.plan-option {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px; border-radius: 11px;
+  border: 1.5px solid var(--bdr2); background: var(--surf2);
+  cursor: pointer; transition: border-color .15s, background .15s;
+  position: relative;
+}
+.plan-option:hover { border-color: var(--green); background: var(--surf3); }
+.plan-option input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.plan-option .plan-radio-dot {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--bdr3); background: var(--surf);
+  flex-shrink: 0; transition: border-color .15s, background .15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.plan-option.selected { border-color: var(--green); background: var(--surf3); }
+.plan-option.selected .plan-radio-dot {
+  border-color: var(--green); background: var(--green);
+}
+.plan-option.selected .plan-radio-dot::after {
+  content: ''; display: block; width: 5px; height: 5px;
+  background: #040507; border-radius: 50%;
+}
+.plan-option-info { flex: 1; }
+.plan-option-name { font-size: 13.5px; font-weight: 800; color: var(--txt); }
+.plan-option-price { font-size: 12px; color: var(--txt2); margin-top: 2px; }
+.sub-context-box {
+  background: var(--surf2); border: 1px solid var(--bdr2);
+  border-radius: 10px; padding: 13px 15px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.sub-context-label { font-size: 9px; font-weight: 800; letter-spacing: .12em;
+  text-transform: uppercase; color: #4a5a72; }
+.sub-context-name { font-size: 13.5px; font-weight: 700; color: var(--txt); }
+.sub-context-email { font-size: 11.5px; color: var(--txt2); }
+#sub-save-btn {
+  background: linear-gradient(135deg, var(--green) 0%, var(--green-d) 100%);
+  color: #040507;
+  box-shadow: 0 4px 16px rgba(16,185,129,.22);
+}
+#sub-save-btn:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); }
+#sub-save-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+#sub-save-btn .btn-spinner { border-color: rgba(0,0,0,.18); border-top-color: rgba(0,0,0,.55); }
+
 /* ── ADD OWNER MODAL ─────────────────────────── */
 #modal-add {
   display: none; position: fixed; inset: 0; z-index: 9999;
@@ -1392,6 +1503,11 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
               <button class="btn-copy" id="dv-copy-subid" onclick="copyDvSubId()" style="display:none" aria-label="Copiar ID da assinatura">&#10697; Copiar</button>
             </div>
           </div>
+          <div class="info-item info-item-full" id="dv-create-sub-row" style="display:none;">
+            <button class="act act-ok" id="dv-create-sub-btn" onclick="createSubscription(_dvOwnerId)" style="font-size:12px;gap:6px;">
+              &#128176;&nbsp;Criar assinatura
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1402,6 +1518,61 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
           <div class="integ-item"><span class="integ-name">ASSINAFY</span><span id="dv-integ-assinafy"></span></div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CRIAR ASSINATURA -->
+<div id="modal-sub"
+  role="dialog" aria-modal="true"
+  aria-labelledby="sub-modal-title" aria-describedby="sub-modal-desc">
+  <div class="edit-panel" style="width:480px;max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+      <div>
+        <div id="sub-modal-title" style="font-size:17px;font-weight:800;color:var(--txt);letter-spacing:-.03em;">Criar assinatura</div>
+        <div id="sub-modal-desc" style="font-size:12px;color:var(--txt2);margin-top:4px;line-height:1.4;">Configure e ative a assinatura mensal via PIX no Asaas.</div>
+      </div>
+      <button class="edit-close" id="sub-close-btn" onclick="closeSubModal()" aria-label="Fechar">&#215;</button>
+    </div>
+
+    <div style="display:grid;gap:16px;">
+      <!-- Imobiliária sendo afetada -->
+      <div>
+        <div class="modal-section-label">Imobili&aacute;ria</div>
+        <div class="sub-context-box">
+          <span class="sub-context-name" id="sub-ctx-name">—</span>
+          <span class="sub-context-email" id="sub-ctx-email">—</span>
+        </div>
+      </div>
+
+      <!-- Seleção de plano -->
+      <div>
+        <div class="modal-section-label">Escolha o plano</div>
+        <div style="display:grid;gap:10px;">
+          <label class="plan-option selected" id="plan-opt-basic" onclick="selectPlan('basic')">
+            <input type="radio" name="sub-plan" value="basic" checked>
+            <span class="plan-radio-dot"></span>
+            <div class="plan-option-info">
+              <div class="plan-option-name">Basic</div>
+              <div class="plan-option-price">R$ 49 / m&ecirc;s</div>
+            </div>
+          </label>
+          <label class="plan-option" id="plan-opt-pro" onclick="selectPlan('pro')">
+            <input type="radio" name="sub-plan" value="pro">
+            <span class="plan-radio-dot"></span>
+            <div class="plan-option-info">
+              <div class="plan-option-name">Pro</div>
+              <div class="plan-option-price">R$ 99 / m&ecirc;s</div>
+            </div>
+          </label>
+        </div>
+        <div class="field-hint">Cobran&ccedil;a mensal via PIX. O vencimento da primeira cobran&ccedil;a ser&aacute; em 1 dia.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:26px;justify-content:flex-end;">
+      <button class="edit-btn-cancel" id="sub-cancel-btn" onclick="closeSubModal()">Cancelar</button>
+      <button id="sub-save-btn" class="edit-btn-save" onclick="confirmSubModal()">Criar assinatura</button>
     </div>
   </div>
 </div>
