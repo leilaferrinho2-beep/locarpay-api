@@ -227,7 +227,31 @@
     $('modal-name').textContent = o.name || 'Imobiliária';
     $('modal').classList.add('open');
   };
-  window.closeModal = () => $('modal').classList.remove('open');
+  window.closeModal = () => {
+    $('modal').classList.remove('open','minimized','windowed');
+  };
+  window.minimizeModal = () => {
+    const m = $('modal');
+    if (m.classList.contains('minimized')) {
+      m.classList.remove('minimized');
+    } else {
+      m.classList.add('minimized');
+      m.classList.remove('windowed');
+    }
+  };
+  window.toggleMaximize = () => {
+    const m = $('modal'), btn = $('btn-maximize');
+    if (m.classList.contains('windowed')) {
+      m.classList.remove('windowed');
+      btn.innerHTML = '&#9633;';
+      btn.title = 'Restaurar';
+    } else {
+      m.classList.add('windowed');
+      m.classList.remove('minimized');
+      btn.innerHTML = '&#10063;';
+      btn.title = 'Maximizar';
+    }
+  };
 
   // Modal de data com máscara
   let _modalDateResolve = null;
@@ -678,6 +702,16 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 }
 .modal-title { font-size: 16px; font-weight: 800; color: var(--txt); letter-spacing: -.03em; }
 .modal-subtitle { font-size: 11px; color: var(--txt2); margin-top: 3px; }
+.win-controls { display: flex; gap: 6px; align-items: center; }
+.btn-wc {
+  width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--bdr2);
+  background: var(--surf2); color: var(--txt2); cursor: pointer; font-size: 15px;
+  display: flex; align-items: center; justify-content: center; transition: all .15s;
+}
+.btn-wc:hover { color: var(--txt); border-color: var(--bdr3); background: var(--surf3); }
+.btn-cls:hover { background: #c0392b; color: #fff; border-color: #c0392b; }
+.btn-min:hover { background: #e6a817; color: #fff; border-color: #e6a817; }
+.btn-max:hover { background: #27ae60; color: #fff; border-color: #27ae60; }
 .btn-close {
   background: var(--surf2); border: 1px solid var(--bdr2); border-radius: 8px;
   color: var(--txt2); width: 32px; height: 32px; cursor: pointer; font-size: 15px;
@@ -685,6 +719,13 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
   transition: all .15s;
 }
 .btn-close:hover { color: var(--txt); border-color: var(--bdr3); background: var(--surf3); }
+#modal.minimized .modal-panel { top: auto; bottom: 0; height: 64px; border-radius: 12px 12px 0 0; }
+#modal.minimized .modal-body, #modal.minimized .modal-footer { display: none; }
+#modal.windowed .modal-panel {
+  inset: auto; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  width: 90vw; max-width: 820px; height: 85vh; border-radius: 12px;
+  box-shadow: 0 24px 80px rgba(0,0,0,.6);
+}
 .modal-body { padding: 20px 26px; flex: 1; overflow-y: auto; }
 .mrow {
   display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
@@ -919,7 +960,11 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
         <div class="modal-title" id="modal-name">Imobili&aacute;ria</div>
         <div class="modal-subtitle">Detalhes da conta</div>
       </div>
-      <button class="btn-close" onclick="closeModal()">&#215;</button>
+      <div class="win-controls">
+        <button class="btn-wc btn-min" onclick="minimizeModal()" title="Minimizar">&#8212;</button>
+        <button class="btn-wc btn-max" id="btn-maximize" onclick="toggleMaximize()" title="Restaurar">&#9633;</button>
+        <button class="btn-wc btn-cls" onclick="closeModal()" title="Fechar">&#215;</button>
+      </div>
     </div>
     <div class="modal-body"><div id="modal-rows"></div></div>
     <div class="modal-footer" id="modal-actions"></div>
