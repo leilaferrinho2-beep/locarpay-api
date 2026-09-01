@@ -223,9 +223,6 @@
       '<button class="act act-edit" onclick="closeModal();editOwner(\''+eid+'\')">&#9998;&nbsp;Editar</button>'
     + (o.status !== 'active'    ? '<button class="act act-ok"   onclick="activateOwner(\''+eid+'\');closeModal()">&#10003;&nbsp;Ativar</button>' : '')
     + (o.status !== 'suspended' ? '<button class="act act-warn" onclick="suspendOwner(\''+eid+'\');closeModal()">&#9646;&nbsp;Suspender</button>' : '')
-    + (!o.asaasConfigured       ? '<button class="act act-blue" onclick="setupAsaas(\''+eid+'\');closeModal()">Criar Asaas</button>' : '')
-    + '<button class="act act-blue" onclick="createSubscription(\''+eid+'\');closeModal()">&#128179;&nbsp;Cobrar</button>'
-    + (o.subscriptionId ? '<button class="act act-warn" onclick="cancelSubscription(\''+eid+'\');closeModal()">Cancelar assin.</button>' : '')
     + '<button class="act act-del"  onclick="deleteOwner(\''+eid+'\',\''+nm+'\');closeModal()">&#128465;&nbsp;Excluir</button>';
     $('modal-name').textContent = o.name || 'Imobiliária';
     $('modal').classList.add('open');
@@ -671,12 +668,9 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
   background: rgba(0,0,0,.72); backdrop-filter: blur(8px);
 }
 .modal-panel {
-  position: relative; z-index: 1;
-  width: 95vw; max-width: 680px; max-height: 90vh;
+  position: absolute; inset: 0;
   background: linear-gradient(160deg, #0e1220 0%, #090c14 100%);
-  border: 1px solid var(--bdr2); border-radius: 20px;
   display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: 0 0 0 1px rgba(255,255,255,.04), 0 32px 80px rgba(0,0,0,.7);
 }
 .modal-header {
   padding: 24px 26px 20px; border-bottom: 1px solid var(--bdr);
