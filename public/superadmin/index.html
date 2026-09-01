@@ -200,7 +200,7 @@
 
   window.viewOwner = id => {
     const o = owners.find(x => x.ownerId === id);
-    if (!o) return;
+    if (!o) { toast('Owner não encontrado (id=' + id + ', total=' + owners.length + ')', 'error'); return; }
     const rows = [
       ['Nome', o.name], ['E-mail', o.email], ['Telefone', o.phone||'—'],
       ['CPF/CNPJ', o.cpfCnpj||'—'], ['Status', o.status||'trial'],
@@ -277,7 +277,7 @@
 
   window.editOwner = (id) => {
     const o = owners.find(x => x.ownerId === id);
-    if (!o) return;
+    if (!o) { toast('Owner não encontrado (id=' + id + ', total=' + owners.length + ')', 'error'); return; }
     $('edit-id').value        = id;
     $('edit-name').value      = o.name        || '';
     $('edit-phone').value     = o.phone       || '';
