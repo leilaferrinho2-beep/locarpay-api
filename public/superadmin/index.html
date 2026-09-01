@@ -220,7 +220,7 @@
         + '<td class="td-date">' + fmtDate(o.trialEndsAt) + '</td>'
         + '<td class="td-actions">'
         + '<button class="act act-view" onclick="viewOwner(\''+eid+'\')">Ver</button>'
-        + '<div class="menu-wrap"><button class="act act-menu" onclick="toggleMenu(event,\''+eid+'\')" aria-label="Mais ações">•••</button>'
+        + '<div class="menu-wrap"><button class="act act-menu" onclick="toggleMenu(event,this,\''+eid+'\')" aria-label="Mais ações">&#8943;</button>'
         + '<ul class="row-menu" data-id="'+eid+'">'+menuItems+'</ul></div>'
         + '</td></tr>';
     }).join('');
@@ -311,12 +311,17 @@
     document.querySelectorAll('.row-menu.open').forEach(m => m.classList.remove('open'));
   });
 
-  window.toggleMenu = (e, id) => {
+  window.toggleMenu = (e, btn, id) => {
     e.stopPropagation();
     const menu = document.querySelector('.row-menu[data-id="' + id + '"]');
     const wasOpen = menu.classList.contains('open');
     document.querySelectorAll('.row-menu.open').forEach(m => m.classList.remove('open'));
-    if (!wasOpen) menu.classList.add('open');
+    if (!wasOpen) {
+      const r = btn.getBoundingClientRect();
+      menu.style.top  = (r.bottom + 4) + 'px';
+      menu.style.right = (window.innerWidth - r.right) + 'px';
+      menu.classList.add('open');
+    }
   };
 
   // Modal de data com máscara
@@ -749,6 +754,7 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 .act:hover { opacity: .82; transform: translateY(-1px); }
 .act:active { transform: translateY(0); }
 .act-view { background: var(--surf3); color: var(--txt2); border: 1px solid var(--bdr2); }
+.act-menu { background: var(--surf3); color: var(--txt2); border: 1px solid var(--bdr2); font-size: 16px; letter-spacing: -.5px; }
 .act-edit { background: rgba(56,189,248,.1); color: var(--sky); border: 1px solid rgba(56,189,248,.2); }
 .act-ok   { background: var(--green-b); color: var(--green); border: 1px solid rgba(16,185,129,.18); }
 .act-warn { background: var(--amber-b); color: var(--amber); border: 1px solid rgba(245,158,11,.18); }
@@ -795,10 +801,10 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 /* ── ROW DROPDOWN MENU ───────────────────────── */
 .menu-wrap { position: relative; display: inline-block; }
 .row-menu {
-  display: none; position: absolute; right: 0; top: calc(100% + 4px);
+  display: none; position: fixed;
   background: var(--surf2); border: 1px solid var(--bdr2); border-radius: 10px;
   list-style: none; margin: 0; padding: 4px; min-width: 170px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.4); z-index: 50;
+  box-shadow: 0 8px 32px rgba(0,0,0,.4); z-index: 9999;
 }
 .row-menu.open { display: block; }
 .row-menu li {
