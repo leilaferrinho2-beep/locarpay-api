@@ -2905,12 +2905,13 @@
           if (codeConflict) { showToast(`Código "${newCode}" já está em uso`, 'error'); return; }
           const rentChanged = rent !== c.baseRent;
           const _eCep  = $('et-cep').value.replace(/\D/g,'');
+          if (_eCep.length !== 8) { showToast('CEP do imóvel obrigatório (8 dígitos)', 'error'); $('et-cep').focus(); return; }
           const _eRua  = $('et-logradouro').value.trim();
           const _eNum  = $('et-numero').value.trim();
           const _eBai  = $('et-bairro').value.trim();
           const _eCid  = $('et-cidade').value.trim();
           const _eUf   = $('et-estado').value.trim().toUpperCase();
-          const _eAddr = [_eRua, _eNum, _eBai, _eCid, _eUf].filter(Boolean).join(', ') + (_eCep ? ` - CEP ${fmtCep(_eCep)}` : '');
+          const _eAddr = [_eRua, _eNum, _eBai, _eCid, _eUf].filter(Boolean).join(', ') + ` - CEP ${fmtCep(_eCep)}`;
           const contractEdits = {
             baseRent: rent, dueDay: due,
             propertyDescription: $('et-property').value.trim(),
@@ -5237,7 +5238,8 @@
           const tenant = tenants.find(t => t.id === c.tenantId);
           const name   = tenant?.name || c.tenantName || '—';
           const init   = name.charAt(0).toUpperCase();
-          const addr   = c.propertyAddress || c.propertyDescription || '—';
+          let addr = c.propertyAddress || c.propertyDescription || '—';
+          if (c.propertyCep && !addr.includes('CEP')) addr += ` — CEP ${fmtCep(c.propertyCep)}`;
           const since  = c.startDate ? new Date(c.startDate + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }) : '';
           return `<div class="recent-item">
             <div class="recent-avatar">${init}</div>
