@@ -220,12 +220,13 @@
     ).join('');
     const eid = esc(o.ownerId), nm = esc(o.name);
     $('modal-actions').innerHTML =
-      (o.status !== 'active'    ? '<button class="act act-ok"   onclick="activateOwner(\''+eid+'\');closeModal()">Ativar plano</button>' : '')
-    + (o.status !== 'suspended' ? '<button class="act act-warn" onclick="suspendOwner(\''+eid+'\');closeModal()">Suspender</button>' : '')
-    + (!o.asaasConfigured       ? '<button class="act act-blue" onclick="setupAsaas(\''+eid+'\');closeModal()">Criar subconta Asaas</button>' : '')
-    + '<button class="act act-blue" onclick="createSubscription(\''+eid+'\');closeModal()">&#128179;&nbsp;Cobrar assinatura</button>'
-    + (o.subscriptionId ? '<button class="act act-warn" onclick="cancelSubscription(\''+eid+'\');closeModal()">Cancelar assinatura</button>' : '')
-    + '<button class="act act-del"  onclick="deleteOwner(\''+eid+'\',\''+nm+'\');closeModal()">Excluir conta</button>';
+      '<button class="act act-edit" onclick="closeModal();editOwner(\''+eid+'\')">&#9998;&nbsp;Editar</button>'
+    + (o.status !== 'active'    ? '<button class="act act-ok"   onclick="activateOwner(\''+eid+'\');closeModal()">&#10003;&nbsp;Ativar</button>' : '')
+    + (o.status !== 'suspended' ? '<button class="act act-warn" onclick="suspendOwner(\''+eid+'\');closeModal()">&#9646;&nbsp;Suspender</button>' : '')
+    + (!o.asaasConfigured       ? '<button class="act act-blue" onclick="setupAsaas(\''+eid+'\');closeModal()">Criar Asaas</button>' : '')
+    + '<button class="act act-blue" onclick="createSubscription(\''+eid+'\');closeModal()">&#128179;&nbsp;Cobrar</button>'
+    + (o.subscriptionId ? '<button class="act act-warn" onclick="cancelSubscription(\''+eid+'\');closeModal()">Cancelar assin.</button>' : '')
+    + '<button class="act act-del"  onclick="deleteOwner(\''+eid+'\',\''+nm+'\');closeModal()">&#128465;&nbsp;Excluir</button>';
     $('modal-name').textContent = o.name || 'Imobiliária';
     $('modal').classList.add('open');
   };
@@ -663,18 +664,19 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
 .act-del  { background: var(--red-b);   color: var(--red); border: 1px solid rgba(244,63,94,.18); }
 
 /* ── MODAL (slide-in) ────────────────────────── */
-#modal { display: none; position: fixed; inset: 0; z-index: 100; }
+#modal { display: none; position: fixed; inset: 0; z-index: 100; align-items: center; justify-content: center; }
 #modal.open { display: flex; }
 .modal-backdrop {
   position: absolute; inset: 0;
-  background: rgba(0,0,0,.65); backdrop-filter: blur(6px);
+  background: rgba(0,0,0,.72); backdrop-filter: blur(8px);
 }
 .modal-panel {
-  position: absolute; right: 0; top: 0; bottom: 0; width: 100%; max-width: 420px;
-  background: linear-gradient(180deg, #0d1018 0%, #090b10 100%);
-  border-left: 1px solid var(--bdr2);
-  display: flex; flex-direction: column; overflow-y: auto;
-  box-shadow: -24px 0 80px rgba(0,0,0,.5);
+  position: relative; z-index: 1;
+  width: 95vw; max-width: 680px; max-height: 90vh;
+  background: linear-gradient(160deg, #0e1220 0%, #090c14 100%);
+  border: 1px solid var(--bdr2); border-radius: 20px;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.04), 0 32px 80px rgba(0,0,0,.7);
 }
 .modal-header {
   padding: 24px 26px 20px; border-bottom: 1px solid var(--bdr);
@@ -689,7 +691,7 @@ tbody td { padding: 14px 18px; vertical-align: middle; }
   transition: all .15s;
 }
 .btn-close:hover { color: var(--txt); border-color: var(--bdr3); background: var(--surf3); }
-.modal-body { padding: 20px 26px; flex: 1; }
+.modal-body { padding: 20px 26px; flex: 1; overflow-y: auto; }
 .mrow {
   display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
   padding: 11px 0; border-bottom: 1px solid var(--bdr); font-size: 13px;
