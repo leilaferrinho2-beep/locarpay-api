@@ -496,26 +496,126 @@
   window.cancelSubscription = (id) => adminAction('cancel-subscription', id,
     'Cancelar assinatura e suspender imobiliaria?');
 
-  window.addOwner = async () => {
-    const name      = prompt('Nome da imobiliária:');        if (!name) return;
-    const email     = prompt('E-mail:');                     if (!email) return;
-    const phone     = prompt('Telefone (opcional):') || '';
-    const cpfCnpj   = prompt('CPF ou CNPJ (opcional):') || '';
-    const birthDate = cpfCnpj.replace(/\D/g,'').length === 11
-      ? prompt('Data de nascimento do responsável (DD/MM/AAAA):') || ''
-      : '';
+  // ── NOVA IMOBILIÁRIA — MODAL ──────────────────────────────
+  let _addSaving = false;
+
+  window.openAddModal = () => {
+    ['add-name','add-email','add-phone','add-cpfcnpj','add-birthdate']
+      .forEach(id => { const el = $(id); if (el) el.value = ''; });
+    ['name','email','cpfcnpj','birthdate'].forEach(clearAddError);
+    $('add-birthdate-row').style.display = 'none';
+    const btn = $('add-save-btn');
+    btn.disabled = false; btn.innerHTML = 'Criar imobili&aacute;ria';
+    _addSaving = false;
+    $('modal-add').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => $('add-name').focus(), 60);
+  };
+
+  window.closeAddModal = () => {
+    if (_addSaving) return;
+    $('modal-add').style.display = 'none';
+    document.body.style.overflow = '';
+    const trigger = $('btn-add-owner'); if (trigger) trigger.focus();
+  };
+
+  window.showAddError = (field, msg) => {
+    const err = $('add-err-' + field), inp = $('add-' + field);
+    if (err) { err.textContent = msg; err.style.display = 'flex'; }
+    if (inp) { inp.setAttribute('aria-invalid','true'); inp.classList.add('input-error'); }
+  };
+  window.clearAddError = (field) => {
+    const err = $('add-err-' + field), inp = $('add-' + field);
+    if (err) { err.textContent = ''; err.style.display = 'none'; }
+    if (inp) { inp.removeAttribute('aria-invalid'); inp.classList.remove('input-error'); }
+  };
+
+  window.maskAddPhone = (el) => {
+    let d = el.value.replace(/\D/g,'').slice(0,11);
+    if (d.length > 6)      d = '(' + d.slice(0,2) + ') ' + d.slice(2,7) + '-' + d.slice(7);
+    else if (d.length > 2) d = '(' + d.slice(0,2) + ') ' + d.slice(2);
+    else if (d.length)     d = '(' + d;
+    el.value = d;
+  };
+
+  window.maskAddCpfCnpj = (el) => {
+    maskCpfCnpj(el);
+    const digits = el.value.replace(/\D/g,'');
+    const isCpf = digits.length === 11;
+    $('add-birthdate-row').style.display = isCpf ? 'block' : 'none';
+    if (!isCpf) { $('add-birthdate').value = ''; clearAddError('birthdate'); }
+    clearAddError('cpfcnpj');
+  };
+
+  window.maskAddBirthdate = (el) => {
+    let d = el.value.replace(/\D/g,'').slice(0,8);
+    if (d.length > 4) d = d.slice(0,2) + '/' + d.slice(2,4) + '/' + d.slice(4);
+    else if (d.length > 2) d = d.slice(0,2) + '/' + d.slice(2);
+    el.value = d;
+    clearAddError('birthdate');
+  };
+
+  window.saveAddOwner = async () => {
+    if (_addSaving) return;
+    const name       = $('add-name').value.trim();
+    const email      = $('add-email').value.trim();
+    const phoneDig   = $('add-phone').value.replace(/\D/g,'');
+    const cpfCnpjDig = $('add-cpfcnpj').value.replace(/\D/g,'');
+    const birthDate  = $('add-birthdate').value.trim();
+
+    ['name','email','cpfcnpj','birthdate'].forEach(clearAddError);
+    let valid = true;
+    if (!name) { showAddError('name','Informe o nome da imobiliária.'); valid = false; }
+    if (!email) { showAddError('email','Informe o e-mail.'); valid = false; }
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showAddError('email','E-mail inválido.'); valid = false; }
+    if (cpfCnpjDig && cpfCnpjDig.length !== 11 && cpfCnpjDig.length !== 14) {
+      showAddError('cpfcnpj','CPF deve ter 11 dígitos ou CNPJ 14 dígitos.'); valid = false;
+    }
+    if (cpfCnpjDig.length === 11 && !birthDate) {
+      showAddError('birthdate','Data de nascimento obrigatória para CPF.'); valid = false;
+    }
+    if (!valid) {
+      const first = document.querySelector('#modal-add .input-error');
+      if (first) first.focus();
+      return;
+    }
+
+    _addSaving = true;
+    const btn = $('add-save-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner"></span>Criando…';
+
     try {
+      const payload = { step: 'register', name, email, plan: 'trial' };
+      if (phoneDig)   payload.phone     = phoneDig;
+      if (cpfCnpjDig) payload.cpfCnpj   = cpfCnpjDig;
+      if (birthDate)  payload.birthDate  = birthDate;
       const r = await fetch('/api/ilocarpay-owner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'register', name, email, phone, cpfCnpj, birthDate, plan: 'trial' })
+        body: JSON.stringify(payload)
       });
       const d = await r.json();
-      if (!r.ok && r.status !== 409) throw new Error(d.error);
-      toast('Imobiliária cadastrada!', 'ok');
+      if (!r.ok && r.status !== 409) throw new Error(d.error || 'Erro ao criar imobiliária.');
+      toast('Imobiliária criada com sucesso!', 'ok');
+      _addSaving = false;
+      closeAddModal();
       loadOwners();
-    } catch(e) { toast('Erro: ' + e.message, 'error'); }
+    } catch(e) {
+      toast('Erro: ' + e.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = 'Criar imobiliária';
+      _addSaving = false;
+    }
   };
+
+  // ESC fecha modais
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if ($('modal-add').style.display  === 'flex') { closeAddModal(); return; }
+    if ($('modal-edit').style.display === 'flex') { closeEditModal(); return; }
+    if ($('modal-date').style.display === 'flex') { modalDateResolve(null); }
+  });
 
   window.refreshData = loadOwners;
 
@@ -1070,6 +1170,43 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
   box-shadow: 0 4px 16px rgba(99,102,241,.3);
 }
 .edit-btn-save:hover { opacity: .9; transform: translateY(-1px); }
+
+/* ── ADD OWNER MODAL ─────────────────────────── */
+#modal-add {
+  display: none; position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,.72); align-items: center; justify-content: center;
+  backdrop-filter: blur(6px);
+}
+.modal-section-sep {
+  height: 1px; background: var(--bdr); margin: 4px 0 20px;
+}
+.modal-section-label {
+  font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--txt3); margin-bottom: 14px;
+}
+.field-hint {
+  font-size: 11px; color: var(--txt3); margin-top: 5px;
+}
+.field-error-msg {
+  font-size: 11.5px; color: var(--red); margin-top: 5px;
+  display: none; align-items: center; gap: 4px;
+}
+.field-error-msg::before { content: '⚠'; font-size: 10px; }
+.edit-input.input-error {
+  border-color: var(--red) !important;
+  box-shadow: 0 0 0 3px rgba(244,63,94,.1) !important;
+}
+.optional-tag {
+  font-size: 10px; color: var(--txt3); font-weight: 400;
+  text-transform: none; letter-spacing: 0;
+}
+.req-star { color: var(--red); margin-left: 2px; }
+.btn-spinner {
+  display: inline-block; width: 11px; height: 11px; margin-right: 6px;
+  border: 2px solid rgba(255,255,255,.25); border-top-color: #fff;
+  border-radius: 50%; animation: spin .6s linear infinite;
+  vertical-align: middle;
+}
 </style>
 </head>
 <body>
@@ -1132,7 +1269,7 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
       </div>
       <div class="page-header-actions">
         <button class="btn-icon" onclick="refreshData()" title="Atualizar">&#8635; Atualizar</button>
-        <button class="btn-add" onclick="addOwner()">+ Nova imobili&aacute;ria</button>
+        <button id="btn-add-owner" class="btn-add" onclick="openAddModal()" aria-label="Cadastrar nova imobiliária">+ Nova imobili&aacute;ria</button>
       </div>
     </div>
 
@@ -1291,6 +1428,90 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
     <div style="display:flex;gap:12px;margin-top:26px;justify-content:flex-end;">
       <button class="edit-btn-cancel" onclick="closeEditModal()">Cancelar</button>
       <button class="edit-btn-save" onclick="saveEditOwner()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NOVA IMOBILIÁRIA -->
+<div id="modal-add"
+  role="dialog" aria-modal="true"
+  aria-labelledby="add-modal-title" aria-describedby="add-modal-desc">
+  <div class="edit-panel" style="width:500px;">
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+      <div>
+        <div id="add-modal-title" style="font-size:17px;font-weight:800;color:var(--txt);letter-spacing:-.03em;">Nova imobiliária</div>
+        <div id="add-modal-desc" style="font-size:12px;color:var(--txt2);margin-top:4px;line-height:1.4;">Cadastre uma nova conta na plataforma.</div>
+      </div>
+      <button class="edit-close" onclick="closeAddModal()" aria-label="Fechar">&#215;</button>
+    </div>
+
+    <div style="display:grid;gap:14px;">
+      <!-- Seção: Dados básicos -->
+      <div class="modal-section-label">Dados da imobiliária</div>
+
+      <label>
+        <span class="edit-field-label">Nome<span class="req-star">*</span></span>
+        <input id="add-name" type="text" class="edit-input"
+          placeholder="Ex.: Ferrinho Im&oacute;veis"
+          autocomplete="organization" maxlength="120"
+          oninput="clearAddError('name')"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey)saveAddOwner()">
+        <span class="field-error-msg" id="add-err-name" role="alert"></span>
+      </label>
+
+      <label>
+        <span class="edit-field-label">E-mail<span class="req-star">*</span></span>
+        <input id="add-email" type="email" class="edit-input"
+          placeholder="contato@imobiliaria.com.br"
+          autocomplete="email" maxlength="120"
+          oninput="clearAddError('email')"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey)saveAddOwner()">
+        <span class="field-error-msg" id="add-err-email" role="alert"></span>
+      </label>
+
+      <!-- Seção: Dados complementares -->
+      <div style="margin-top:4px;">
+        <div class="modal-section-sep"></div>
+        <div class="modal-section-label">Dados complementares <span class="optional-tag">&mdash; opcional</span></div>
+      </div>
+
+      <label>
+        <span class="edit-field-label">Telefone <span class="optional-tag">opcional</span></span>
+        <input id="add-phone" type="tel" class="edit-input"
+          placeholder="(11) 99999-9999"
+          autocomplete="tel"
+          oninput="maskAddPhone(this)">
+      </label>
+
+      <div>
+        <label>
+          <span class="edit-field-label">CPF / CNPJ <span class="optional-tag">opcional</span></span>
+          <input id="add-cpfcnpj" type="text" class="edit-input"
+            placeholder="000.000.000-00 ou 00.000.000/0000-00"
+            maxlength="18"
+            oninput="maskAddCpfCnpj(this)">
+          <span class="field-error-msg" id="add-err-cpfcnpj" role="alert"></span>
+        </label>
+      </div>
+
+      <!-- Data de nascimento — aparece somente para CPF -->
+      <div id="add-birthdate-row" style="display:none;">
+        <label>
+          <span class="edit-field-label">Data de nasc. do respons&aacute;vel<span class="req-star">*</span></span>
+          <input id="add-birthdate" type="text" class="edit-input"
+            placeholder="DD/MM/AAAA" maxlength="10"
+            oninput="maskAddBirthdate(this)"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey)saveAddOwner()">
+          <span class="field-error-msg" id="add-err-birthdate" role="alert"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="display:flex;gap:12px;margin-top:26px;justify-content:flex-end;">
+      <button class="edit-btn-cancel" onclick="closeAddModal()">Cancelar</button>
+      <button id="add-save-btn" class="edit-btn-save" onclick="saveAddOwner()">Criar imobili&aacute;ria</button>
     </div>
   </div>
 </div>
