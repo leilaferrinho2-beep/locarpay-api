@@ -587,8 +587,8 @@
 
     try {
       const payload = { step: 'register', name, email, plan: 'trial' };
-      if (phoneDig)   payload.phone     = phoneDig;
-      if (cpfCnpjDig) payload.cpfCnpj   = cpfCnpjDig;
+      if (phoneDig && phoneDig.length >= 10) payload.phone = phoneDig;
+      if (cpfCnpjDig) payload.cpfCnpj = cpfCnpjDig;
       if (birthDate)  payload.birthDate  = birthDate;
       const r = await fetch('/api/ilocarpay-owner', {
         method: 'POST',
@@ -596,7 +596,14 @@
         body: JSON.stringify(payload)
       });
       const d = await r.json();
-      if (!r.ok && r.status !== 409) throw new Error(d.error || 'Erro ao criar imobiliária.');
+      if (r.status === 409) {
+        toast(d.error || 'Já existe uma imobiliária cadastrada com este e-mail.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = 'Criar imobiliária';
+        _addSaving = false;
+        return;
+      }
+      if (!r.ok) throw new Error(d.error || 'Erro ao criar imobiliária.');
       toast('Imobiliária criada com sucesso!', 'ok');
       _addSaving = false;
       closeAddModal();
@@ -1170,6 +1177,21 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
   box-shadow: 0 4px 16px rgba(99,102,241,.3);
 }
 .edit-btn-save:hover { opacity: .9; transform: translateY(-1px); }
+.edit-btn-cancel:focus-visible, .edit-btn-save:focus-visible {
+  outline: 2px solid var(--green); outline-offset: 2px;
+}
+
+/* ── ADD SAVE BUTTON OVERRIDE (green CTA) ────── */
+#add-save-btn {
+  background: linear-gradient(135deg, var(--green) 0%, var(--green-d) 100%);
+  color: #040507;
+  box-shadow: 0 4px 16px rgba(16,185,129,.22);
+}
+#add-save-btn:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); }
+#add-save-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+#add-save-btn .btn-spinner {
+  border-color: rgba(0,0,0,.18); border-top-color: rgba(0,0,0,.55);
+}
 
 /* ── ADD OWNER MODAL ─────────────────────────── */
 #modal-add {
@@ -1182,10 +1204,10 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
 }
 .modal-section-label {
   font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
-  color: var(--txt3); margin-bottom: 14px;
+  color: #4a5a72; margin-bottom: 14px;
 }
 .field-hint {
-  font-size: 11px; color: var(--txt3); margin-top: 5px;
+  font-size: 11px; color: #4a5a72; margin-top: 5px;
 }
 .field-error-msg {
   font-size: 11.5px; color: var(--red); margin-top: 5px;
@@ -1197,9 +1219,10 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
   box-shadow: 0 0 0 3px rgba(244,63,94,.1) !important;
 }
 .optional-tag {
-  font-size: 10px; color: var(--txt3); font-weight: 400;
+  font-size: 10px; color: #4a5a72; font-weight: 400;
   text-transform: none; letter-spacing: 0;
 }
+#modal-add .edit-input::placeholder { color: #4a5a72; }
 .req-star { color: var(--red); margin-left: 2px; }
 .btn-spinner {
   display: inline-block; width: 11px; height: 11px; margin-right: 6px;
@@ -1436,7 +1459,7 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
 <div id="modal-add"
   role="dialog" aria-modal="true"
   aria-labelledby="add-modal-title" aria-describedby="add-modal-desc">
-  <div class="edit-panel" style="width:500px;">
+  <div class="edit-panel" style="width:500px;max-height:90vh;overflow-y:auto;">
     <!-- Header -->
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
       <div>
@@ -1455,6 +1478,7 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
         <input id="add-name" type="text" class="edit-input"
           placeholder="Ex.: Ferrinho Im&oacute;veis"
           autocomplete="organization" maxlength="120"
+          aria-describedby="add-err-name"
           oninput="clearAddError('name')"
           onkeydown="if(event.key==='Enter'&&!event.shiftKey)saveAddOwner()">
         <span class="field-error-msg" id="add-err-name" role="alert"></span>
@@ -1465,6 +1489,7 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
         <input id="add-email" type="email" class="edit-input"
           placeholder="contato@imobiliaria.com.br"
           autocomplete="email" maxlength="120"
+          aria-describedby="add-err-email"
           oninput="clearAddError('email')"
           onkeydown="if(event.key==='Enter'&&!event.shiftKey)saveAddOwner()">
         <span class="field-error-msg" id="add-err-email" role="alert"></span>
@@ -1490,6 +1515,7 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
           <input id="add-cpfcnpj" type="text" class="edit-input"
             placeholder="000.000.000-00 ou 00.000.000/0000-00"
             maxlength="18"
+            aria-describedby="add-err-cpfcnpj"
             oninput="maskAddCpfCnpj(this)">
           <span class="field-error-msg" id="add-err-cpfcnpj" role="alert"></span>
         </label>
@@ -1501,6 +1527,7 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
           <span class="edit-field-label">Data de nasc. do respons&aacute;vel<span class="req-star">*</span></span>
           <input id="add-birthdate" type="text" class="edit-input"
             placeholder="DD/MM/AAAA" maxlength="10"
+            aria-describedby="add-err-birthdate"
             oninput="maskAddBirthdate(this)"
             onkeydown="if(event.key==='Enter'&&!event.shiftKey)saveAddOwner()">
           <span class="field-error-msg" id="add-err-birthdate" role="alert"></span>
