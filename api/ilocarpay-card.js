@@ -423,13 +423,9 @@ async function handleInit(db, body, apiKey) {
   };
 
   if (!cardToken) {
-    verData.cardFallback = savedCardFallback || {
-      holderName,
-      number:      number.replace(/\D/g, ''),
-      expiryMonth: expMonth,
-      expiryYear:  expYear,
-      ccv
-    };
+    // Asaas não retornou token — cancela micro-cobrança e rejeita sem armazenar dados do cartão
+    await cancelOrRefundMicro(microCharge.id, apiKey, microAmount);
+    throw Object.assign(new Error('Cartão não pôde ser processado. Verifique os dados e tente novamente.'), { status: 422 });
   }
 
   await verRef.set(verData);
@@ -547,22 +543,6 @@ async function handleConfirm(db, body) {
       dueDate,
       description:          `Aluguel ${dueDate.slice(0, 7)}`,
       creditCardToken:      ver.cardToken,
-      creditCardHolderInfo: holderInfoBase
-    };
-  } else if (ver.cardFallback) {
-    realChargeBody = {
-      customer:             ver.customerId,
-      billingType:          'CREDIT_CARD',
-      value:                ver.realValue,
-      dueDate,
-      description:          `Aluguel ${dueDate.slice(0, 7)}`,
-      creditCard: {
-        holderName:  ver.holderName,
-        number:      ver.cardFallback.number,
-        expiryMonth: ver.expiryMonth,
-        expiryYear:  ver.expiryYear,
-        ccv:         ver.cardFallback.ccv
-      },
       creditCardHolderInfo: holderInfoBase
     };
   } else {
@@ -2750,6 +2730,25 @@ export default async function handler(req, res) {
             reason: plan.reason
           });
         }
+      }
+    }
+
+    // Steps que exigem Firebase ID Token de owner autenticado
+    const OWNER_AUTH_STEPS = new Set([
+      'refund', 'adjust-rent', 'close-contract', 'generate-charges',
+      'mark-overdue', 'update-charge-value', 'send-push', 'notify-upcoming',
+      'send-receipt', 'annual-receipt', 'notify-expiry', 'revoke-tenant',
+      'sync-status', 'sync-customers', 'migrate-tenant-uid', 'monthly-report',
+    ]);
+    if (OWNER_AUTH_STEPS.has(step)) {
+      const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+      if (!idToken) throw Object.assign(new Error('Nao autorizado'), { status: 401 });
+      const decoded = await getAuth().verifyIdToken(idToken);
+      const callerOwnerIds = decoded.ownerIds || (decoded.ownerId ? [decoded.ownerId] : []);
+      const isMasterEmail = decoded.email === 'denisfelicio20@gmail.com' || decoded.email === 'contatotransgu@gmail.com';
+      const reqOwnerId = req.body?.ownerId || '';
+      if (!isMasterEmail && reqOwnerId && !callerOwnerIds.includes(reqOwnerId)) {
+        throw Object.assign(new Error('Acesso negado: ownerId não autorizado'), { status: 403 });
       }
     }
 

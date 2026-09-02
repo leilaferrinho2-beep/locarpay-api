@@ -28,14 +28,18 @@ service cloud.firestore {
 
     // ── users ───────────────────────────────────────────────────────────────
     match /users/{userId} {
-      allow read:   if isAuth() && (request.auth.uid == userId || isMaster() || isActiveTenant());
+      allow read:   if isAuth() && (
+        request.auth.uid == userId ||
+        isMaster() ||
+        isOwnerOf(resource.data.get('ownerId', ''))  // P0-4
+      );
       allow create: if isAuth();
       allow update: if isAuth() && (
         resource.data.get('email', '') == myEmail() ||
         isMaster() ||
         isOwnerOf(resource.data.get('ownerId', ''))
       );
-      allow delete: if isAuth();
+      allow delete: if isAuth() && (request.auth.uid == userId || isMaster());  // P0-6
 
       match /savedCards/{cardId} {
         allow read, write: if isAuth() &&
@@ -61,14 +65,16 @@ service cloud.firestore {
       allow read:   if isMaster() || (isAuth() && isActiveTenant());
       allow create: if isAuth();
       allow update: if isAuth() && (
-        resource.data.get('tenantEmail', '') == myEmail() ||
         isMaster() ||
         isOwnerOf(resource.data.get('ownerId', '')) ||
         // Cobranças antigas sem ownerId: resolve via tenantId → users.ownerId
         (resource.data.get('ownerId', '') == '' &&
          resource.data.get('tenantId', '') != '' &&
          exists(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))) &&
-         isOwnerOf(get(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))).data.get('ownerId','')))
+         isOwnerOf(get(/databases/$(database)/documents/users/$(resource.data.get('tenantId',''))).data.get('ownerId',''))) ||
+        // P0-5: Inquilino só pode atualizar campos de UI — nunca campos financeiros
+        (resource.data.get('tenantEmail', '') == myEmail() &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readByTenant', 'seenByTenant', 'readAt']))
       );
       allow delete: if isAuth() && (
         isMaster() ||

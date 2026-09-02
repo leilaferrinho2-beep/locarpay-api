@@ -864,9 +864,10 @@
       `Estornar o pagamento de "${tenantNameOrId}"?\n\nO valor será devolvido via Asaas e a cobrança voltará para pendente.`,
       async () => {
         try {
+          const _refToken = await auth.currentUser.getIdToken();
           const r = await fetch('/api/ilocarpay-card', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _refToken },
             body: JSON.stringify({ step: 'refund', chargeId, ownerId: currentOwnerId })
           });
           const data = await r.json();
@@ -3580,9 +3581,10 @@
     showConfirm(`Aplicar ${pct > 0 ? '+' : ''}${pct}% em ${contracts.length} contrato(s) ativo(s)? Esta ação não pode ser desfeita.`, async () => {
     $('adjust-save').disabled = true; $('adjust-save').textContent = 'Aplicando...';
     try {
+      const _adjToken = await auth.currentUser.getIdToken();
       const r = await fetch('/api/ilocarpay-card', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _adjToken },
         body: JSON.stringify({ step: 'adjust-rent', ownerId: currentOwnerId, percentage: pct })
       });
       const d = await r.json();
@@ -3608,9 +3610,10 @@
       const btn = $('et-close-contract');
       btn.disabled = true; btn.textContent = 'Encerrando...';
       try {
+        const _ccToken = await auth.currentUser.getIdToken();
         const r = await fetch('/api/ilocarpay-card', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _ccToken },
           body: JSON.stringify({ step: 'close-contract', contractId: c.id, tenantId: editingTenantId, ownerId: currentOwnerId })
         });
         const d = await r.json();
@@ -3773,17 +3776,18 @@
     btn.disabled = true;
     btn.textContent = 'Gerando...';
     try {
+      const _gcToken = await auth.currentUser.getIdToken();
       // Gera mês atual
       const r0 = await fetch('/api/ilocarpay-card', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _gcToken },
         body: JSON.stringify({ step: 'generate-charges', ownerId: currentOwnerId, monthOffset: 0 })
       });
       const d0 = await r0.json();
       // Gera próximo mês também (idempotente se já existir)
       const r1 = await fetch('/api/ilocarpay-card', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _gcToken },
         body: JSON.stringify({ step: 'generate-charges', ownerId: currentOwnerId, monthOffset: 1 })
       });
       const d1 = await r1.json();
@@ -3803,10 +3807,11 @@
     btn.disabled = true;
     btn.textContent = 'Processando...';
     try {
+      const _ovdToken = await auth.currentUser.getIdToken();
       // 1. Marca cobranças vencidas
       const markResp = await fetch('/api/ilocarpay-card', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _ovdToken },
         body: JSON.stringify({ step: 'mark-overdue', ownerId: currentOwnerId })
       });
       const markData = await markResp.json();
@@ -3815,7 +3820,7 @@
       // 2. Envia push para inquilinos com cobranças pendentes/vencidas
       const pushResp = await fetch('/api/ilocarpay-card', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _ovdToken },
         body: JSON.stringify({ step: 'send-push', ownerId: currentOwnerId })
       });
       const pushData = await pushResp.json();

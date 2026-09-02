@@ -200,7 +200,11 @@ async function handleCardInit(db, body) {
     createdAt:  FieldValue.serverTimestamp(),
     expiresAt:  new Date(Date.now() + 30 * 60 * 1000)
   };
-  if (!cardToken) verData.cardFallback = { holderName, number: number.replace(/\D/g, ''), expiryMonth: expMonth, expiryYear: expYear, ccv };
+  if (!cardToken) {
+    // Asaas não retornou token — cancela micro-cobrança e rejeita sem armazenar dados do cartão
+    try { await asaasReq('POST', `/payments/${microCharge.id}/cancel`, {}, apiKey); } catch (_) {}
+    throw Object.assign(new Error('Cartão não pôde ser processado. Verifique os dados e tente novamente.'), { status: 422 });
+  }
 
   await verRef.set(verData);
   return { verificationId: verRef.id, lastFour, cardBrand };
@@ -259,20 +263,6 @@ async function handleCardConfirm(db, body) {
       value:       ver.realValue, dueDate,
       description: `iLocarPay — Plano ${PLANS[ver.plan]?.name || ver.plan}`,
       creditCardToken: ver.cardToken,
-      creditCardHolderInfo: {
-        name: ver.holderName, email: ver.email, cpfCnpj: ver.holderDocument,
-        postalCode: ver.postalCode, addressNumber: 'SN', phone: ver.phone || '11999999999'
-      }
-    };
-  } else if (ver.cardFallback) {
-    realChargeBody = {
-      customer:    ver.customerId, billingType: 'CREDIT_CARD',
-      value:       ver.realValue, dueDate,
-      description: `iLocarPay — Plano ${PLANS[ver.plan]?.name || ver.plan}`,
-      creditCard: {
-        holderName: ver.holderName, number: ver.cardFallback.number,
-        expiryMonth: ver.expiryMonth, expiryYear: ver.expiryYear, ccv: ver.cardFallback.ccv
-      },
       creditCardHolderInfo: {
         name: ver.holderName, email: ver.email, cpfCnpj: ver.holderDocument,
         postalCode: ver.postalCode, addressNumber: 'SN', phone: ver.phone || '11999999999'

@@ -230,6 +230,19 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Verificação de token — falha-fechado: sem token configurado, rejeita tudo
+  // O token deve ser passado como query param ?token=SECRET na URL configurada no Assinafy
+  const webhookSecret = process.env.ASSINAFY_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    console.error('[assinafy-webhook] ASSINAFY_WEBHOOK_SECRET não configurado — rejeitando');
+    return res.status(401).json({ error: 'Webhook não configurado' });
+  }
+  const receivedToken = req.query?.token || '';
+  if (receivedToken !== webhookSecret) {
+    console.error('[assinafy-webhook] token inválido');
+    return res.status(401).json({ error: 'Token inválido' });
+  }
+
   const payload = req.body || {};
 
   // Rota Asaas: payload tem payment.id e event começa com PAYMENT_
