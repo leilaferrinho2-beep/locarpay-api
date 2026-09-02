@@ -22,6 +22,50 @@ function validatePaymentWebhookToken(req) {
   return typeof sent === 'string' && sent.length > 0 && sent === token;
 }
 
+// Janela de notificações: eventos mais antigos que isso não disparam push/email.
+// Efeito financeiro (baixa, paidAt, próxima cobrança) ocorre independente da idade.
+const NOTIFICATION_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 horas
+
+// Extrai a data real do pagamento do payload Asaas para gravar em paidAt.
+// Cadeia: confirmedDate (cartão, datetime) → paymentDate (PIX/boleto, date) → now.
+function extractPaymentDate(payment) {
+  const raw = payment?.confirmedDate || payment?.paymentDate || payment?.clientPaymentDate;
+  if (!raw) return new Date();
+  try {
+    const d = new Date(raw);
+    return isFinite(d.getTime()) ? d : new Date();
+  } catch (_) { return new Date(); }
+}
+
+// Determina se o evento é suficientemente recente para disparar notificações.
+// Comportamento conservador: timestamp ausente/inválido/futuro → trata como recente
+// (não suprime notificação legítima por incerteza).
+// Para strings date-only (YYYY-MM-DD), adiciona 24h de buffer para incerteza de fuso.
+function isPaymentRecent(payment) {
+  const raw = payment?.confirmedDate
+           || payment?.paymentDate
+           || payment?.clientPaymentDate
+           || payment?.dateCreated;
+  if (!raw) return true; // ausente → trata como recente
+
+  let ts;
+  try { ts = new Date(raw).getTime(); } catch (_) { return true; }
+  if (!isFinite(ts)) return true; // inválido → trata como recente
+
+  if (ts > Date.now() + 60_000) { // futuro (>1min tolerância de clock skew)
+    console.warn('[payment-webhook] timestamp futuro no payload Asaas:', raw);
+    return true;
+  }
+
+  // Date-only strings não têm hora → adiciona 24h de buffer para evitar falsos negativos de fuso
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(String(raw).trim());
+  const effectiveThreshold = isDateOnly
+    ? NOTIFICATION_THRESHOLD_MS + 24 * 60 * 60 * 1000
+    : NOTIFICATION_THRESHOLD_MS;
+
+  return (Date.now() - ts) <= effectiveThreshold;
+}
+
 function initFirebase() {
   if (getApps().length) return;
   initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
@@ -2318,20 +2362,25 @@ async function handleAsaasPaymentWebhook(db, body) {
   const chargeId   = snap.docs[0].id;
   const chargeData = snap.docs[0].data();
 
+  // Determina data real do pagamento e se evento é recente o suficiente para notificar.
+  // Ambos calculados antes da transação para uso uniforme.
+  const actualPaidAt  = extractPaymentDate(payment);
+  const recentPayment = isPaymentRecent(payment);
+
   // Transação atômica: lê status + grava em um único commit — previne race condition
   let alreadyPaid = false;
   await db.runTransaction(async (tx) => {
     const doc = await tx.get(chargeRef);
     if (!doc.exists || doc.data().status === 'paid') { alreadyPaid = true; return; }
 
-    const now = new Date();
-    tx.update(chargeRef, { status: 'paid', paidAt: now });
+    // Usa data real do pagamento Asaas (não Date.now()) para fidelidade financeira
+    tx.update(chargeRef, { status: 'paid', paidAt: actualPaidAt });
 
     const linkedIds = doc.data().linkedChargeIds;
     if (Array.isArray(linkedIds)) {
       for (const lid of linkedIds) {
         if (lid !== chargeId) {
-          tx.update(db.collection('charges').doc(lid), { status: 'paid', paidAt: now });
+          tx.update(db.collection('charges').doc(lid), { status: 'paid', paidAt: actualPaidAt });
         }
       }
     }
@@ -2341,65 +2390,74 @@ async function handleAsaasPaymentWebhook(db, body) {
 
   const { tenantId, ownerId } = chargeData;
 
-  // Push ao tenant
-  try {
-    if (tenantId) {
-      const userSnap = await db.collection('users').doc(tenantId).get();
-      const token = userSnap.data()?.fcmToken;
-      if (token) {
-        await getMessaging().send({
-          token,
-          notification: { title: '✅ Pagamento confirmado!', body: 'Seu aluguel foi recebido. Obrigado!' },
-          data: { type: 'paid', chargeId },
-          android: { priority: 'high' }
-        });
-      }
-    }
-  } catch (_) {}
-
-  // Email ao tenant (fire-and-forget)
-  if (tenantId) {
-    handleSendReceipt(db, { chargeId, tenantId }).catch(() => {});
-  }
-
-  // Push ao owner
-  try {
-    if (ownerId) {
-      const [ownerSnap, tenantSnap] = await Promise.all([
-        db.collection('owners').doc(ownerId).get(),
-        tenantId ? db.collection('users').doc(tenantId).get() : Promise.resolve(null)
-      ]);
-      const ownerEmail = ownerSnap.data()?.email;
-      const tenantName = tenantSnap?.data()?.name || 'Inquilino';
-      if (ownerEmail) {
-        const ownerUserSnap = await db.collection('users')
-          .where('email', '==', ownerEmail)
-          .where('role', '==', 'admin')
-          .limit(1)
-          .get();
-        const ownerToken = ownerUserSnap.docs[0]?.data()?.fcmToken;
-        if (ownerToken) {
-          const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  // ── COMUNICAÇÃO: somente para eventos recentes (≤24h) ────────────────────
+  // Efeitos financeiros (transação, paidAt, próxima cobrança) ocorrem sempre.
+  if (recentPayment) {
+    // Push ao tenant
+    try {
+      if (tenantId) {
+        const userSnap = await db.collection('users').doc(tenantId).get();
+        const token = userSnap.data()?.fcmToken;
+        if (token) {
           await getMessaging().send({
-            token: ownerToken,
-            notification: {
-              title: '💰 Pagamento recebido!',
-              body: `${tenantName} pagou ${fmt.format(chargeData.totalAmount || 0)}`
-            },
-            data: { type: 'admin', chargeId },
+            token,
+            notification: { title: '✅ Pagamento confirmado!', body: 'Seu aluguel foi recebido. Obrigado!' },
+            data: { type: 'paid', chargeId },
             android: { priority: 'high' }
           });
         }
       }
-    }
-  } catch (_) {}
+    } catch (_) {}
 
-  // Gera próxima cobrança do mês seguinte
+    // Email ao tenant (fire-and-forget)
+    if (tenantId) {
+      handleSendReceipt(db, { chargeId, tenantId }).catch(() => {});
+    }
+
+    // Push ao owner
+    try {
+      if (ownerId) {
+        const [ownerSnap, tenantSnap] = await Promise.all([
+          db.collection('owners').doc(ownerId).get(),
+          tenantId ? db.collection('users').doc(tenantId).get() : Promise.resolve(null)
+        ]);
+        const ownerEmail = ownerSnap.data()?.email;
+        const tenantName = tenantSnap?.data()?.name || 'Inquilino';
+        if (ownerEmail) {
+          const ownerUserSnap = await db.collection('users')
+            .where('email', '==', ownerEmail)
+            .where('role', '==', 'admin')
+            .limit(1)
+            .get();
+          const ownerToken = ownerUserSnap.docs[0]?.data()?.fcmToken;
+          if (ownerToken) {
+            const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+            await getMessaging().send({
+              token: ownerToken,
+              notification: {
+                title: '💰 Pagamento recebido!',
+                body: `${tenantName} pagou ${fmt.format(chargeData.totalAmount || 0)}`
+              },
+              data: { type: 'admin', chargeId },
+              android: { priority: 'high' }
+            });
+          }
+        }
+      }
+    } catch (_) {}
+  } else {
+    console.info('[payment-webhook] evento antigo — conciliação financeira efetuada, notificações suprimidas', {
+      event, chargeId, paymentDate: payment?.paymentDate || payment?.confirmedDate || payment?.dateCreated
+    });
+  }
+
+  // ── EFEITO FINANCEIRO: sempre ─────────────────────────────────────────────
+  // Gera próxima cobrança do mês seguinte independente da idade do evento
   if (ownerId) {
     await handleGenerateCharges(db, { ownerId, monthOffset: 1 }).catch(() => {});
   }
 
-  return { ok: true, event, chargeId, action: 'marked_paid' };
+  return { ok: true, event, chargeId, action: 'marked_paid', notificationSent: recentPayment };
 }
 
 // ── HANDLER ──────────────────────────────────────────────────────────────────
