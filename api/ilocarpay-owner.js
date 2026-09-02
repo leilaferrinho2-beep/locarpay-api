@@ -941,9 +941,12 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Vercel Cron: GET com header x-vercel-cron
+  // Vercel Cron: GET com Authorization: Bearer {CRON_SECRET}
   if (req.method === 'GET') {
-    if (!req.headers['x-vercel-cron']) return res.status(401).json({ error: 'Unauthorized' });
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret || req.headers['authorization'] !== `Bearer ${cronSecret}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
     try {
       initFirebase();
       const db = getFirestore();

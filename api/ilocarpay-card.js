@@ -1984,10 +1984,10 @@ async function handleAnnualRentAlert(db, body) {
 // Itera todos os owners e executa: mark-overdue, notify-expiry, notify-upcoming.
 // No dia 1 do mês também gera cobranças para todos os owners.
 async function handleCronDaily(db, req) {
-  // Vercel envia o header x-vercel-cron: 1 nos requests de cron
-  const isCron = req.headers?.['x-vercel-cron'] === '1';
+  // Vercel envia Authorization: Bearer {CRON_SECRET} automaticamente nos cron jobs
+  // Fail-closed: se CRON_SECRET não estiver configurado, rejeita tudo
   const cronSecret = process.env.CRON_SECRET;
-  if (!isCron && req.body?.secret !== cronSecret) {
+  if (!cronSecret || req.headers?.authorization !== `Bearer ${cronSecret}`) {
     throw Object.assign(new Error('Unauthorized'), { status: 401 });
   }
 

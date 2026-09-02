@@ -1,6 +1,7 @@
 ﻿// GET  → serve admin HTML
 // POST → superadmin API (requer x-admin-token do super admin)
 
+import crypto from 'crypto';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth }                        from 'firebase-admin/auth';
 import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
@@ -65,8 +66,9 @@ async function sendOtpEmail(otp) {
 
 async function requestOtp(db, ip) {
   const otp     = generateOtp();
+  const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
   const expires = Date.now() + 5 * 60 * 1000;
-  await db.collection('_admin_otp').doc('current').set({ otp, expires, ip });
+  await db.collection('_admin_otp').doc('current').set({ otpHash, expires, ip });
   await sendOtpEmail(otp);
   return { message: 'Código enviado para o e-mail do administrador.' };
 }
@@ -74,12 +76,14 @@ async function requestOtp(db, ip) {
 async function verifyOtp(db, ip, code) {
   const snap = await db.collection('_admin_otp').doc('current').get();
   if (!snap.exists) throw Object.assign(new Error('Nenhum código ativo'), { status: 401 });
-  const { otp, expires } = snap.data();
+  const { otpHash, otp: otpLegacy, expires } = snap.data();
   if (Date.now() > expires) {
     await db.collection('_admin_otp').doc('current').delete();
     throw Object.assign(new Error('Código expirado'), { status: 401 });
   }
-  if (code !== otp) throw Object.assign(new Error('Código incorreto'), { status: 401 });
+  const inputHash = crypto.createHash('sha256').update(code).digest('hex');
+  const valid = otpHash ? otpHash === inputHash : otpLegacy === code;
+  if (!valid) throw Object.assign(new Error('Código incorreto'), { status: 401 });
   await db.collection('_admin_otp').doc('current').delete();
   return { ok: true };
 }

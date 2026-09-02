@@ -11,6 +11,7 @@
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue }      from 'firebase-admin/firestore';
+import { getAuth }                       from 'firebase-admin/auth';
 import { getMessaging }                  from 'firebase-admin/messaging';
 import { getStorage }                    from 'firebase-admin/storage';
 import nodemailer                         from 'nodemailer';
@@ -1462,7 +1463,7 @@ async function handleUploadDoc(db, body) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   // Safety net: garante JSON mesmo em erros inesperados
   res.setHeader('Content-Type', 'application/json');
@@ -1624,6 +1625,10 @@ async function handleCronRetryAssinafy(db) {
   if (req.method === 'GET') {
     const { view, contractId, step: getStep } = req.query || {};
     if (getStep === 'wa-keepalive') {
+      const cronSecret = process.env.CRON_SECRET;
+      if (!cronSecret || req.headers['authorization'] !== `Bearer ${cronSecret}`) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
       try {
         initFirebase();
         const db = getFirestore();
@@ -1655,6 +1660,10 @@ async function handleCronRetryAssinafy(db) {
 
   // Cron: retentar contratos que falharam no Assinafy
   if (req.method === 'POST' && req.body?.step === 'cron-retry-assinafy') {
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret || req.headers['authorization'] !== `Bearer ${cronSecret}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
     try {
       initFirebase();
       const db = getFirestore();
@@ -1713,6 +1722,25 @@ async function handleCronRetryAssinafy(db) {
     const sa   = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.ILOCARPAY_SERVICE_ACCOUNT || '{}');
     req._storageBucket = 'transgu-web-6d50f.firebasestorage.app';
     const { step } = req.body || {};
+
+    // Steps de upload exigem Firebase ID Token autenticado
+    const UPLOAD_AUTH_STEPS = new Set(['get-upload-url', 'upload-doc', 'get-chat-upload-url', 'confirm-chat-upload', 'get-signed-url']);
+    if (UPLOAD_AUTH_STEPS.has(step)) {
+      const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+      if (!idToken) return res.status(401).json({ error: 'Nao autorizado' });
+      try {
+        const decoded = await getAuth().verifyIdToken(idToken);
+        const callerOwnerIds = decoded.ownerIds || (decoded.ownerId ? [decoded.ownerId] : []);
+        const isMasterEmail = decoded.email === 'denisfelicio20@gmail.com' || decoded.email === 'contatotransgu@gmail.com';
+        const reqOwnerId = req.body?.ownerId || '';
+        if (!isMasterEmail && reqOwnerId && !callerOwnerIds.includes(reqOwnerId)) {
+          return res.status(403).json({ error: 'Acesso negado: ownerId não autorizado' });
+        }
+      } catch (_) {
+        return res.status(401).json({ error: 'Token inválido' });
+      }
+    }
+
     let result;
     if      (step === 'register-broker')   result = await handleRegisterBroker(db, req.body);
     else if (step === 'update-broker')     result = await handleUpdateBroker(db, req.body);

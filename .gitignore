@@ -1,5 +1,6 @@
 .vercel
 .env*
+!.env.example
 node_modules/
 public/download/locarpay*.apk
 public/download/ilocarpay-v*.apk

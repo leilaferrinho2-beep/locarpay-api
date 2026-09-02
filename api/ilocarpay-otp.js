@@ -84,11 +84,12 @@ async function handleSend(req, res) {
       return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com a imobiliária.' });
     }
 
-    const otp = String(Math.floor(100000 + crypto.randomInt(900000)));
+    const otp     = String(Math.floor(100000 + crypto.randomInt(900000)));
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
     const id  = Buffer.from(emailNorm).toString('base64').replace(/[^a-zA-Z0-9]/g, '_');
     await db.collection('loginOtps').doc(id).set({
-      email: emailNorm,
-      otp,
+      email:     emailNorm,
+      otpHash,
       expiresAt: Date.now() + 60 * 60 * 1000,
       used: false
     });
@@ -128,8 +129,11 @@ async function handleVerify(req, res) {
     if (!doc.exists) return res.status(401).json({ error: 'Código inválido' });
 
     const data = doc.data();
-    if (data.used)            return res.status(401).json({ error: 'Código já utilizado' });
-    if (data.otp !== otp)     return res.status(401).json({ error: 'Código incorreto' });
+    if (data.used) return res.status(401).json({ error: 'Código já utilizado' });
+    // Compara hash — suporte a docs antigos com campo otp (plaintext) durante transição
+    const inputHash = crypto.createHash('sha256').update(otp).digest('hex');
+    const valid = data.otpHash ? data.otpHash === inputHash : data.otp === otp;
+    if (!valid)   return res.status(401).json({ error: 'Código incorreto' });
     if (Date.now() > Number(data.expiresAt)) return res.status(401).json({ error: 'Código expirado' });
 
     await doc.ref.update({ used: true });
