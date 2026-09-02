@@ -766,30 +766,61 @@ async function handleCronDaily(db) {
 async function handleAsaasWebhook(db, body) {
   const { event, payment } = body || {};
   if (!event || !payment?.subscription) return { ok: true, ignored: true };
-  // payment.id identifica o pagamento único — necessário para rastreabilidade
   if (!payment.id) return { ok: true, ignored: true, reason: 'payment.id ausente' };
+
+  // Chave de idempotência: event + payment.id — garante que o mesmo evento
+  // entregue mais de uma vez não produz efeito duplicado.
+  const idempotencyKey = `${event}:${payment.id}`;
+  const idempotencyRef = db.collection('webhook-events').doc(idempotencyKey);
 
   const snap = await db.collection('owners')
     .where('subscriptionId', '==', payment.subscription)
     .limit(1).get();
   if (snap.empty) return { ok: true, ignored: true };
 
-  const ref = snap.docs[0].ref;
+  const ownerRef = snap.docs[0].ref;
+  const ownerId  = snap.docs[0].id;
 
+  // Determina o update a aplicar com base no evento
+  let ownerUpdate;
+  let action;
   if (event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') {
     const planActiveUntil = Timestamp.fromMillis(Date.now() + 32 * 24 * 60 * 60 * 1000);
-    await ref.update({ status: 'active', billingStatus: 'paid', planActiveUntil });
-    return { ok: true, event, action: 'plan_extended' };
+    ownerUpdate = { status: 'active', billingStatus: 'paid', planActiveUntil };
+    action = 'plan_extended';
+  } else if (event === 'PAYMENT_OVERDUE') {
+    ownerUpdate = { billingStatus: 'overdue' };
+    action = 'marked_overdue';
+  } else if (event === 'PAYMENT_DELETED' || event === 'SUBSCRIPTION_DELETED') {
+    ownerUpdate = { status: 'suspended', billingStatus: 'cancelled' };
+    action = 'suspended';
+  } else {
+    return { ok: true, event, ignored: true };
   }
-  if (event === 'PAYMENT_OVERDUE') {
-    await ref.update({ billingStatus: 'overdue' });
-    return { ok: true, event, action: 'marked_overdue' };
-  }
-  if (event === 'PAYMENT_DELETED' || event === 'SUBSCRIPTION_DELETED') {
-    await ref.update({ status: 'suspended', billingStatus: 'cancelled' });
-    return { ok: true, event, action: 'suspended' };
-  }
-  return { ok: true, event, ignored: true };
+
+  // Transação atômica: verifica idempotência E aplica efeito no mesmo commit.
+  // Se o processo morrer antes do commit: Asaas retenta → processado normalmente.
+  // Se o processo morrer após o commit: Asaas retenta → transação detecta doc existente → deduplica.
+  // Duas instâncias simultâneas: Firestore garante que apenas uma commita com sucesso.
+  let deduplicated = false;
+  await db.runTransaction(async (tx) => {
+    const existing = await tx.get(idempotencyRef);
+    if (existing.exists) {
+      deduplicated = true;
+      return;
+    }
+    tx.update(ownerRef, ownerUpdate);
+    tx.set(idempotencyRef, {
+      event,
+      ownerId,
+      paymentId:    payment.id,
+      subscription: payment.subscription,
+      processedAt:  Timestamp.now(),
+    });
+  });
+
+  if (deduplicated) return { ok: true, event, deduplicated: true };
+  return { ok: true, event, action };
 }
 
 async function handleDeleteTenant(db, body, req) {
