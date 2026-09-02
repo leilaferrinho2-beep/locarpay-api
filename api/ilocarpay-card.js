@@ -10,13 +10,25 @@ import { getMessaging }                  from 'firebase-admin/messaging';
 import { getAsaasKey, getDefaultOwnerId, checkOwnerPlanActive } from '../lib/owner.js';
 import nodemailer                         from 'nodemailer';
 
+const ASAAS_BASE = (process.env.ASAAS_API_URL || 'https://api.asaas.com/v3').replace(/\/$/, '');
+
+function validatePaymentWebhookToken(req) {
+  const token = process.env.ASAAS_WEBHOOK_TOKEN;
+  if (!token) {
+    console.error('[payment-webhook] ASAAS_WEBHOOK_TOKEN não configurado — requisição rejeitada (fail-closed).');
+    return false;
+  }
+  const sent = req.headers['asaas-access-token'];
+  return typeof sent === 'string' && sent.length > 0 && sent === token;
+}
+
 function initFirebase() {
   if (getApps().length) return;
   initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
 }
 
 async function asaasReq(method, path, body, apiKey) {
-  const r = await fetch(`https://api.asaas.com/v3${path}`, {
+  const r = await fetch(`${ASAAS_BASE}${path}`, {
     method,
     headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
     ...(body ? { body: JSON.stringify(body) } : {})
@@ -31,7 +43,7 @@ async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
   const phoneDigits = (phone || '').replace(/\D/g, '');
 
   const search = await fetch(
-    `https://api.asaas.com/v3/customers?email=${encodeURIComponent(email)}&limit=1`,
+    `${ASAAS_BASE}/customers?email=${encodeURIComponent(email)}&limit=1`,
     { headers: { 'access_token': apiKey } }
   );
   const { data } = await search.json();
@@ -43,7 +55,7 @@ async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
       const patch = { name: existing.name };
       if (!existing.cpfCnpj   && cpfDigits.length === 11)   patch.cpfCnpj     = cpfDigits;
       if (!existing.mobilePhone && phoneDigits.length >= 10) patch.mobilePhone = phoneDigits;
-      await fetch(`https://api.asaas.com/v3/customers/${existing.id}`, {
+      await fetch(`${ASAAS_BASE}/customers/${existing.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
         body: JSON.stringify(patch)
@@ -698,7 +710,7 @@ async function handleSyncCustomers(db, body) {
 
     try {
       const search = await fetch(
-        `https://api.asaas.com/v3/customers?email=${encodeURIComponent(email)}&limit=1`,
+        `${ASAAS_BASE}/customers?email=${encodeURIComponent(email)}&limit=1`,
         { headers: { 'access_token': apiKey } }
       );
       const { data } = await search.json();
@@ -707,7 +719,7 @@ async function handleSyncCustomers(db, body) {
       const existing = data[0];
       if (existing.mobilePhone) { results.skipped++; return; } // já tem
 
-      await fetch(`https://api.asaas.com/v3/customers/${existing.id}`, {
+      await fetch(`${ASAAS_BASE}/customers/${existing.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
         body: JSON.stringify({ name: existing.name, mobilePhone: phone })
@@ -2279,7 +2291,7 @@ async function handleAsaasPaymentWebhook(db, body) {
     return { ok: true, ignored: true, event };
   }
 
-  // Localiza a cobrança pelo asaasChargeId
+  // Query fora da transação — Firestore não suporta where() em tx
   const snap = await db.collection('charges')
     .where('asaasChargeId', '==', asaasId)
     .limit(1)
@@ -2287,28 +2299,35 @@ async function handleAsaasPaymentWebhook(db, body) {
 
   if (snap.empty) return { ok: true, notFound: true, asaasId };
 
-  const chargeDoc = snap.docs[0];
-  const charge    = chargeDoc.data();
+  const chargeRef  = snap.docs[0].ref;
+  const chargeId   = snap.docs[0].id;
+  const chargeData = snap.docs[0].data();
 
-  // Já marcada como paga — idempotência
-  if (charge.status === 'paid') return { ok: true, alreadyPaid: true };
+  // Transação atômica: lê status + grava em um único commit — previne race condition
+  let alreadyPaid = false;
+  await db.runTransaction(async (tx) => {
+    const doc = await tx.get(chargeRef);
+    if (!doc.exists || doc.data().status === 'paid') { alreadyPaid = true; return; }
 
-  // Marca como paga (e cobranças vinculadas se for PIX combinado)
-  const batch = db.batch();
-  batch.update(chargeDoc.ref, { status: 'paid', paidAt: new Date() });
-  const linkedIds = charge.linkedChargeIds;
-  if (Array.isArray(linkedIds) && linkedIds.length > 0) {
-    for (const lid of linkedIds) {
-      if (lid !== chargeDoc.id) {
-        batch.update(db.collection('charges').doc(lid), { status: 'paid', paidAt: new Date() });
+    const now = new Date();
+    tx.update(chargeRef, { status: 'paid', paidAt: now });
+
+    const linkedIds = doc.data().linkedChargeIds;
+    if (Array.isArray(linkedIds)) {
+      for (const lid of linkedIds) {
+        if (lid !== chargeId) {
+          tx.update(db.collection('charges').doc(lid), { status: 'paid', paidAt: now });
+        }
       }
     }
-  }
-  await batch.commit();
+  });
 
-  // Push de confirmação ao tenant
+  if (alreadyPaid) return { ok: true, alreadyPaid: true };
+
+  const { tenantId, ownerId } = chargeData;
+
+  // Push ao tenant
   try {
-    const tenantId = charge.tenantId;
     if (tenantId) {
       const userSnap = await db.collection('users').doc(tenantId).get();
       const token = userSnap.data()?.fcmToken;
@@ -2316,25 +2335,24 @@ async function handleAsaasPaymentWebhook(db, body) {
         await getMessaging().send({
           token,
           notification: { title: '✅ Pagamento confirmado!', body: 'Seu aluguel foi recebido. Obrigado!' },
-          data: { type: 'paid', chargeId: chargeDoc.id },
+          data: { type: 'paid', chargeId },
           android: { priority: 'high' }
         });
       }
     }
   } catch (_) {}
 
-  // Email de recibo para o inquilino (fire-and-forget)
-  if (charge.tenantId) {
-    handleSendReceipt(db, { chargeId: chargeDoc.id, tenantId: charge.tenantId }).catch(() => {});
+  // Email ao tenant (fire-and-forget)
+  if (tenantId) {
+    handleSendReceipt(db, { chargeId, tenantId }).catch(() => {});
   }
 
-  // Push de notificação ao proprietário
-  const ownerId = charge.ownerId;
+  // Push ao owner
   try {
     if (ownerId) {
       const [ownerSnap, tenantSnap] = await Promise.all([
         db.collection('owners').doc(ownerId).get(),
-        charge.tenantId ? db.collection('users').doc(charge.tenantId).get() : Promise.resolve(null)
+        tenantId ? db.collection('users').doc(tenantId).get() : Promise.resolve(null)
       ]);
       const ownerEmail = ownerSnap.data()?.email;
       const tenantName = tenantSnap?.data()?.name || 'Inquilino';
@@ -2351,9 +2369,9 @@ async function handleAsaasPaymentWebhook(db, body) {
             token: ownerToken,
             notification: {
               title: '💰 Pagamento recebido!',
-              body: `${tenantName} pagou ${fmt.format(charge.totalAmount || 0)}`
+              body: `${tenantName} pagou ${fmt.format(chargeData.totalAmount || 0)}`
             },
-            data: { type: 'admin', chargeId: chargeDoc.id },
+            data: { type: 'admin', chargeId },
             android: { priority: 'high' }
           });
         }
@@ -2366,7 +2384,7 @@ async function handleAsaasPaymentWebhook(db, body) {
     await handleGenerateCharges(db, { ownerId, monthOffset: 1 }).catch(() => {});
   }
 
-  return { ok: true, event, chargeId: chargeDoc.id, action: 'marked_paid' };
+  return { ok: true, event, chargeId, action: 'marked_paid' };
 }
 
 // ── HANDLER ──────────────────────────────────────────────────────────────────
@@ -2693,12 +2711,8 @@ export default async function handler(req, res) {
 
     // Webhook Asaas sem step (evento direto da subconta)
     if (!step && req.body?.event && req.body?.payment) {
-      const webhookToken = process.env.ASAAS_WEBHOOK_TOKEN;
-      if (webhookToken) {
-        const sentToken = req.headers['asaas-access-token'];
-        if (sentToken !== webhookToken) {
-          return res.status(401).json({ error: 'Webhook token inválido' });
-        }
+      if (!validatePaymentWebhookToken(req)) {
+        return res.status(401).json({ error: 'Webhook token inválido' });
       }
       return res.status(200).json(await handleAsaasPaymentWebhook(db, req.body));
     }
