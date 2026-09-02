@@ -979,7 +979,6 @@ async function handleGenerateCharges(db, body) {
 
   let created = 0;
   const newCharges = [];
-  const batch = db.batch();
 
   await Promise.all(contractsSnap.docs.map(async contractDoc => {
     const contract = contractDoc.data();
@@ -1021,31 +1020,47 @@ async function handleGenerateCharges(db, body) {
       return;
     }
 
+    // Lock atômico: previne duas instâncias simultâneas criando a mesma cobrança.
+    // Padrão: claim-lock + create-charge na mesma transação Firestore.
+    // A chamada Asaas (createPixForCharge) ocorre FORA da transação — operações
+    // HTTP externas não devem estar dentro de runTransaction.
+    const lockKey  = `${contractId}_${monthStr}`;
+    const lockRef  = db.collection('charge-locks').doc(lockKey);
     const chargeRef = db.collection('charges').doc();
-    batch.set(chargeRef, {
-      id:           chargeRef.id,
-      contractId,
-      tenantId,
-      tenantEmail:  tenantEmail || '',
-      dueDate:      { seconds: dueSecs, nanoseconds: 0 },
-      baseRent,
-      extras:       [],
-      totalAmount:  baseRent,
-      status:       'pending',
-      asaasChargeId:'',
-      pixCopyPaste: '',
-      pixQrCode:    '',
-      ownerId,
-      monthRef:            monthStr,
-      propertyDescription: propertyDescription || '',
-      generatedAt:         new Date()
+    let claimed = false;
+
+    await db.runTransaction(async (tx) => {
+      const lockDoc = await tx.get(lockRef);
+      if (lockDoc.exists) return; // outra instância já processou este contrato/mês
+      tx.set(lockRef, { contractId, monthStr, chargeId: chargeRef.id, claimedAt: Timestamp.now() });
+      tx.set(chargeRef, {
+        id:                  chargeRef.id,
+        contractId,
+        tenantId,
+        tenantEmail:         tenantEmail || '',
+        dueDate:             { seconds: dueSecs, nanoseconds: 0 },
+        baseRent,
+        extras:              [],
+        totalAmount:         baseRent,
+        status:              'pending',
+        asaasChargeId:       '',
+        pixCopyPaste:        '',
+        pixQrCode:           '',
+        ownerId,
+        monthRef:            monthStr,
+        propertyDescription: propertyDescription || '',
+        generatedAt:         new Date()
+      });
+      claimed = true;
     });
+
+    if (!claimed) return;
     newCharges.push({ chargeId: chargeRef.id, tenantId, tenantEmail: tenantEmail || '', baseRent, dueDate, monthStr });
     created++;
   }));
 
   if (created > 0) {
-    await batch.commit();
+    // Sem batch.commit() — cada cobrança já foi gravada atomicamente acima.
 
     // Busca config do owner para fine/interest do PIX
     const ownerSnap2 = await db.collection('owners').doc(ownerId).get().catch(() => null);
