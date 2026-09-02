@@ -3,7 +3,7 @@
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth }                        from 'firebase-admin/auth';
-import { getFirestore, Timestamp }        from 'firebase-admin/firestore';
+import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import nodemailer from 'nodemailer';
 import {
   setCorsHeaders, getClientIp,
@@ -12,6 +12,7 @@ import {
 } from '../lib/security.js';
 
 const SUPER_ADMIN_EMAIL = 'denisfelicio20@gmail.com';
+const ASAAS_BASE = (process.env.ASAAS_API_URL || 'https://api.asaas.com/v3').replace(/\/$/, '');
 
 function initFirebase() {
   if (getApps().length) return;
@@ -197,7 +198,7 @@ async function getMasterAsaasKey(db) {
 }
 
 async function asaasPost(path, body, apiKey) {
-  const r = await fetch(`https://api.asaas.com/v3${path}`, {
+  const r = await fetch(`${ASAAS_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
     body: JSON.stringify(body)
@@ -208,7 +209,7 @@ async function asaasPost(path, body, apiKey) {
 }
 
 async function asaasGet(path, apiKey) {
-  const r = await fetch(`https://api.asaas.com/v3${path}`, {
+  const r = await fetch(`${ASAAS_BASE}${path}`, {
     headers: { 'access_token': apiKey }
   });
   const json = await r.json();
@@ -218,10 +219,20 @@ async function asaasGet(path, apiKey) {
 
 async function createSubscription(db, ownerId, plan) {
   const ref  = db.collection('owners').doc(ownerId);
-  const snap = await ref.get();
-  if (!snap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
 
-  const data = snap.data();
+  // Proteção contra race condition: tenta reservar atomicamente via transação
+  let data;
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
+    data = snap.data();
+    if (data._subPending) {
+      const pendingAge = Date.now() - (data._subPending.toMillis?.() ?? 0);
+      if (pendingAge < 5 * 60 * 1000) throw Object.assign(new Error('Criacao de assinatura ja em andamento'), { status: 409 });
+    }
+    tx.update(ref, { _subPending: Timestamp.now() });
+  });
+
   const PLANS = {
     trial: { monthlyPrice: 0,  label: 'Trial'  },
     basic: { monthlyPrice: 49, label: 'Basic'  },
@@ -229,68 +240,79 @@ async function createSubscription(db, ownerId, plan) {
   };
   const selectedPlan = plan || data.plan || 'basic';
   const planInfo = PLANS[selectedPlan] || PLANS.basic;
-  if (planInfo.monthlyPrice === 0) throw Object.assign(new Error('Plano trial nao gera assinatura paga'), { status: 400 });
-
-  const masterKey = await getMasterAsaasKey(db);
-
-  // Busca ou cria customer na conta master
-  const searchR = await fetch(
-    `https://api.asaas.com/v3/customers?email=${encodeURIComponent(data.email)}&limit=1`,
-    { headers: { 'access_token': masterKey } }
-  );
-  const searchJson = await searchR.json();
-  let customerId;
-  if (searchJson.data?.length > 0) {
-    customerId = searchJson.data[0].id;
-  } else {
-    const cpfCnpj = (data.cpfCnpj || '').replace(/\D/g, '');
-    const phone   = (data.phone   || '').replace(/\D/g, '');
-    const custBody = { name: data.name, email: data.email };
-    if (cpfCnpj) custBody.cpfCnpj    = cpfCnpj;
-    if (phone)   custBody.mobilePhone = phone;
-    const cust = await asaasPost('/customers', custBody, masterKey);
-    customerId = cust.id;
+  if (planInfo.monthlyPrice === 0) {
+    await ref.update({ _subPending: FieldValue.delete() });
+    throw Object.assign(new Error('Plano trial nao gera assinatura paga'), { status: 400 });
   }
 
-  // Cancela assinatura anterior se existir
-  if (data.subscriptionId) {
-    try { await fetch(`https://api.asaas.com/v3/subscriptions/${data.subscriptionId}`, {
-      method: 'DELETE', headers: { 'access_token': masterKey }
-    }); } catch (_) {}
+  try {
+    const masterKey = await getMasterAsaasKey(db);
+
+    // Busca ou cria customer na conta master
+    const searchR = await fetch(
+      `${ASAAS_BASE}/customers?email=${encodeURIComponent(data.email)}&limit=1`,
+      { headers: { 'access_token': masterKey } }
+    );
+    const searchJson = await searchR.json();
+    let customerId;
+    if (searchJson.data?.length > 0) {
+      customerId = searchJson.data[0].id;
+    } else {
+      const cpfCnpj = (data.cpfCnpj || '').replace(/\D/g, '');
+      const phone   = (data.phone   || '').replace(/\D/g, '');
+      const custBody = { name: data.name, email: data.email };
+      if (cpfCnpj) custBody.cpfCnpj    = cpfCnpj;
+      if (phone)   custBody.mobilePhone = phone;
+      const cust = await asaasPost('/customers', custBody, masterKey);
+      customerId = cust.id;
+    }
+
+    // Cancela assinatura anterior se existir
+    if (data.subscriptionId) {
+      try {
+        await fetch(`${ASAAS_BASE}/subscriptions/${data.subscriptionId}`, {
+          method: 'DELETE', headers: { 'access_token': masterKey }
+        });
+      } catch (cancelErr) {
+        console.error('[createSubscription] falha ao cancelar assinatura anterior', { ownerId, subscriptionId: data.subscriptionId, message: cancelErr.message });
+      }
+    }
+
+    // Cria assinatura mensal PIX
+    const nextDueDate = new Date();
+    nextDueDate.setDate(nextDueDate.getDate() + 1);
+    const sub = await asaasPost('/subscriptions', {
+      customer:     customerId,
+      billingType:  'PIX',
+      value:        planInfo.monthlyPrice,
+      nextDueDate:  nextDueDate.toISOString().slice(0, 10),
+      cycle:        'MONTHLY',
+      description:  `iLocarPay - Plano ${planInfo.label}`,
+    }, masterKey);
+
+    const planActiveUntil = Timestamp.fromMillis(Date.now() + 32 * 24 * 60 * 60 * 1000);
+    await ref.update({
+      status:           'active',
+      plan:             selectedPlan,
+      monthlyPrice:     planInfo.monthlyPrice,
+      subscriptionId:   sub.id,
+      asaasCustomerId:  customerId,
+      billingStatus:    'ACTIVE',
+      planActiveUntil,
+      _subPending:      FieldValue.delete(),
+    });
+
+    return {
+      message:        `Assinatura ${planInfo.label} criada com sucesso.`,
+      subscriptionId: sub.id,
+      customerId,
+      nextDueDate:    nextDueDate.toISOString().slice(0, 10),
+      value:          planInfo.monthlyPrice,
+    };
+  } catch (err) {
+    await ref.update({ _subPending: FieldValue.delete() }).catch(() => {});
+    throw err;
   }
-
-  // Cria assinatura mensal PIX
-  const nextDueDate = new Date();
-  nextDueDate.setDate(nextDueDate.getDate() + 1);
-  const sub = await asaasPost('/subscriptions', {
-    customer:     customerId,
-    billingType:  'PIX',
-    value:        planInfo.monthlyPrice,
-    nextDueDate:  nextDueDate.toISOString().slice(0, 10),
-    cycle:        'MONTHLY',
-    description:  `iLocarPay - Plano ${planInfo.label}`,
-  }, masterKey);
-
-  // Atualiza Firestore
-  const { Timestamp } = await import('firebase-admin/firestore');
-  const planActiveUntil = Timestamp.fromMillis(Date.now() + 32 * 24 * 60 * 60 * 1000);
-  await ref.update({
-    status:           'active',
-    plan:             selectedPlan,
-    monthlyPrice:     planInfo.monthlyPrice,
-    subscriptionId:   sub.id,
-    asaasCustomerId:  customerId,
-    billingStatus:    'ACTIVE',
-    planActiveUntil,
-  });
-
-  return {
-    message:        `Assinatura ${planInfo.label} criada com sucesso.`,
-    subscriptionId: sub.id,
-    customerId,
-    nextDueDate:    nextDueDate.toISOString().slice(0, 10),
-    value:          planInfo.monthlyPrice,
-  };
 }
 
 async function getSubscriptionStatus(db, ownerId) {
@@ -315,7 +337,7 @@ async function cancelSubscription(db, ownerId) {
   const data = snap.data();
   if (!data.subscriptionId) throw Object.assign(new Error('Nenhuma assinatura ativa'), { status: 400 });
   const masterKey = await getMasterAsaasKey(db);
-  await fetch(`https://api.asaas.com/v3/subscriptions/${data.subscriptionId}`, {
+  await fetch(`${ASAAS_BASE}/subscriptions/${data.subscriptionId}`, {
     method: 'DELETE', headers: { 'access_token': masterKey }
   });
   await ref.update({ subscriptionId: null, billingStatus: 'CANCELLED', status: 'suspended' });

@@ -9,6 +9,8 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue }      from 'firebase-admin/firestore';
 
+const ASAAS_BASE = (process.env.ASAAS_API_URL || 'https://api.asaas.com/v3').replace(/\/$/, '');
+
 function initFirebase() {
   if (getApps().length) return;
   initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
@@ -26,7 +28,7 @@ async function getMainAsaasKey(db) {
 }
 
 async function asaasReq(method, path, body, apiKey) {
-  const r = await fetch(`https://api.asaas.com/v3${path}`, {
+  const r = await fetch(`${ASAAS_BASE}${path}`, {
     method,
     headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
     ...(body ? { body: JSON.stringify(body) } : {})
@@ -40,7 +42,7 @@ async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
   const cpfD   = (cpf   || '').replace(/\D/g, '');
   const phoneD = (phone || '').replace(/\D/g, '');
   const search = await fetch(
-    `https://api.asaas.com/v3/customers?email=${encodeURIComponent(email)}&limit=1`,
+    `${ASAAS_BASE}/customers?email=${encodeURIComponent(email)}&limit=1`,
     { headers: { 'access_token': apiKey } }
   );
   const { data } = await search.json();

@@ -11,8 +11,10 @@ function initFirebase() {
   initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
 }
 
+const ASAAS_BASE = (process.env.ASAAS_API_URL || 'https://api.asaas.com/v3').replace(/\/$/, '');
+
 async function asaasPost(path, body, apiKey) {
-  const r = await fetch(`https://api.asaas.com/v3${path}`, {
+  const r = await fetch(`${ASAAS_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
     body: JSON.stringify(body)
@@ -23,7 +25,7 @@ async function asaasPost(path, body, apiKey) {
 }
 
 async function asaasGet(path, apiKey) {
-  const r = await fetch(`https://api.asaas.com/v3${path}`, {
+  const r = await fetch(`${ASAAS_BASE}${path}`, {
     headers: { 'access_token': apiKey }
   });
   const json = await r.json();
@@ -36,7 +38,7 @@ async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
   const phoneDigits = (phone || '').replace(/\D/g, '');
 
   const search = await fetch(
-    `https://api.asaas.com/v3/customers?email=${encodeURIComponent(email)}&limit=1`,
+    `${ASAAS_BASE}/customers?email=${encodeURIComponent(email)}&limit=1`,
     { headers: { 'access_token': apiKey } }
   );
   const searchJson = await search.json();
@@ -48,7 +50,7 @@ async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
       const patch = { name: existing.name };
       if (!existing.cpfCnpj    && cpfDigits.length === 11)   patch.cpfCnpj     = cpfDigits;
       if (!existing.mobilePhone && phoneDigits.length >= 10) patch.mobilePhone  = phoneDigits;
-      await fetch(`https://api.asaas.com/v3/customers/${existing.id}`, {
+      await fetch(`${ASAAS_BASE}/customers/${existing.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
         body: JSON.stringify(patch)
@@ -89,7 +91,7 @@ async function handleMultiChargePix(db, req, res, tenantId, chargeIds, checkOnly
     if (checkOnly) {
       if (primaryData.asaasChargeId) {
         try {
-          const s = await fetch(`https://api.asaas.com/v3/payments/${primaryData.asaasChargeId}`, {
+          const s = await fetch(`${ASAAS_BASE}/payments/${primaryData.asaasChargeId}`, {
             headers: { 'access_token': await getAsaasKey(db, ownerId) }
           });
           const d = await s.json();
@@ -133,7 +135,7 @@ async function handleMultiChargePix(db, req, res, tenantId, chargeIds, checkOnly
     // Cancela QR anterior se existir
     if (primaryData.asaasChargeId) {
       try {
-        await fetch(`https://api.asaas.com/v3/payments/${primaryData.asaasChargeId}`, {
+        await fetch(`${ASAAS_BASE}/payments/${primaryData.asaasChargeId}`, {
           method: 'DELETE', headers: { 'access_token': apiKey }
         });
       } catch (_) {}
@@ -293,7 +295,7 @@ export default async function handler(req, res) {
     // Se tem asaasChargeId, verifica status no Asaas antes de tentar criar novo
     if (charge.asaasChargeId) {
       try {
-        const statusRes = await fetch(`https://api.asaas.com/v3/payments/${charge.asaasChargeId}`, {
+        const statusRes = await fetch(`${ASAAS_BASE}/payments/${charge.asaasChargeId}`, {
           headers: { 'access_token': apiKey }
         });
         if (statusRes.ok) {
@@ -348,7 +350,7 @@ export default async function handler(req, res) {
     // QR precisa ser (re)criado: cobrança nova OU vencida com QR de outro dia → cancela o antigo
     if (charge.asaasChargeId) {
       try {
-        await fetch(`https://api.asaas.com/v3/payments/${charge.asaasChargeId}`, {
+        await fetch(`${ASAAS_BASE}/payments/${charge.asaasChargeId}`, {
           method: 'DELETE',
           headers: { 'access_token': apiKey }
         });

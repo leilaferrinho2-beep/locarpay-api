@@ -11,6 +11,22 @@ import { getMessaging }                   from 'firebase-admin/messaging';
 import { getStorage }                     from 'firebase-admin/storage';
 import nodemailer                         from 'nodemailer';
 
+// URL base do Asaas — configure ASAAS_API_URL para apontar ao sandbox em dev/homologação.
+// Em produção, se a variável não estiver definida, usa o endpoint de produção (compatibilidade).
+const ASAAS_BASE = (process.env.ASAAS_API_URL || 'https://api.asaas.com/v3').replace(/\/$/, '');
+
+// Valida o token do billing-webhook (conta master Asaas).
+// Fail closed: se ASAAS_BILLING_WEBHOOK_TOKEN não estiver configurado, rejeita toda requisição.
+function validateBillingWebhookToken(req) {
+  const token = process.env.ASAAS_BILLING_WEBHOOK_TOKEN;
+  if (!token) {
+    console.error('[billing-webhook] ASAAS_BILLING_WEBHOOK_TOKEN não configurado — requisição rejeitada (fail closed).');
+    return false;
+  }
+  const sent = req.headers['asaas-access-token'];
+  return typeof sent === 'string' && sent.length > 0 && sent === token;
+}
+
 const PLANS = {
   trial:      { maxTenants: 3,   maxProperties: 2,   monthlyPrice: 0   },
   basic:      { maxTenants: 10,  maxProperties: 5,   monthlyPrice: 49  },
@@ -85,7 +101,7 @@ async function createAsaasSubaccount(masterKey, ownerData) {
   // Remove campos undefined
   Object.keys(body).forEach(k => body[k] === undefined && delete body[k]);
 
-  const r = await fetch('https://api.asaas.com/v3/accounts', {
+  const r = await fetch(`${ASAAS_BASE}/accounts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': masterKey },
     body: JSON.stringify(body)
@@ -338,7 +354,7 @@ const PLAN_PRICES = { trial: 0, basic: 49, pro: 99 };
 
 async function findOrCreateBillingCustomer(masterKey, ownerData) {
   const search = await fetch(
-    `https://api.asaas.com/v3/customers?email=${encodeURIComponent(ownerData.email)}&limit=1`,
+    `${ASAAS_BASE}/customers?email=${encodeURIComponent(ownerData.email)}&limit=1`,
     { headers: { 'access_token': masterKey } }
   );
   const searchJson = await search.json();
@@ -350,7 +366,7 @@ async function findOrCreateBillingCustomer(masterKey, ownerData) {
   if (cpfCnpj) body.cpfCnpj     = cpfCnpj;
   if (phone)   body.mobilePhone = phone;
 
-  const r = await fetch('https://api.asaas.com/v3/customers', {
+  const r = await fetch(`${ASAAS_BASE}/customers`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': masterKey },
     body: JSON.stringify(body)
@@ -380,7 +396,7 @@ async function handleActivatePlan(db, body) {
   // Cancel existing subscription if any
   if (ownerData.subscriptionId) {
     try {
-      await fetch(`https://api.asaas.com/v3/subscriptions/${ownerData.subscriptionId}`, {
+      await fetch(`${ASAAS_BASE}/subscriptions/${ownerData.subscriptionId}`, {
         method: 'DELETE',
         headers: { 'access_token': masterKey }
       });
@@ -390,7 +406,7 @@ async function handleActivatePlan(db, body) {
   // Next due date: tomorrow
   const nextDueDateStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
 
-  const subResp = await fetch('https://api.asaas.com/v3/subscriptions', {
+  const subResp = await fetch(`${ASAAS_BASE}/subscriptions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': masterKey },
     body: JSON.stringify({
@@ -448,7 +464,7 @@ async function handleSetupWebhook(db, body) {
   const events = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_OVERDUE', 'SUBSCRIPTION_DELETED'];
 
   // Lista webhooks existentes para evitar duplicata
-  const listResp = await fetch('https://api.asaas.com/v3/webhooks', {
+  const listResp = await fetch(`${ASAAS_BASE}/webhooks`, {
     headers: { 'access_token': masterKey }
   });
   const listJson = await listResp.json();
@@ -456,7 +472,7 @@ async function handleSetupWebhook(db, body) {
 
   if (existing) {
     // Atualiza para garantir que os eventos estao corretos
-    const updResp = await fetch(`https://api.asaas.com/v3/webhooks/${existing.id}`, {
+    const updResp = await fetch(`${ASAAS_BASE}/webhooks/${existing.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'access_token': masterKey },
       body: JSON.stringify({ url: webhookUrl, enabled: true, events })
@@ -468,7 +484,7 @@ async function handleSetupWebhook(db, body) {
   }
 
   // Cria novo webhook
-  const createResp = await fetch('https://api.asaas.com/v3/webhooks', {
+  const createResp = await fetch(`${ASAAS_BASE}/webhooks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': masterKey },
     body: JSON.stringify({ name: 'iLocarPay Billing', url: webhookUrl, email: 'contatotransgu@gmail.com', enabled: true, interrupted: false, type: 'PAYMENT', sendType: 'NON_SEQUENTIALLY', events })
@@ -615,14 +631,14 @@ async function handleSetupPaymentWebhook(db, body) {
   const events = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_OVERDUE', 'PAYMENT_DELETED'];
 
   // Checa webhooks existentes
-  const listResp = await fetch('https://api.asaas.com/v3/webhooks', {
+  const listResp = await fetch(`${ASAAS_BASE}/webhooks`, {
     headers: { 'access_token': apiKey }
   });
   const listJson = await listResp.json();
   const existing = (listJson.data || []).find(w => w.url === webhookUrl);
 
   if (existing) {
-    const updResp = await fetch(`https://api.asaas.com/v3/webhooks/${existing.id}`, {
+    const updResp = await fetch(`${ASAAS_BASE}/webhooks/${existing.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
       body: JSON.stringify({ url: webhookUrl, enabled: true, events })
@@ -632,7 +648,7 @@ async function handleSetupPaymentWebhook(db, body) {
     return { ok: true, action: 'updated', webhookId: upd.id || existing.id };
   }
 
-  const createResp = await fetch('https://api.asaas.com/v3/webhooks', {
+  const createResp = await fetch(`${ASAAS_BASE}/webhooks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
     body: JSON.stringify({
@@ -750,6 +766,8 @@ async function handleCronDaily(db) {
 async function handleAsaasWebhook(db, body) {
   const { event, payment } = body || {};
   if (!event || !payment?.subscription) return { ok: true, ignored: true };
+  // payment.id identifica o pagamento único — necessário para rastreabilidade
+  if (!payment.id) return { ok: true, ignored: true, reason: 'payment.id ausente' };
 
   const snap = await db.collection('owners')
     .where('subscriptionId', '==', payment.subscription)
@@ -913,8 +931,13 @@ export default async function handler(req, res) {
     const body = req.body || {};
     const { step } = body;
 
-    // Asaas payment webhook (no step, has event field)
-    if (!step && body.event) return res.status(200).json(await handleAsaasWebhook(db, body));
+    // Asaas billing webhook (no step, has event field) — valida token antes de processar
+    if (!step && body.event) {
+      if (!validateBillingWebhookToken(req)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      return res.status(200).json(await handleAsaasWebhook(db, body));
+    }
 
     if (step === 'register')       return res.status(201).json(await handleRegister(db, body));
     if (step === 'update')         return res.status(200).json(await handleUpdate(db, body));
