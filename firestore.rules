@@ -56,7 +56,8 @@ service cloud.firestore {
         || isOwnerOf(resource.data.get('ownerId', ''))
         || (isAuth() && resource.data.get('tenantId', '')    == request.auth.uid)
         || (isAuth() && resource.data.get('tenantEmail', '') == myEmail());
-      allow create: if isAuth();
+      // P1-fix: criação restrita a owner/master — impede tenant de criar contrato arbitrário
+      allow create: if isAuth() && (isMaster() || isOwnerOf(request.resource.data.get('ownerId', '')));
       allow update: if isAuth() && (
         isMaster() ||
         isOwnerOf(resource.data.get('ownerId', '')) ||
@@ -75,7 +76,8 @@ service cloud.firestore {
         || isOwnerOf(resource.data.get('ownerId', ''))
         || (isAuth() && resource.data.get('tenantId', '')    == request.auth.uid)
         || (isAuth() && resource.data.get('tenantEmail', '') == myEmail());
-      allow create: if isAuth();
+      // P1-fix: criação restrita a owner/master — tenant não cria cobrança falsa
+      allow create: if isAuth() && (isMaster() || isOwnerOf(request.resource.data.get('ownerId', '')));
       allow update: if isAuth() && (
         isMaster() ||
         isOwnerOf(resource.data.get('ownerId', '')) ||
@@ -172,14 +174,20 @@ service cloud.firestore {
 
     // ── maintenance (chamados) ────────────────────────────────────────────────
     match /maintenance/{chamadoId} {
-      allow read:   if isAuth();
+      // P1-fix: tenant lê apenas seus chamados; owner lê os do seu ownerId
+      allow read: if isMaster()
+        || isOwnerOf(resource.data.get('ownerId',''))
+        || (isAuth() && isActiveTenant() && resource.data.get('tenantId','') == request.auth.uid);
       allow create: if isAuth() && isActiveTenant();
       allow update: if isAuth() && (isMaster() || isOwnerOf(resource.data.get('ownerId','')));
       allow delete: if isAuth() && (isMaster() || isOwnerOf(resource.data.get('ownerId','')));
 
       match /messages/{msgId} {
-        allow read:   if isAuth();
-        allow create: if isAuth();
+        // P1-fix: leitura e criação restritas aos participantes do chamado pai
+        allow read, create: if isMaster()
+          || isOwnerOf(get(/databases/$(database)/documents/maintenance/$(chamadoId)).data.get('ownerId',''))
+          || (isAuth() && isActiveTenant() &&
+              get(/databases/$(database)/documents/maintenance/$(chamadoId)).data.get('tenantId','') == request.auth.uid);
         allow update: if isAuth() && (
           isMaster() ||
           isOwnerOf(resource.data.get('chamadoOwnerId', get(/databases/$(database)/documents/maintenance/$(chamadoId)).data.get('ownerId',''))) ||
