@@ -2822,7 +2822,12 @@ export default async function handler(req, res) {
     if (step === 'close-contract')    return res.status(200).json(await handleCloseContract(db, req.body));
     if (step === 'adjust-rent')       return res.status(200).json(await handleAdjustRent(db, req.body));
     if (step === 'monthly-report')    return res.status(200).json(await handleMonthlyReport(db, req.body));
-    if (step === 'asaas-webhook')     return res.status(200).json(await handleAsaasPaymentWebhook(db, req.body));
+    if (step === 'asaas-webhook') {
+      if (!validatePaymentWebhookToken(req)) {
+        return res.status(401).json({ error: 'Webhook token inválido' });
+      }
+      return res.status(200).json(await handleAsaasPaymentWebhook(db, req.body));
+    }
     if (step === 'annual-receipt')       return res.status(200).json(await handleAnnualReceipt(db, req.body));
     if (step === 'notify-expiry')        return res.status(200).json(await handleNotifyContractExpiry(db, req.body));
     if (step === 'cron-daily')           return res.status(200).json(await handleCronDaily(db, req));
