@@ -837,24 +837,56 @@ async function handleDeleteTenant(db, body, req) {
   });
 
   // Confirma que o caller é owner válido ou super admin
-  const SUPER_ADMIN = 'denisfelicio20@gmail.com';
-  const ownerSnap = await db.collection('owners').where('email', '==', decoded.email).limit(1).get();
-  if (ownerSnap.empty && decoded.email !== SUPER_ADMIN)
+  const SUPER_ADMINS = new Set(['denisfelicio20@gmail.com', 'contatotransgu@gmail.com']);
+  const isSuperAdmin = SUPER_ADMINS.has(decoded.email);
+  const ownerSnap = isSuperAdmin
+    ? { empty: true, docs: [] }
+    : await db.collection('owners').where('email', '==', decoded.email).limit(1).get();
+
+  if (!isSuperAdmin && ownerSnap.empty)
     throw Object.assign(new Error('Acesso negado'), { status: 403 });
 
   const userSnap = await db.collection('users').doc(tenantId).get();
   if (!userSnap.exists) throw Object.assign(new Error('Inquilino não encontrado'), { status: 404 });
+
+  const tenantData = userSnap.data();
+
+  // P0-6: verifica que o tenant pertence ao owner autenticado.
+  // Super admin pode deletar qualquer tenant.
+  if (!isSuperAdmin) {
+    const callerOwnerId  = ownerSnap.docs[0].id;
+    const tenantOwnerId  = tenantData.ownerId || '';
+    if (tenantOwnerId && tenantOwnerId !== callerOwnerId) {
+      throw Object.assign(
+        new Error('Acesso negado: inquilino não pertence a esta imobiliária'),
+        { status: 403 }
+      );
+    }
+  }
+
+  // Bloqueia exclusão se houver contrato ativo — regra comercial não definida, comportamento seguro
+  const activeContractSnap = await db.collection('contracts')
+    .where('tenantId', '==', tenantId)
+    .where('active', '==', true)
+    .limit(1)
+    .get();
+  if (!activeContractSnap.empty) {
+    throw Object.assign(
+      new Error('Não é possível remover inquilino com contrato ativo. Encerre o contrato primeiro.'),
+      { status: 422 }
+    );
+  }
 
   // Marca suspended=true primeiro para acionar o listener no app (logout imediato)
   await db.collection('users').doc(tenantId).update({ suspended: true }).catch(() => {});
 
   // Deleta conta Firebase Auth do inquilino (impede novo login)
   try {
-    const fbUser = await getAuth().getUserByEmail(userSnap.data().email);
+    const fbUser = await getAuth().getUserByEmail(tenantData.email);
     await getAuth().deleteUser(fbUser.uid);
   } catch (_) {}
 
-  const tenantEmail = userSnap.data().email || '';
+  const tenantEmail = tenantData.email || '';
 
   // Deleta cobranças, contratos, leads (por tenantId e por tenant.email para leads pendentes) e usuário
   const [chargesSnap, contractsSnap, leadsByIdSnap, leadsByEmailSnap] = await Promise.all([

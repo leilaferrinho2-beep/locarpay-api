@@ -226,11 +226,37 @@ async function handleFixContract(req, res) {
   return res.status(200).json({ ok: true, assinafyDocumentId: foundDocId, assinafyAssignmentId: foundAssignmentId });
 }
 
+// Emails autorizados para operações de manutenção — igual ao isMaster() das Firestore Rules
+const MASTER_EMAILS = new Set(['denisfelicio20@gmail.com', 'contatotransgu@gmail.com']);
+
+async function requireMasterAuth(req) {
+  const { getAuth } = await import('firebase-admin/auth');
+  const authHeader = (req.headers['authorization'] || '').trim();
+  if (!authHeader.startsWith('Bearer '))
+    throw Object.assign(new Error('Token de autenticação ausente'), { status: 401 });
+  const idToken = authHeader.slice(7);
+  const decoded = await getAuth().verifyIdToken(idToken).catch(() => {
+    throw Object.assign(new Error('Token inválido'), { status: 401 });
+  });
+  if (!MASTER_EMAILS.has(decoded.email))
+    throw Object.assign(new Error('Acesso negado: operação restrita ao super admin'), { status: 403 });
+  return decoded;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  // P0-4: todas as operações exigem autenticação de super admin
+  try {
+    initFirebase();
+    await requireMasterAuth(req);
+  } catch (authErr) {
+    return res.status(authErr.status || 401).json({ error: authErr.message });
+  }
+
   if (req.method === 'GET') return handleGetContractPdf(req, res);
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -241,6 +267,6 @@ export default async function handler(req, res) {
     return handleFixContract(req, res);
   } catch(e) {
     console.error('fix-contract error:', e.message);
-    return res.status(500).json({ error: e.message });
+    return res.status(e.status || 500).json({ error: e.message });
   }
 }

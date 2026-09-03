@@ -1069,6 +1069,32 @@ async function handleDeliverKeys(db, body) {
   const { contractId, tenantId } = body;
   if (!contractId || !tenantId) throw Object.assign(new Error('contractId e tenantId obrigatórios'), { status: 400 });
 
+  // Guarda server-side: contrato deve estar assinado por ambas as partes antes de ser ativado.
+  // Protege contra chamada direta, request manipulado e clique antecipado no botão.
+  const contractSnap = await db.collection('contracts').doc(contractId).get();
+  if (!contractSnap.exists)
+    throw Object.assign(new Error('Contrato não encontrado'), { status: 404 });
+
+  const contract = contractSnap.data();
+
+  // Aceita contractStatus === 'CONTRATO_ASSINADO' OU bothSigned === true (campo legado)
+  const fullySignedStatus = contract.contractStatus === 'CONTRATO_ASSINADO';
+  const fullySignedFlag   = contract.bothSigned === true;
+  if (!fullySignedStatus && !fullySignedFlag) {
+    throw Object.assign(
+      new Error(
+        `Entrega de chaves bloqueada: contrato ainda não foi assinado por todas as partes. ` +
+        `Status atual: ${contract.contractStatus || 'desconhecido'}`
+      ),
+      { status: 422 }
+    );
+  }
+
+  // Verifica que o tenantId fornecido corresponde ao tenant do contrato
+  if (contract.tenantId && contract.tenantId !== tenantId) {
+    throw Object.assign(new Error('tenantId não corresponde ao contrato'), { status: 403 });
+  }
+
   await Promise.all([
     db.collection('contracts').doc(contractId).update({
       active:           true,

@@ -33,7 +33,8 @@ service cloud.firestore {
         isMaster() ||
         isOwnerOf(resource.data.get('ownerId', ''))  // P0-4
       );
-      allow create: if isAuth();
+      // P0-3: usuário só pode criar o próprio documento — impede criação com role arbitrário
+      allow create: if isAuth() && request.auth.uid == userId;
       allow update: if isAuth() && (
         resource.data.get('email', '') == myEmail() ||
         isMaster() ||
@@ -50,19 +51,30 @@ service cloud.firestore {
 
     // ── contracts ────────────────────────────────────────────────────────────
     match /contracts/{contractId} {
-      allow read:   if isMaster() || (isAuth() && isActiveTenant());
+      // P0-3: inquilino só lê os seus próprios contratos; owner lê os do seu ownerId
+      allow read: if isMaster()
+        || isOwnerOf(resource.data.get('ownerId', ''))
+        || (isAuth() && resource.data.get('tenantId', '')    == request.auth.uid)
+        || (isAuth() && resource.data.get('tenantEmail', '') == myEmail());
       allow create: if isAuth();
       allow update: if isAuth() && (
         isMaster() ||
-        isActiveTenant() ||
-        isOwnerOf(resource.data.get('ownerId', ''))
+        isOwnerOf(resource.data.get('ownerId', '')) ||
+        // Inquilino só pode marcar campos de leitura, nunca campos financeiros ou de status
+        (resource.data.get('tenantId', '') == request.auth.uid &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['readByTenant', 'seenByTenant', 'readAt']))
       );
       allow delete: if isAuth() && (isMaster() || isOwnerOf(resource.data.get('ownerId', '')));
     }
 
     // ── charges ──────────────────────────────────────────────────────────────
     match /charges/{chargeId} {
-      allow read:   if isMaster() || (isAuth() && isActiveTenant());
+      // P0-3: inquilino só lê cobranças do seu tenantId ou tenantEmail
+      allow read: if isMaster()
+        || isOwnerOf(resource.data.get('ownerId', ''))
+        || (isAuth() && resource.data.get('tenantId', '')    == request.auth.uid)
+        || (isAuth() && resource.data.get('tenantEmail', '') == myEmail());
       allow create: if isAuth();
       allow update: if isAuth() && (
         isMaster() ||
@@ -131,9 +143,14 @@ service cloud.firestore {
 
     // ── brokerChats ─────────────────────────────────────────────────────────
     match /brokerChats/{chatId} {
-      allow read, write: if isAuth();
+      // P0-3: participante do chat (brokerId ou ownerId no token) ou master
+      allow read, write: if isMaster()
+        || isOwnerOf(resource.data.get('ownerId', ''))
+        || (isAuth() && resource.data.get('brokerId', '') == request.auth.uid);
       match /messages/{msgId} {
-        allow read, create: if isAuth();
+        allow read, create: if isMaster()
+          || (isAuth() && isOwnerOf(get(/databases/$(database)/documents/brokerChats/$(chatId)).data.get('ownerId','')))
+          || (isAuth() && get(/databases/$(database)/documents/brokerChats/$(chatId)).data.get('brokerId','') == request.auth.uid);
         allow update, delete: if false;
       }
     }
@@ -176,9 +193,14 @@ service cloud.firestore {
 
     // ── messages (mural de avisos owner→inquilino) ───────────────────────────
     match /messages/{msgId} {
-      // Inquilino lê as mensagens do seu contrato; owner escreve
-      allow read: if isAuth();
-      allow create: if isAuth();
+      // P0-3: inquilino lê mensagens do seu ownerId; owner cria/lê as suas
+      allow read: if isMaster()
+        || isOwnerOf(resource.data.get('ownerId', ''))
+        || (isAuth() && resource.data.get('tenantId', '')    == request.auth.uid)
+        || (isAuth() && resource.data.get('tenantEmail', '') == myEmail());
+      allow create: if isAuth() && (
+        isMaster() || isOwnerOf(request.resource.data.get('ownerId', ''))
+      );
       // Inquilino pode marcar readByTenant=true nas mensagens do owner
       allow update: if isAuth() && (
         isMaster() ||

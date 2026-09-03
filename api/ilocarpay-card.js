@@ -505,17 +505,29 @@ async function handleConfirm(db, body) {
   if (!verificationId)
     throw Object.assign(new Error('verificationId obrigatório'), { status: 400 });
 
-  const verRef  = db.collection('cardVerifications').doc(verificationId);
-  const verSnap = await verRef.get();
-  if (!verSnap.exists) throw Object.assign(new Error('Verificação não encontrada'), { status: 404 });
+  const verRef = db.collection('cardVerifications').doc(verificationId);
 
-  const ver = verSnap.data();
-
-  if (!ver.amountVerified)
-    throw Object.assign(new Error('Cartão não verificado.'), { status: 400 });
-
-  if (ver.verified)
-    throw Object.assign(new Error('Pagamento já processado.'), { status: 400 });
+  // Lock atômico via transação Firestore — garante que apenas UMA instância
+  // prossegue para cobrar o Asaas, mesmo sob concorrência ou retry de rede.
+  // Duas chamadas simultâneas: a segunda encontra confirming=true e retorna 409.
+  // Crash após lock mas antes do Asaas: campo confirming expira em 5min, permitindo retry.
+  let ver;
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(verRef);
+    if (!snap.exists) throw Object.assign(new Error('Verificação não encontrada'), { status: 404 });
+    ver = snap.data();
+    if (!ver.amountVerified)
+      throw Object.assign(new Error('Cartão não verificado.'), { status: 400 });
+    if (ver.verified)
+      throw Object.assign(new Error('Pagamento já processado.'), { status: 400 });
+    if (ver.confirming) {
+      const ageMs = Date.now() - (ver.confirmingAt?.toMillis?.() || 0);
+      if (ageMs < 300_000)
+        throw Object.assign(new Error('Pagamento em processamento. Aguarde alguns instantes.'), { status: 409 });
+      // Lock expirado (> 5min) — tentativa anterior falhou; permite nova tentativa
+    }
+    tx.update(verRef, { confirming: true, confirmingAt: FieldValue.serverTimestamp() });
+  });
 
   const chargeSnap = await db.collection('charges').doc(ver.chargeId).get();
   const ownerId    = chargeSnap.data()?.ownerId || await getDefaultOwnerId(db);
@@ -546,10 +558,19 @@ async function handleConfirm(db, body) {
       creditCardHolderInfo: holderInfoBase
     };
   } else {
+    // Libera o lock antes de lançar erro
+    await verRef.update({ confirming: false }).catch(() => {});
     throw Object.assign(new Error('Dados do cartão indisponíveis para cobrança.'), { status: 400 });
   }
 
-  const realCharge = await asaasReq('POST', '/payments', realChargeBody, apiKey);
+  let realCharge;
+  try {
+    realCharge = await asaasReq('POST', '/payments', realChargeBody, apiKey);
+  } catch (asaasErr) {
+    // Libera o lock para que o usuário possa tentar novamente
+    await verRef.update({ confirming: false, lastConfirmError: asaasErr.message }).catch(() => {});
+    throw asaasErr;
+  }
 
   const chargeIdsToMark = ver.chargeIds?.length > 1 ? ver.chargeIds : [ver.chargeId];
   const ops = [
@@ -558,7 +579,7 @@ async function handleConfirm(db, body) {
       status:        'paid',
       paidAt:        FieldValue.serverTimestamp()
     })),
-    verRef.update({ verified: true, realPaymentId: realCharge.id, paidAt: FieldValue.serverTimestamp(), cardFallback: FieldValue.delete() }),
+    verRef.update({ verified: true, confirming: false, realPaymentId: realCharge.id, paidAt: FieldValue.serverTimestamp(), cardFallback: FieldValue.delete() }),
     db.collection('paymentLogs').add({
       tenantId:       ver.tenantId,
       chargeId:       ver.chargeId,
@@ -1336,10 +1357,13 @@ async function handleAutoGenerateUpcoming(db, { ownerId, ownerData = {} }) {
 // Marca como 'overdue' cobranças pendentes com vencimento no passado
 async function handleMarkOverdue(db, body) {
   const { ownerId } = body;
+  // P0-5: ownerId obrigatório — impede atualização indiscriminada de toda a base.
+  // O cron em ilocarpay-owner.js já envia ownerId para cada owner individualmente.
+  if (!ownerId) throw Object.assign(new Error('ownerId obrigatório'), { status: 400 });
+
   const nowSecs = Math.floor(Date.now() / 1000);
 
-  let q = db.collection('charges').where('status', '==', 'pending');
-  if (ownerId) q = q.where('ownerId', '==', ownerId);
+  let q = db.collection('charges').where('status', '==', 'pending').where('ownerId', '==', ownerId);
 
   const snap = await q.get();
   const overdue = snap.docs.filter(d => {
