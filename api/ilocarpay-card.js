@@ -82,6 +82,23 @@ async function asaasReq(method, path, body, apiKey) {
   return json;
 }
 
+// Consulta o Asaas por uma cobrança já criada com o dado externalReference.
+// Retorna o payment.id se encontrado, null caso contrário ou em caso de erro de rede.
+// Usado em handleConfirm para reconciliar antes de criar nova cobrança (anti double-charge).
+async function findExistingAsaasPayment(externalReference, apiKey) {
+  try {
+    const res = await asaasReq(
+      'GET',
+      `/payments?externalReference=${encodeURIComponent(externalReference)}&limit=1`,
+      null,
+      apiKey
+    );
+    return res?.data?.[0]?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function findOrCreateCustomer(name, email, cpf, phone, apiKey) {
   const cpfDigits   = (cpf   || '').replace(/\D/g, '');
   const phoneDigits = (phone || '').replace(/\D/g, '');
@@ -565,7 +582,16 @@ async function handleConfirm(db, body) {
 
   let realCharge;
   try {
-    realCharge = await asaasReq('POST', '/payments', realChargeBody, apiKey);
+    // Reconciliação anti double-charge: verifica se Asaas já criou cobrança para esta
+    // verificação antes de criar nova. Cobre crash após POST Asaas mas antes de
+    // persistir verified=true no Firestore (cenário de timeout/crash e retry).
+    const existingPaymentId = await findExistingAsaasPayment(verificationId, apiKey);
+    if (existingPaymentId) {
+      realCharge = { id: existingPaymentId };
+    } else {
+      realChargeBody.externalReference = verificationId;
+      realCharge = await asaasReq('POST', '/payments', realChargeBody, apiKey);
+    }
   } catch (asaasErr) {
     // Libera o lock para que o usuário possa tentar novamente
     await verRef.update({ confirming: false, lastConfirmError: asaasErr.message }).catch(() => {});
