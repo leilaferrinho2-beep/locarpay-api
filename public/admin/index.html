@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>iLocarPay — Painel Admin</title>
+<script>var _k='ilocarpay-theme',_p;try{_p=localStorage.getItem(_k)||'system';}catch(e){_p='system';}var _d=_p==='light'?'light':_p==='dark'?'dark':window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',_d);</script>
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, signInWithPopup, signInWithRedirect, signInWithCustomToken, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
@@ -65,6 +66,7 @@
     let v = input.value.replace(/\D/g, '').slice(0, 8);
     if (v.length > 5) v = v.slice(0,5) + '-' + v.slice(5);
     input.value = v;
+    input.style.color = v.replace(/\D/g,'').length > 0 && v.replace(/\D/g,'').length < 8 ? '#ef5350' : '';
     if (v.replace(/\D/g,'').length === 8) fetchCEP();
   }
   async function fetchCEP() {
@@ -97,10 +99,10 @@
       overlay.id = '_confirm-overlay';
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
       overlay.innerHTML = `
-        <div style="background:#1a1d2e;border:1px solid #3a3d52;border-radius:14px;padding:32px;max-width:420px;width:90%;box-shadow:0 24px 60px rgba(0,0,0,.6)">
-          <p id="_confirm-msg" style="font-size:15px;color:#e0e0e0;line-height:1.6;margin-bottom:24px;white-space:pre-line"></p>
+        <div style="background:var(--s1);border:1px solid var(--border2);border-radius:14px;padding:32px;max-width:420px;width:90%;box-shadow:0 24px 60px rgba(0,0,0,.6)">
+          <p id="_confirm-msg" style="font-size:15px;color:var(--text1);line-height:1.6;margin-bottom:24px;white-space:pre-line"></p>
           <div style="display:flex;gap:10px;justify-content:flex-end">
-            <button id="_confirm-cancel" style="background:#2a2d3e;color:#aaa;border:1px solid #3a3d52;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">Cancelar</button>
+            <button id="_confirm-cancel" style="background:var(--s3);color:var(--text2);border:1px solid var(--border2);border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">Cancelar</button>
             <button id="_confirm-ok" style="border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer">Confirmar</button>
           </div>
         </div>`;
@@ -125,11 +127,11 @@
       overlay.id = '_prompt-overlay';
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
       overlay.innerHTML = `
-        <div style="background:#1a1d2e;border:1px solid #3a3d52;border-radius:14px;padding:32px;max-width:420px;width:90%;box-shadow:0 24px 60px rgba(0,0,0,.6)">
-          <p id="_prompt-msg" style="font-size:15px;color:#e0e0e0;margin-bottom:16px"></p>
-          <input id="_prompt-input" style="width:100%;background:#0f1117;border:1px solid #3a3d52;color:#e0e0e0;border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:20px">
+        <div style="background:var(--s1);border:1px solid var(--border2);border-radius:14px;padding:32px;max-width:420px;width:90%;box-shadow:0 24px 60px rgba(0,0,0,.6)">
+          <p id="_prompt-msg" style="font-size:15px;color:var(--text1);margin-bottom:16px"></p>
+          <input id="_prompt-input" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text1);border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:20px">
           <div style="display:flex;gap:10px;justify-content:flex-end">
-            <button id="_prompt-cancel" style="background:#2a2d3e;color:#aaa;border:1px solid #3a3d52;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">Cancelar</button>
+            <button id="_prompt-cancel" style="background:var(--s3);color:var(--text2);border:1px solid var(--border2);border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">Cancelar</button>
             <button id="_prompt-ok" style="background:#4CAF50;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer">OK</button>
           </div>
         </div>`;
@@ -311,7 +313,7 @@
         `<option value="${o.id}" ${o.id === currentOwnerId ? 'selected' : ''}>${o.name} (${o.email})</option>`
       ).join('');
       $('owner-selector-wrap').innerHTML =
-        `<select id="owner-select" style="background:#0f1117;color:#e0e0e0;border:1px solid #3a3d52;border-radius:6px;padding:6px 10px;font-size:13px">${opts}</select>`;
+        `<select id="owner-select" style="background:var(--bg);color:var(--text1);border:1px solid var(--border2);border-radius:6px;padding:6px 10px;font-size:13px">${opts}</select>`;
       $('owner-select').addEventListener('change', async e => {
         currentOwnerId   = e.target.value;
         currentOwnerData = allOwners.find(o => o.id === currentOwnerId);
@@ -2320,13 +2322,19 @@
     document.addEventListener('DOMContentLoaded', () => {
       const inp = cepInput();
       if (!inp) return;
-      inp.addEventListener('input', e => { e.target.value = formatCep(e.target.value); });
+      inp.addEventListener('input', e => {
+        e.target.value = formatCep(e.target.value);
+        const d = e.target.value.replace(/\D/g,'');
+        inp.style.color = d.length > 0 && d.length < 8 ? '#ef5350' : '';
+      });
       inp.addEventListener('blur',  e => lookupCep(e.target.value));
       inp.addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); lookupCep(e.target.value); } });
       // Máscaras nos campos do form
       applyMask('t-cpf',   maskCpf);
+      const tCpfEl = $('t-cpf'); if (tCpfEl) tCpfEl.addEventListener('input', () => cpfErrorColor(tCpfEl));
       applyMask('t-phone', maskPhone);
       applyMask('et-cpf',   maskCpf);
+      const etCpfEl = $('et-cpf'); if (etCpfEl) etCpfEl.addEventListener('input', () => cpfErrorColor(etCpfEl));
       applyMask('et-phone', maskPhone);
     });
   })();
@@ -2348,8 +2356,16 @@
   };
 
   // CEP lookup para endereço atual do inquilino
-  window.lookupCepTenant = async (raw) => {
+  window.lookupCepTenant = async (elOrRaw) => {
+    const el = typeof elOrRaw === 'string' ? null : elOrRaw;
+    const raw = el ? el.value : elOrRaw;
     const digits = raw.replace(/\D/g,'');
+    if (el) {
+      let fv = digits.slice(0,8);
+      if (fv.length > 5) fv = fv.slice(0,5) + '-' + fv.slice(5);
+      el.value = fv;
+      el.style.color = digits.length > 0 && digits.length < 8 ? '#ef5350' : '';
+    }
     if (digits.length !== 8) return;
     $('t-curr-cep-status').textContent = '⏳';
     try {
@@ -2380,10 +2396,15 @@
       box.dataset.expanded = '1';
     }
   };
+  function cpfErrorColor(el) {
+    const d = el.value.replace(/\D/g,'');
+    el.style.color = d.length === 11 && !validateCpf(d) ? '#ef5350' : '';
+  }
   window.maskCpfInput = (el) => {
     let v = el.value.replace(/\D/g,'').slice(0,11);
     v = v.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2');
     el.value = v;
+    cpfErrorColor(el);
   };
   window.maskPhoneInput = (el) => {
     let v = el.value.replace(/\D/g,'').slice(0,11);
@@ -3333,22 +3354,41 @@
 
   // ── Excluir inquilino ─────────────────────────────────────────
   window.deleteTenant = async function(tenantId, tenantName) {
-    showConfirm(`Excluir "${tenantName || tenantId}" e todos os dados relacionados?\n\nEssa ação não pode ser desfeita.`, async () => {
+    const activeContract = contracts.find(c => c.tenantId === tenantId && c.active);
+    const msg = activeContract
+      ? `"${tenantName || tenantId}" tem um contrato ativo.\n\nO contrato será encerrado e o inquilino removido.\n\nEssa ação não pode ser desfeita.`
+      : `Excluir "${tenantName || tenantId}" e todos os dados relacionados?\n\nEssa ação não pode ser desfeita.`;
+
+    showConfirm(msg, async () => {
       try {
         const token = await auth.currentUser.getIdToken();
+        const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+
+        // Encerra o contrato ativo antes de excluir, se existir
+        if (activeContract) {
+          const r = await fetch('/api/ilocarpay-card', {
+            method: 'POST', headers,
+            body: JSON.stringify({ step: 'close-contract', contractId: activeContract.id, tenantId, ownerId: currentOwnerId })
+          });
+          if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            throw new Error(d.error || 'Erro ao encerrar contrato');
+          }
+        }
+
         const resp = await fetch('/api/ilocarpay-owner', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          method: 'POST', headers,
           body: JSON.stringify({ step: 'delete-tenant', tenantId })
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Erro ao excluir');
         showToast(`Inquilino "${tenantName || tenantId}" excluído.`, 'success');
         await loadTenants();
+        renderDashboard();
       } catch(e) {
         showToast('Erro ao excluir: ' + e.message, 'error');
       }
-    }, { danger: true, okText: 'Excluir' });
+    }, { danger: true, okText: activeContract ? 'Encerrar e excluir' : 'Excluir' });
   };
 
   // ── Histórico de cobranças ────────────────────────────────────
@@ -3592,6 +3632,7 @@
       $('modal-adjust-rent').style.display = 'none';
       showToast(`Reajuste de ${pct}% aplicado em ${d.updated} contrato(s).`, 'success');
       await loadTenants();
+      renderDashboard();
     } catch (e) {
       $('adjust-error').textContent = 'Erro: ' + e.message;
     } finally {
@@ -4178,6 +4219,9 @@
   });
 
   $('btn-logout').addEventListener('click', () => signOut(auth));
+
+  // ── Theme system ─────────────────────────────────────────────────────────────
+  (function(){var K='ilocarpay-theme',I={system:'◐',light:'☀',dark:'☾'};function g(){try{return localStorage.getItem(K)||'system';}catch(e){return'system';}}function s(m){try{localStorage.setItem(K,m);}catch(e){}}function r(p){return p==='light'?'light':p==='dark'?'dark':window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';}function a(p){document.documentElement.setAttribute('data-theme',r(p));var ic=document.getElementById('ip-theme-icon');if(ic)ic.textContent=I[p]||I.system;document.querySelectorAll('[data-theme-option]').forEach(function(b){var ok=b.getAttribute('data-theme-option')===p;b.classList.toggle('ip-theme-active',ok);b.setAttribute('aria-pressed',ok?'true':'false');});}a(g());var t=document.getElementById('ip-theme-toggle'),pan=document.getElementById('ip-theme-panel');if(t&&pan){t.addEventListener('click',function(e){e.stopPropagation();pan.classList.toggle('open');});document.addEventListener('click',function(){pan.classList.remove('open');});pan.querySelectorAll('[data-theme-option]').forEach(function(b){b.addEventListener('click',function(e){e.stopPropagation();var m=b.getAttribute('data-theme-option');s(m);a(m);pan.classList.remove('open');});});}try{window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(){if(g()==='system')a('system');});}catch(e){}})();
 
   // OTP login
   let otpEmail = '';
@@ -5391,6 +5435,30 @@
     --r-sm:        8px;
     --r-lg:        16px;
   }
+  html[data-theme="light"] {
+    --bg:          #F4F6FB;
+    --s1:          #FFFFFF;
+    --s2:          #F0F2F9;
+    --s3:          #E8ECF4;
+    --s4:          #DDE2F0;
+    --border:      rgba(0,0,0,.08);
+    --border2:     rgba(0,0,0,.14);
+    --text1:       #0F1225;
+    --text2:       #4A5280;
+    --text3:       #9099C0;
+    --accent-bg:   rgba(5,150,105,.08);
+    --accent-glow: rgba(5,150,105,.14);
+    --danger-bg:   rgba(244,63,94,.08);
+    --warn-bg:     rgba(245,158,11,.08);
+    --blue-bg:     rgba(59,130,246,.08);
+  }
+  .ip-theme-btn { background:var(--s2); border:1px solid var(--border2); color:var(--text2); width:34px; height:34px; border-radius:50%; cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; transition:color .2s; }
+  .ip-theme-btn:hover { color:var(--text1); }
+  .ip-theme-panel { position:absolute; right:0; top:calc(100% + 6px); background:var(--s1); border:1px solid var(--border2); border-radius:12px; padding:6px; display:none; flex-direction:column; gap:2px; min-width:130px; box-shadow:0 8px 24px rgba(0,0,0,.2); z-index:100; }
+  .ip-theme-panel.open { display:flex; }
+  .ip-theme-panel button { background:none; border:none; color:var(--text2); cursor:pointer; padding:7px 10px; border-radius:8px; font-size:12.5px; text-align:left; transition:background .15s,color .15s; }
+  .ip-theme-panel button:hover { background:var(--s2); color:var(--text1); }
+  .ip-theme-panel button.ip-theme-active { color:var(--accent2); font-weight:600; }
 
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -5669,22 +5737,27 @@
   .ll-logo-name span { color: var(--accent3); }
   .ll-headline { font-size: 44px; font-weight: 800; color: var(--text1); line-height: 1.1; letter-spacing: -1.5px; margin-bottom: 20px; max-width: 500px; }
   .ll-headline em { font-style: normal; background: linear-gradient(135deg, #10b981, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-  .ll-sub { font-size: 16px; color: #3a5060; line-height: 1.7; max-width: 400px; margin-bottom: 64px; }
+  .ll-sub { font-size: 16px; color: rgba(255,255,255,0.45); line-height: 1.7; max-width: 400px; margin-bottom: 64px; }
   .ll-stats { display: flex; gap: 48px; }
   .ll-stat-num   { font-size: 28px; font-weight: 800; color: var(--text1); font-variant-numeric: tabular-nums; }
-  .ll-stat-label { font-size: 11px; color: #2a3e4e; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
-  .login-right { background: #050910; display: flex; flex-direction: column; justify-content: center; padding: 60px 52px; border-left: 1px solid rgba(255,255,255,0.04); }
+  .ll-stat-label { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+  .login-right { background: var(--s1); display: flex; flex-direction: column; justify-content: center; padding: 60px 52px; border-left: 1px solid var(--border); }
   .lr-eyebrow { font-size: 10px; font-weight: 700; color: var(--accent2); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px; }
   .lr-title { font-size: 26px; font-weight: 700; color: var(--text1); margin-bottom: 8px; letter-spacing: -0.5px; }
-  .lr-sub { font-size: 14px; color: #223040; margin-bottom: 40px; line-height: 1.6; }
+  .lr-sub { font-size: 14px; color: var(--text2); margin-bottom: 40px; line-height: 1.6; }
   .btn-google { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 14px 24px; background: #fff; color: #111; border: none; border-radius: var(--r); font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity .15s, box-shadow .15s; font-family: inherit; }
   .btn-google:hover { opacity: 0.93; box-shadow: 0 8px 30px rgba(255,255,255,0.06); }
   .btn-google svg { width: 20px; height: 20px; flex-shrink: 0; }
   .lr-divider { display: flex; align-items: center; gap: 12px; margin: 28px 0; }
-  .lr-divider::before, .lr-divider::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.05); }
-  .lr-divider span { font-size: 11px; color: #182432; text-transform: uppercase; letter-spacing: 1px; }
-  .lr-note { font-size: 12px; color: #182432; text-align: center; line-height: 1.7; }
+  .lr-divider::before, .lr-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .lr-divider span { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; }
+  .lr-note { font-size: 12px; color: var(--text3); text-align: center; line-height: 1.7; }
   #login-error { color: var(--danger); font-size: 13px; margin-top: 16px; text-align: center; min-height: 18px; }
+  /* ── Login light-mode overrides — left panel stays dark (brand identity), right panel adapts ── */
+  html[data-theme="light"] .login-left { background: linear-gradient(150deg, #0d2219 0%, #091a10 60%, #071510 100%); }
+  html[data-theme="light"] .ll-logo-name { color: #fff; }
+  html[data-theme="light"] .ll-headline  { color: #fff; }
+  html[data-theme="light"] .ll-stat-num  { color: #fff; }
   @media (max-width: 860px) { #login-section { grid-template-columns: 1fr; } .login-left { display: none; } .login-right { padding: 40px 28px; } }
   @media (max-width: 768px) { :root { --sidebar-w: 0px; } .tabs { display: none; } #dashboard-section { margin-left: 0; } }
 </style>
@@ -5700,6 +5773,14 @@
     <div id="owner-selector-wrap"></div>
     <span class="owner-chip" id="owner-name-badge"></span>
     <span id="user-email"></span>
+    <div style="position:relative">
+      <button class="ip-theme-btn" id="ip-theme-toggle" title="Tema" aria-label="Alterar tema"><span id="ip-theme-icon">◐</span></button>
+      <div class="ip-theme-panel" id="ip-theme-panel">
+        <button data-theme-option="system" aria-pressed="false">☀︎ Sistema</button>
+        <button data-theme-option="light"  aria-pressed="false">☀ Claro</button>
+        <button data-theme-option="dark"   aria-pressed="false">☾ Escuro</button>
+      </div>
+    </div>
     <button class="btn-logout" id="btn-logout">Sair</button>
   </div>
 </header>
@@ -6641,7 +6722,7 @@
       <div>
         <label>CEP <span>*</span></label>
         <div style="position:relative">
-          <input id="t-curr-cep" type="text" placeholder="00000-000" maxlength="9" oninput="lookupCepTenant(this.value)">
+          <input id="t-curr-cep" type="text" placeholder="00000-000" maxlength="9" oninput="lookupCepTenant(this)">
           <span id="t-curr-cep-status" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:12px"></span>
         </div>
       </div>

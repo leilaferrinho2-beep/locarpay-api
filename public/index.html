@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>iLocarPay — Gestão de Aluguéis para Imobiliárias</title>
+<script>var _k='ilocarpay-theme',_p;try{_p=localStorage.getItem(_k)||'system';}catch(e){_p='system';}var _d=_p==='light'?'light':_p==='dark'?'dark':window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',_d);</script>
 <meta name="description" content="Plataforma completa de gestão de aluguéis: cobranças automáticas, contratos digitais e app para inquilinos. Teste grátis por 30 dias.">
 <meta property="og:type"        content="website">
 <meta property="og:url"         content="https://www.ilocarpay.com.br/">
@@ -31,6 +32,27 @@
     --white:     #f0f2ff;
     --danger:    #E57373;
     --gold:      #FFD54F;
+    --green:     #2DB56B;
+    --green-lit: #2DB56B;
+    --accent:    #2DB56B;
+    --hero-glow-top: rgba(76,175,80,0.13);
+    --hero-glow-btm: rgba(37,99,235,0.09);
+    --nav-glass: rgba(15,17,23,0.95);
+    --nav-text:  #fff;
+  }
+  html[data-theme="light"] {
+    --bg:        #F4F6FB;
+    --surface:   #FFFFFF;
+    --card:      #F0F2F9;
+    --border:    #DDE2F0;
+    --text:      #0F1225;
+    --text-dim:  #4A5280;
+    --text-faint:#9099C0;
+    --white:     #0F1225;
+    --hero-glow-top: rgba(76,175,80,0.04);
+    --hero-glow-btm: rgba(37,99,235,0.02);
+    --nav-glass: rgba(244,246,251,0.97);
+    --nav-text:  #0F1225;
   }
 
   html { scroll-behavior: smooth; }
@@ -49,13 +71,13 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 5%;
     height: 64px;
-    background: rgba(15,17,23,0.95);
+    background: var(--nav-glass);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
   }
   .nav-brand {
     display: flex; align-items: center; gap: 10px;
-    font-size: 1.25rem; font-weight: 800; color: #fff;
+    font-size: 1.25rem; font-weight: 800; color: var(--nav-text);
     letter-spacing: -0.5px; text-decoration: none;
   }
   .nav-brand .pay { color: var(--accent); }
@@ -85,8 +107,8 @@
     content: '';
     position: absolute; inset: 0;
     background:
-      radial-gradient(ellipse 60% 40% at 50% 0%, rgba(76,175,80,0.07) 0%, transparent 65%),
-      radial-gradient(ellipse 40% 30% at 80% 85%, rgba(37,99,235,0.05) 0%, transparent 60%);
+      radial-gradient(ellipse 60% 40% at 50% 0%, var(--hero-glow-top) 0%, transparent 65%),
+      radial-gradient(ellipse 40% 30% at 80% 85%, var(--hero-glow-btm) 0%, transparent 60%);
     pointer-events: none;
   }
   .hero-badge {
@@ -263,7 +285,7 @@
 
   /* CTA SECTION */
   .cta-section {
-    background: linear-gradient(135deg, #131929 0%, #0f1117 100%);
+    background: linear-gradient(135deg, var(--surface) 0%, var(--bg) 100%);
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
     text-align: center;
@@ -669,19 +691,19 @@
       <p>Seu trial de 30 dias está ativo. Acesse o painel agora para cadastrar seus primeiros inquilinos.</p>
 
       <!-- Login rápido após cadastro -->
-      <div id="success-login-box" style="background:#0d1120;border:1px solid #1e2644;border-radius:12px;padding:20px;margin:20px 0;text-align:left">
-        <div style="font-size:13px;color:#8FAF8F;margin-bottom:12px">Entrar no painel agora:</div>
+      <div id="success-login-box" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin:20px 0;text-align:left">
+        <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Entrar no painel agora:</div>
         <div id="success-otp-email-step">
-          <button id="btn-success-send-otp" style="width:100%;padding:11px;border-radius:9px;border:1px solid #2563eb;background:transparent;color:#69D369;font-size:14px;font-weight:600;cursor:pointer;">Enviar código por e-mail →</button>
+          <button id="btn-success-send-otp" style="width:100%;padding:11px;border-radius:9px;border:1px solid #2563eb;background:transparent;color:var(--accent);font-size:14px;font-weight:600;cursor:pointer;">Enviar código por e-mail →</button>
         </div>
         <div id="success-otp-code-step" style="display:none">
-          <div style="font-size:12px;color:#8FAF8F;margin-bottom:8px">Código enviado! Digite abaixo:</div>
-          <input id="success-otp-input" type="text" inputmode="numeric" maxlength="6" placeholder="000000" style="width:100%;padding:10px;border-radius:8px;border:1px solid #2563eb;background:#080c14;color:#e0e6f0;font-size:20px;letter-spacing:6px;text-align:center;box-sizing:border-box;margin-bottom:8px;outline:none;">
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">Código enviado! Digite abaixo:</div>
+          <input id="success-otp-input" type="text" inputmode="numeric" maxlength="6" placeholder="000000" style="width:100%;padding:10px;border-radius:8px;border:1px solid #2563eb;background:var(--surface);color:var(--text);font-size:20px;letter-spacing:6px;text-align:center;box-sizing:border-box;margin-bottom:8px;outline:none;">
           <button id="btn-success-verify-otp" style="width:100%;padding:11px;border-radius:9px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Entrar no painel</button>
         </div>
         <div id="success-otp-error" style="color:#E57373;font-size:12px;margin-top:6px;min-height:16px"></div>
         <div style="margin-top:10px;text-align:center">
-          <a href="admin" target="_blank" style="font-size:12px;color:#4a6090;text-decoration:underline">Entrar com Google em vez disso</a>
+          <a href="admin" target="_blank" style="font-size:12px;color:var(--text-dim);text-decoration:underline">Entrar com Google em vez disso</a>
         </div>
       </div>
 

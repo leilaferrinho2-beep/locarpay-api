@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>iLocarPay — Área do Corretor</title>
+<script>var _k='ilocarpay-theme',_p;try{_p=localStorage.getItem(_k)||'system';}catch(e){_p='system';}var _d=_p==='light'?'light':_p==='dark'?'dark':window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',_d);</script>
 <style>
 :root {
   --bg:         #07080d;
@@ -13,14 +14,23 @@
   --blue:       #42A5F5;
   --blue-dk:    #1565C0;
   --blue-glow:  rgba(66,165,245,.18);
-  --green:      #4CAF50;
-  --orange:     #FFA726;
+  --green:      #2DB56B;
+  --orange:     #F59E0B;
   --red:        #ef5350;
-  --yellow:     #FFD54F;
+  --yellow:     #F59E0B;
   --text:       #f0f0f0;
   --muted:      rgba(255,255,255,.45);
   --card-r:     18px;
   --sans:       -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+html[data-theme="light"] {
+  --bg:       #F4F6FB;
+  --surface:  rgba(0,0,0,.04);
+  --surface2: rgba(0,0,0,.06);
+  --border:   rgba(0,0,0,.10);
+  --text:     #0F1225;
+  --muted:    rgba(15,18,37,.50);
+  --blue-glow: rgba(66,165,245,.12);
 }
 *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
 html,body { height:100%; -webkit-tap-highlight-color:transparent; }
@@ -107,6 +117,13 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
   transition:color .2s, border-color .2s; font-family:var(--sans);
 }
 .btn-logout:hover { color:var(--text); border-color:rgba(255,255,255,.2); }
+.ip-theme-btn { background:var(--surface); border:1px solid var(--border); color:var(--muted); width:34px; height:34px; border-radius:50%; cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; transition:color .2s,border-color .2s; }
+.ip-theme-btn:hover { color:var(--text); }
+.ip-theme-panel { position:absolute; right:0; top:calc(100% + 6px); background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:8px; display:none; flex-direction:column; gap:4px; min-width:140px; box-shadow:0 8px 24px rgba(0,0,0,.4); z-index:100; }
+.ip-theme-panel.open { display:flex; }
+.ip-theme-panel button { background:none; border:none; color:var(--muted); cursor:pointer; padding:8px 12px; border-radius:10px; font-size:13px; text-align:left; display:flex; align-items:center; gap:8px; transition:background .15s,color .15s; }
+.ip-theme-panel button:hover { background:var(--surface); color:var(--text); }
+.ip-theme-panel button.ip-theme-active { color:var(--green); font-weight:600; }
 
 /* ── Body ── */
 .dash-body { flex:1; padding-bottom:100px; max-width:600px; margin:0 auto; width:100%; }
@@ -219,7 +236,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 .modal-overlay.open { opacity:1; pointer-events:all; }
 .modal-sheet {
   width:100%; max-width:600px; margin:0 auto;
-  background:#0f1117; border-radius:24px 24px 0 0;
+  background:var(--bg); border-radius:24px 24px 0 0;
   border:1px solid var(--border); border-bottom:none;
   max-height:92dvh; overflow-y:auto;
   transform:translateY(100%); transition:transform .3s cubic-bezier(.25,.46,.45,.94);
@@ -371,6 +388,14 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
     </div>
     <div class="dash-user">
       <span class="dash-email" id="user-email-lbl"></span>
+      <div style="position:relative">
+        <button class="ip-theme-btn" id="ip-theme-toggle" title="Tema" aria-label="Alterar tema"><span id="ip-theme-icon">◐</span></button>
+        <div class="ip-theme-panel" id="ip-theme-panel">
+          <button data-theme-option="system" aria-pressed="false">☀︎ Sistema</button>
+          <button data-theme-option="light"  aria-pressed="false">☀ Claro</button>
+          <button data-theme-option="dark"   aria-pressed="false">☾ Escuro</button>
+        </div>
+      </div>
       <button class="btn-logout" id="btn-logout">Sair</button>
     </div>
   </div>
@@ -602,6 +627,7 @@ $('btn-send').onclick = async () => {
 };
 $('btn-back').onclick    = () => show('screen-login');
 $('btn-logout').onclick  = () => signOut(auth);
+(function(){var K='ilocarpay-theme',I={system:'◐',light:'☀',dark:'☾'};function g(){try{return localStorage.getItem(K)||'system';}catch(e){return'system';}}function s(m){try{localStorage.setItem(K,m);}catch(e){}}function r(p){return p==='light'?'light':p==='dark'?'dark':window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';}function a(p){document.documentElement.setAttribute('data-theme',r(p));var ic=document.getElementById('ip-theme-icon');if(ic)ic.textContent=I[p]||I.system;document.querySelectorAll('[data-theme-option]').forEach(function(b){var ok=b.getAttribute('data-theme-option')===p;b.classList.toggle('ip-theme-active',ok);b.setAttribute('aria-pressed',ok?'true':'false');});}a(g());var t=document.getElementById('ip-theme-toggle'),pan=document.getElementById('ip-theme-panel');if(t&&pan){t.addEventListener('click',function(e){e.stopPropagation();pan.classList.toggle('open');});document.addEventListener('click',function(){pan.classList.remove('open');});pan.querySelectorAll('[data-theme-option]').forEach(function(b){b.addEventListener('click',function(e){e.stopPropagation();var m=b.getAttribute('data-theme-option');s(m);a(m);pan.classList.remove('open');});});}try{window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(){if(g()==='system')a('system');});}catch(e){}})();
 $('btn-verify').onclick  = verifyOtp;
 
 async function verifyOtp() {
