@@ -4590,7 +4590,7 @@
   $('btn-logout').addEventListener('click', () => signOut(auth));
 
   // ── Theme system ─────────────────────────────────────────────────────────────
-  (function(){var K='ilocarpay-theme';function g(){try{var v=localStorage.getItem(K);return(v==='light'||v==='dark')?v:window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';}catch(e){return'light';}}function s(m){try{localStorage.setItem(K,m);}catch(e){}}function a(p){document.documentElement.setAttribute('data-theme',p);document.querySelectorAll('[data-theme-option]').forEach(function(b){var ok=b.getAttribute('data-theme-option')===p;b.classList.toggle('ip-theme-active',ok);b.setAttribute('aria-pressed',ok?'true':'false');});}a(g());document.querySelectorAll('[data-theme-option]').forEach(function(b){b.addEventListener('click',function(){var m=b.getAttribute('data-theme-option');s(m);a(m);});});})();
+  (function(){var K='ilocarpay-theme';function g(){try{var v=localStorage.getItem(K);return(v==='light'||v==='dark')?v:window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';}catch(e){return'dark';}}function a(p){document.documentElement.setAttribute('data-theme',p);var btn=document.getElementById('btn-theme-toggle');if(btn)btn.textContent=p==='dark'?'☾ Escuro':'☀ Claro';}a(g());document.addEventListener('DOMContentLoaded',function(){var btn=document.getElementById('btn-theme-toggle');if(btn){var cur=document.documentElement.getAttribute('data-theme')||'dark';btn.textContent=cur==='dark'?'☾ Escuro':'☀ Claro';}});})();
 
   // OTP login
   let otpEmail = '';
@@ -6140,10 +6140,7 @@
     <span class="owner-chip" id="owner-name-badge"></span>
     <span id="user-email"></span>
     <div style="position:relative">
-      <div class="ip-theme-toggle-wrap" id="ip-theme-toggle-wrap">
-        <button class="ip-theme-opt" data-theme-option="light"  aria-pressed="false" title="Tema claro">☀ Claro</button>
-        <button class="ip-theme-opt" data-theme-option="dark"   aria-pressed="false" title="Tema escuro">☾ Escuro</button>
-      </div>
+      <button id="btn-theme-toggle" title="Alternar tema" style="background:var(--s2);border:1px solid var(--border2);color:var(--text2);height:32px;padding:0 12px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;transition:background .15s,color .15s" onclick="(function(){var K='ilocarpay-theme';var cur=document.documentElement.getAttribute('data-theme')||'dark';var next=cur==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',next);try{localStorage.setItem(K,next);}catch(e){}document.getElementById('btn-theme-toggle').textContent=next==='dark'?'☾ Escuro':'☀ Claro';})()"></button>
     </div>
     <button class="btn-logout" id="btn-logout">Sair</button>
   </div>
