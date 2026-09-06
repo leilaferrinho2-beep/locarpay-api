@@ -423,9 +423,83 @@ async function handleUpdateBroker(db, body) {
 async function handleDeleteBroker(db, body) {
   const { brokerId } = body;
   if (!brokerId) throw Object.assign(new Error('brokerId obrigatório'), { status: 400 });
+
+  // Busca o doc principal para saber o email e ownerId
+  const mainSnap = await db.collection('brokers').doc(brokerId).get();
+  const email    = mainSnap.exists ? (mainSnap.data().email || '').toLowerCase().trim() : null;
+  const ownerId  = mainSnap.exists ? mainSnap.data().ownerId : null;
+
+  // Deleta o doc principal
   await db.collection('brokers').doc(brokerId).delete();
   await db.collection('users').doc(brokerId).delete().catch(() => {});
+
+  // Limpa todos os docs com mesmo email cujo owner não existe (órfãos)
+  if (email) {
+    const allByEmail = await db.collection('brokers').where('email', '==', email).get();
+    for (const d of allByEmail.docs) {
+      if (d.id === brokerId) continue; // já deletado acima
+      const orphanOwnerId = d.data().ownerId;
+      let ownerExists = false;
+      if (orphanOwnerId) {
+        const ownerSnap = await db.collection('owners').doc(orphanOwnerId).get().catch(() => null);
+        ownerExists = ownerSnap?.exists === true;
+      }
+      if (!ownerExists) {
+        await d.ref.delete().catch(() => {});
+        await db.collection('users').doc(d.id).delete().catch(() => {});
+      }
+    }
+  }
+
   return { ok: true, brokerId };
+}
+
+// ── RESEND INVITE ─────────────────────────────────────────────────────────────
+
+async function handleResendInvite(db, body) {
+  const { brokerId } = body;
+  if (!brokerId) throw Object.assign(new Error('brokerId obrigatório'), { status: 400 });
+
+  const brokerSnap = await db.collection('brokers').doc(brokerId).get();
+  if (!brokerSnap.exists) throw Object.assign(new Error('Corretor não encontrado'), { status: 404 });
+  const broker = brokerSnap.data();
+
+  if (!broker.ownerId) throw Object.assign(new Error('Corretor sem ownerId'), { status: 400 });
+  const ownerSnap = await db.collection('owners').doc(broker.ownerId).get();
+  const ownerName = ownerSnap.exists ? (ownerSnap.data().name || 'sua imobiliária') : 'sua imobiliária';
+
+  await sendWelcomeBrokerEmail({
+    brokerName: broker.name || broker.email,
+    brokerEmail: broker.email,
+    ownerName
+  });
+
+  return { ok: true, brokerId };
+}
+
+// ── CHECK BROKER DEPENDENCIES ─────────────────────────────────────────────────
+
+async function handleCheckBrokerDeps(db, body) {
+  const { brokerId } = body;
+  if (!brokerId) throw Object.assign(new Error('brokerId obrigatório'), { status: 400 });
+
+  const brokerSnap = await db.collection('brokers').doc(brokerId).get();
+  if (!brokerSnap.exists) throw Object.assign(new Error('Corretor não encontrado'), { status: 404 });
+  const broker = brokerSnap.data();
+  const email = (broker.email || '').toLowerCase().trim();
+
+  const [leadsSnap, contractsSnap, chatsSnap] = await Promise.all([
+    db.collection('leads').where('brokerEmail', '==', email).limit(1).get(),
+    db.collection('contracts').where('brokerEmail', '==', email).limit(1).get(),
+    db.collection('brokerChats').where('brokerId', '==', brokerId).limit(1).get()
+  ]);
+
+  const hasLeads     = !leadsSnap.empty;
+  const hasContracts = !contractsSnap.empty;
+  const hasChats     = !chatsSnap.empty;
+  const hasHistory   = hasLeads || hasContracts || hasChats;
+
+  return { ok: true, brokerId, hasHistory, hasLeads, hasContracts, hasChats };
 }
 
 // ── SUBMIT LEAD ───────────────────────────────────────────────────────────────
@@ -506,7 +580,7 @@ async function handleApproveLead(db, body) {
   const owner = { id: lead.ownerId, ...ownerSnap.data() };
 
   // Cria ou atualiza usuário (inquilino)
-  const tenantEmail = lead.tenant.email;
+  const tenantEmail = (lead.tenant.email || '').trim().toLowerCase();
   let tenantId;
   const existing = await db.collection('users').where('email', '==', tenantEmail).where('role', '==', 'tenant').limit(1).get();
   if (!existing.empty) {
@@ -516,7 +590,7 @@ async function handleApproveLead(db, body) {
       name:     lead.tenant.name,
       phone:    lead.tenant.phone,
       cpf:      lead.tenant.cpf,
-      active:   false, // ainda não entregou as chaves
+      active:   false,
       updatedAt: FieldValue.serverTimestamp()
     });
   } else {
@@ -582,6 +656,7 @@ async function handleApproveLead(db, body) {
     propertyBairro:      lp.neighborhood || '',
     propertyCidade:      lp.city         || '',
     propertyEstado:      lp.state        || '',
+    propertyCep:         lp.cep          || '',
     baseRent:            cd.baseRent  || parseFloat(lp.rentValue)  || 0,
     dueDay:              cd.dueDay    || lp.dueDay    || 10,
     startDate:           cd.startDate || lp.startDate || '',
@@ -1771,6 +1846,8 @@ async function handleCronRetryAssinafy(db) {
     if      (step === 'register-broker')   result = await handleRegisterBroker(db, req.body);
     else if (step === 'update-broker')     result = await handleUpdateBroker(db, req.body);
     else if (step === 'delete-broker')     result = await handleDeleteBroker(db, req.body);
+    else if (step === 'resend-invite')     result = await handleResendInvite(db, req.body);
+    else if (step === 'check-broker-deps') result = await handleCheckBrokerDeps(db, req.body);
     else if (step === 'submit-lead')       result = await handleSubmitLead(db, req.body);
     else if (step === 'approve-lead')         result = await handleApproveLead(db, req.body);
     else if (step === 'generate-contract')    result = await handleGenerateContract(db, req.body);

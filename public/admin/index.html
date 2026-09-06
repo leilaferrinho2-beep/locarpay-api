@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>iLocarPay — Painel Admin</title>
-<script>var _k='ilocarpay-theme',_p;try{_p=localStorage.getItem(_k)||'system';}catch(e){_p='system';}var _d=_p==='light'?'light':_p==='dark'?'dark':window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',_d);</script>
+<script>var _k='ilocarpay-theme',_p;try{_p=localStorage.getItem(_k);}catch(e){_p=null;}if(_p!=='light'&&_p!=='dark'){_p=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';try{localStorage.setItem(_k,_p);}catch(e){}}document.documentElement.setAttribute('data-theme',_p);</script>
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, signInWithPopup, signInWithRedirect, signInWithCustomToken, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
@@ -42,13 +42,29 @@
         // Já é um path relativo (não começa com http)
         else if (!urlOrPath.startsWith('http')) path = urlOrPath;
       }
+      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
       const res = await fetch('/api/ilocarpay-broker', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { 'Authorization': `Bearer ${idToken}` } : {})
+        },
         body: JSON.stringify({ step: 'get-signed-url', path, adminEmail: auth.currentUser?.email || '' })
       });
       const data = await res.json();
-      if (data.url) { window.open(data.url, '_blank'); return; }
+      if (data.url) {
+        let finalUrl = data.url;
+        if (finalUrl.startsWith('data:')) {
+          const [meta, b64] = finalUrl.split(',');
+          const mime = meta.split(':')[1].split(';')[0];
+          const bytes = atob(b64);
+          const arr = new Uint8Array(bytes.length);
+          for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+          finalUrl = URL.createObjectURL(new Blob([arr], { type: mime }));
+        }
+        window.open(finalUrl, '_blank');
+        return;
+      }
       throw new Error(data.error || 'sem URL');
     } catch(e) {
       console.warn('[openStorageDoc] falha:', e.message);
@@ -187,6 +203,8 @@
   }
 
   function loadConfigTab() {
+    loadOwnerLogoUI(currentOwnerData?.logoUrl || '');
+
     const el = $('config-credit-toggle');
     if (el) el.checked = !!currentOwnerData?.creditAnalysisEnabled;
 
@@ -368,6 +386,7 @@
         c.propertyBairro     = c.propertyBairro     || lp.neighborhood || '';
         c.propertyCidade     = c.propertyCidade     || lp.city         || '';
         c.propertyEstado     = c.propertyEstado     || lp.state        || '';
+        c.propertyCep        = c.propertyCep        || lp.cep          || '';
       }
     });
 
@@ -565,7 +584,8 @@
       const cell = document.createElement('div');
       cell.className = 'doc-cell';
       if (url) {
-        cell.innerHTML = `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${label}" onerror="this.src=''"></a><div class="doc-label">✅ ${label}</div>`;
+        const escapedUrl = url.replace(/'/g, "\\'");
+        cell.innerHTML = `<button onclick="openStorageDoc('${escapedUrl}')" style="background:none;border:2px solid #4CAF50;border-radius:8px;padding:10px 14px;cursor:pointer;color:#4CAF50;font-size:13px;font-weight:700;width:100%;text-align:center">📄 Abrir</button><div class="doc-label">✅ ${label}</div>`;
       } else {
         cell.innerHTML = `<div class="doc-placeholder">📄</div><div class="doc-label" style="color:#555">⬜ ${label}</div>`;
       }
@@ -585,11 +605,8 @@
         const isPdf  = url.includes('.pdf') || url.includes('application%2Fpdf');
         const cell   = document.createElement('div');
         cell.style.cssText = 'text-align:center;width:120px';
-        if (isPdf) {
-          cell.innerHTML = `<a href="${url}" target="_blank" rel="noopener" style="display:block;background:#1a1a2e;border-radius:8px;padding:20px 10px;text-decoration:none"><span style="font-size:32px">📄</span></a><div style="font-size:11px;color:#aaa;margin-top:4px">✅ ${esc(name)}</div>`;
-        } else {
-          cell.innerHTML = `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" style="width:100%;border-radius:8px;object-fit:cover;height:80px" alt="${esc(name)}" onerror="this.style.display='none'"></a><div style="font-size:11px;color:#aaa;margin-top:4px">✅ ${esc(name)}</div>`;
-        }
+        const escapedDocUrl = url.replace(/'/g, "\\'");
+        cell.innerHTML = `<button onclick="openStorageDoc('${escapedDocUrl}')" style="display:block;width:100%;background:#1a1a2e;border:1px solid #333;border-radius:8px;padding:20px 10px;cursor:pointer;text-align:center"><span style="font-size:32px">${isPdf ? '📄' : '🖼️'}</span></button><div style="font-size:11px;color:#aaa;margin-top:4px">✅ ${esc(name)}</div>`;
         leadGrid.appendChild(cell);
       });
       section.appendChild(leadGrid);
@@ -722,9 +739,99 @@
 
   // ── Inadimplentes ──────────────────────────────────────────
   let overdueCharges = [];
+  let overdueNameMap = {};
+
+  // Lei 8.245/91 — cálculo client-side (espelho de JurosRepository.kt)
+  function calcJuros(c) {
+    const dueDate = c.dueDate?.seconds ? new Date(c.dueDate.seconds * 1000) : null;
+    if (!dueDate) return { multa: 0, juros: 0, ipca: 0, dias: 0 };
+    const tzOff = -3 * 60; // America/Sao_Paulo (UTC-3)
+    const hojeMs  = Date.now() + (new Date().getTimezoneOffset() + tzOff) * 60000;
+    const hojeD   = new Date(Math.floor(hojeMs / 86400000) * 86400000);
+    const dueD    = new Date(Math.floor(dueDate.getTime() / 86400000) * 86400000);
+    if (hojeD <= dueD) return { multa: 0, juros: 0, ipca: 0, dias: 0 };
+    const dias    = Math.max(1, Math.round((hojeD - dueD) / 86400000));
+    const extras  = (c.extras || []).reduce((s, e) => s + (Number(e.value) || 0), 0);
+    const base    = (c.baseRent || 0) + extras;
+    const multa   = Math.round(base * 0.10 * 100) / 100;
+    const juros   = Math.round(base * (0.01 / 30) * dias * 100) / 100;
+    const ipca    = Math.round(base * (0.0038 / 30) * dias * 100) / 100;
+    return { multa, juros, ipca, dias };
+  }
+
+  window.recalcularJuros = async function recalcularJuros() {
+    if (!overdueCharges.length) { showToast('Nenhum inadimplente.', 'info'); return; }
+    const btn = $('btn-recalc-juros');
+    btn.disabled = true; btn.textContent = 'Recalculando...';
+    let ok = 0, err = 0;
+    try {
+      for (const c of overdueCharges) {
+        try {
+          const { multa, juros, ipca, dias } = calcJuros(c);
+          if (dias === 0) continue;
+          const extras  = (c.extras || []).reduce((s, e) => s + (Number(e.value) || 0), 0);
+          const base    = (c.baseRent || 0) + extras;
+          const total   = Math.round((base + multa + juros + ipca) * 100) / 100;
+          await updateDoc(doc(db, 'charges', c.id), {
+            status: 'overdue',
+            multaAplicada: multa,
+            jurosAplicado: juros,
+            ipcaAplicado: ipca,
+            diasAtraso: dias,
+            totalAmount: total
+          });
+          // Atualiza objeto local
+          c.multaAplicada = multa; c.jurosAplicado = juros;
+          c.ipcaAplicado = ipca; c.diasAtraso = dias; c.totalAmount = total;
+          ok++;
+        } catch (_) { err++; }
+      }
+      renderOverdue();
+      showToast(`Juros recalculados: ${ok} cobranças atualizadas${err ? ', ' + err + ' erros' : ''}.`, ok > 0 ? 'success' : 'error');
+    } catch (e) { showToast('Erro ao recalcular: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = '⚡ Recalcular Juros'; }
+  };
+
+  function renderOverdue() {
+    const tbody = $('overdue-tbody');
+    const total = overdueCharges.reduce((s, c) => s + (c.totalAmount || c.baseRent || 0), 0);
+    $('overdue-count').textContent = `${overdueCharges.length} cobrança${overdueCharges.length !== 1 ? 's' : ''} vencida${overdueCharges.length !== 1 ? 's' : ''}`;
+    $('overdue-total').textContent = `Total em aberto: ${fmt.format(total)}`;
+    if (overdueCharges.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhum inadimplente.</td></tr>'; return; }
+
+    tbody.innerHTML = overdueCharges.map(c => {
+      const dueD  = c.dueDate?.seconds ? new Date(c.dueDate.seconds * 1000) : null;
+      const tenant = overdueNameMap[c.tenantId] || { name: c.tenantId || '—', email: '' };
+      // Usa valores já calculados (worker) ou calcula na hora
+      const enc = (c.multaAplicada != null)
+        ? { multa: c.multaAplicada, juros: c.jurosAplicado || 0, ipca: c.ipcaAplicado || 0, dias: c.diasAtraso || 0 }
+        : calcJuros(c);
+      const extras  = (c.extras || []).reduce((s, e) => s + (Number(e.value) || 0), 0);
+      const base    = (c.baseRent || 0) + extras;
+      const totalVal = enc.dias > 0 ? base + enc.multa + enc.juros + enc.ipca : (c.totalAmount || base);
+      const encLabel = enc.dias > 0
+        ? `<span title="Multa 10%: ${fmt.format(enc.multa)} | Juros 1%/mês: ${fmt.format(enc.juros)} | IPCA 0,38%/mês: ${fmt.format(enc.ipca)}" style="cursor:help;text-decoration:underline dotted">
+             ${fmt.format(enc.multa + enc.juros + enc.ipca)}
+           </span>`
+        : '—';
+      return `<tr>
+        <td><strong>${esc(tenant.name)}</strong><br><span style="font-size:11px;color:#888">${esc(tenant.email)}</span></td>
+        <td style="font-weight:600;color:#ef9a9a">${fmt.format(totalVal)}<br><span style="font-size:10px;color:#888">base: ${fmt.format(base)}</span></td>
+        <td style="color:#ffb74d">${dueD ? dueD.toLocaleDateString('pt-BR') : '—'}</td>
+        <td><span style="color:#ef5350;font-weight:600">${enc.dias || '?'} dias</span></td>
+        <td style="color:#ce93d8;font-size:12px">${encLabel}<br>
+          ${enc.dias > 0 ? `<span style="font-size:10px;color:#888">multa+juros+IPCA<br>Lei 8.245/91</span>` : ''}</td>
+        <td class="actions">
+          <button class="btn-sm" style="color:#81c784;border-color:#2a4a2a" onclick="markChargePaid('${c.id}')">✓ Pago</button>
+          <button class="btn-sm" onclick="sendOverduePush('${c.tenantId}')">Push</button>
+          <button class="btn-sm" style="color:#ef9a9a;border-color:#4a1a1a" onclick="estornarCobranca('${c.id}','${esc(tenant.name)}')">↩ Estornar</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
 
   window.loadOverdue = async function loadOverdue() {
-    $('overdue-tbody').innerHTML = '<tr><td colspan="6" class="empty">Carregando...</td></tr>';
+    $('overdue-tbody').innerHTML = '<tr><td colspan="7" class="empty">Carregando...</td></tr>';
     try {
       const q = currentOwnerId
         ? query(collection(db, 'charges'), where('ownerId', '==', currentOwnerId), where('status', '==', 'overdue'))
@@ -748,42 +855,12 @@
         const us = await getDocs(query(collection(db, 'users'), where('__name__', 'in', sl)));
         us.docs.forEach(d => { nameMap[d.id] = { name: d.data().name || d.data().email, email: d.data().email }; });
       }
-      renderOverdue(nameMap);
+      // Guarda mapa de nomes para renderOverdue()
+      Object.assign(overdueNameMap, nameMap);
+      renderOverdue();
     } catch (e) {
-      $('overdue-tbody').innerHTML = `<tr><td colspan="6" class="empty" style="color:#ef9a9a">Erro: ${e.message}</td></tr>`;
+      $('overdue-tbody').innerHTML = `<tr><td colspan="7" class="empty" style="color:#ef9a9a">Erro: ${e.message}</td></tr>`;
     }
-  }
-
-  function renderOverdue(nameMap) {
-    const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-    const tbody = $('overdue-tbody');
-    if (overdueCharges.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty" style="color:#81c784">✓ Nenhum inadimplente</td></tr>';
-      $('overdue-count').textContent = '0 cobranças vencidas';
-      $('overdue-total').textContent = '';
-      return;
-    }
-    const total = overdueCharges.reduce((s, c) => s + (c.totalAmount || c.baseRent || 0), 0);
-    $('overdue-count').textContent = `${overdueCharges.length} cobrança${overdueCharges.length !== 1 ? 's' : ''} vencida${overdueCharges.length !== 1 ? 's' : ''}`;
-    $('overdue-total').textContent = `Total em aberto: ${fmt.format(total)}`;
-    tbody.innerHTML = overdueCharges.map(c => {
-      const dueD  = c.dueDate?.seconds ? new Date(c.dueDate.seconds * 1000) : null;
-      const daysLate = dueD ? Math.floor((Date.now() - dueD) / 86400000) : '?';
-      const tenant = nameMap[c.tenantId] || { name: c.tenantId, email: '' };
-      const multa = c.multaAplicada ? fmt.format(c.multaAplicada) : '—';
-      return `<tr>
-        <td><strong>${esc(tenant.name)}</strong><br><span style="font-size:11px;color:#888">${esc(tenant.email)}</span></td>
-        <td style="font-weight:600;color:#ef9a9a">${fmt.format(c.totalAmount || c.baseRent || 0)}</td>
-        <td style="color:#ffb74d">${dueD ? dueD.toLocaleDateString('pt-BR') : '—'}</td>
-        <td><span style="color:#ef5350;font-weight:600">${daysLate} dias</span></td>
-        <td style="color:#ce93d8">${multa}</td>
-        <td class="actions">
-          <button class="btn-sm" style="color:#81c784;border-color:#2a4a2a" onclick="markChargePaid('${c.id}')">✓ Pago</button>
-          <button class="btn-sm" onclick="sendOverduePush('${c.tenantId}')">Push</button>
-          <button class="btn-sm" style="color:#ef9a9a;border-color:#4a1a1a" onclick="estornarCobranca('${c.id}','${esc(tenant.name)}')">↩ Estornar</button>
-        </td>
-      </tr>`;
-    }).join('');
   }
 
   window.notifyAllOverdue = async () => {
@@ -905,6 +982,71 @@
       showToast('Configuração de atraso atualizada', 'success');
     } catch (e) {
       if (st) { st.textContent = '❌ Erro: ' + e.message; st.style.color = '#ef5350'; }
+    }
+  };
+
+  // ── Logo da imobiliária ───────────────────────────────────────────────────
+  function loadOwnerLogoUI(logoUrl) {
+    const img = document.getElementById('owner-logo-preview');
+    const placeholder = document.getElementById('owner-logo-placeholder');
+    const btnRemove = document.getElementById('btn-remove-logo');
+    if (logoUrl) {
+      img.src = logoUrl;
+      img.style.display = 'block';
+      placeholder.style.display = 'none';
+      if (btnRemove) btnRemove.style.display = '';
+    } else {
+      img.src = '';
+      img.style.display = 'none';
+      placeholder.style.display = '';
+      if (btnRemove) btnRemove.style.display = 'none';
+    }
+  }
+
+  window.handleOwnerLogoChange = async (input) => {
+    const file = input.files[0];
+    if (!file) return;
+    const st = document.getElementById('owner-logo-status');
+    st.textContent = 'Enviando...'; st.style.color = '#aaa';
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Não autenticado');
+      const idToken = await user.getIdToken();
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const b64 = e.target.result.split(',')[1];
+          const resp = await fetch('/api/locarpay-owner', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
+            body: JSON.stringify({ step: 'upload-owner-logo', ownerId: currentOwnerId, imageBase64: b64, contentType: file.type || 'image/jpeg' })
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.error || 'Erro ao enviar');
+          const url = data.url;
+          await updateDoc(doc(db, 'owners', currentOwnerId), { logoUrl: url });
+          loadOwnerLogoUI(url);
+          st.textContent = '✓ Logo atualizada'; st.style.color = '#4CAF50';
+        } catch (err) {
+          st.textContent = '❌ ' + err.message; st.style.color = '#ef5350';
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      st.textContent = '❌ ' + err.message; st.style.color = '#ef5350';
+    }
+    input.value = '';
+  };
+
+  window.removeOwnerLogo = async () => {
+    const st = document.getElementById('owner-logo-status');
+    st.textContent = 'Removendo...'; st.style.color = '#aaa';
+    try {
+      await updateDoc(doc(db, 'owners', currentOwnerId), { logoUrl: '' });
+      loadOwnerLogoUI('');
+      st.textContent = '✓ Logo removida'; st.style.color = '#4CAF50';
+    } catch (e) {
+      st.textContent = '❌ ' + e.message; st.style.color = '#ef5350';
     }
   };
 
@@ -2129,12 +2271,26 @@
                   ${b.active !== false ? '● Ativo' : '● Inativo'}
                 </span>
               </div>
-              <div style="display:flex;gap:8px">
+              <div style="display:flex;gap:8px;align-items:center">
                 <button id="chat-btn2-${b.id}" onclick="openBrokerChat('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}')"
                   style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:#0d1a2a;border:1px solid #1a3a5a;color:#64B5F6;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s"
                   onmouseover="this.style.background='#111e30'" onmouseout="this.style.background='#0d1a2a'">
                   💬 Chat <span id="chat-unread2-${b.id}" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;font-weight:700"></span>
                 </button>
+                <!-- ⋮ Menu de ações -->
+                <div style="position:relative" id="broker-menu-wrap-${b.id}">
+                  <button onclick="toggleBrokerMenu('${b.id}')"
+                    style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;background:#1a1d2e;border:1px solid #2a2d3e;color:#aaa;border-radius:9px;font-size:18px;cursor:pointer;line-height:1;transition:background .15s"
+                    title="Ações" onmouseover="this.style.background='#22253a'" onmouseout="this.style.background='#1a1d2e'">⋮</button>
+                  <div id="broker-menu-${b.id}" style="display:none;position:absolute;right:0;top:40px;background:#1a1d2e;border:1px solid #2a2d3e;border-radius:12px;min-width:190px;z-index:100;box-shadow:0 8px 32px #00000055;overflow:hidden">
+                    <button onclick="brokerAction('details','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:#ccc;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='#22253a'" onmouseout="this.style.background='none'">🔎 Ver detalhes</button>
+                    <button onclick="brokerAction('edit','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:#ccc;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='#22253a'" onmouseout="this.style.background='none'">✏️ Editar</button>
+                    <button onclick="brokerAction('toggle','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:${b.active !== false ? '#FFD54F' : '#4CAF50'};font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='#22253a'" onmouseout="this.style.background='none'">${b.active !== false ? '⏸ Desativar' : '▶ Ativar'}</button>
+                    <button onclick="brokerAction('resend','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:#64B5F6;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='#22253a'" onmouseout="this.style.background='none'">📧 Reenviar convite</button>
+                    <div style="height:1px;background:#2a2d3e;margin:2px 0"></div>
+                    <button onclick="brokerAction('delete','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:#ef5350;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='#2a1515'" onmouseout="this.style.background='none'">🗑 Excluir</button>
+                  </div>
+                </div>
               </div>
             </div>
             <!-- Métricas -->
@@ -2262,6 +2418,190 @@
       loadBrokers();
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
   };
+
+  // ── BROKER ADMIN ACTIONS ───────────────────────────────────────────────────
+
+  // Fecha todos os menus ⋮ abertos ao clicar fora
+  document.addEventListener('click', e => {
+    if (!e.target.closest('[id^="broker-menu-wrap-"]')) {
+      document.querySelectorAll('[id^="broker-menu-"]').forEach(el => {
+        if (!el.id.includes('wrap')) el.style.display = 'none';
+      });
+    }
+  });
+
+  window.toggleBrokerMenu = (brokerId) => {
+    const menu = document.getElementById('broker-menu-' + brokerId);
+    if (!menu) return;
+    const isOpen = menu.style.display !== 'none';
+    // fecha todos
+    document.querySelectorAll('[id^="broker-menu-"]').forEach(el => {
+      if (!el.id.includes('wrap')) el.style.display = 'none';
+    });
+    menu.style.display = isOpen ? 'none' : 'block';
+  };
+
+  // Cache dos dados dos brokers para uso nos modais
+  let _brokerDataCache = {};
+
+  window.brokerAction = async (action, brokerId) => {
+    // Fecha o menu
+    const menu = document.getElementById('broker-menu-' + brokerId);
+    if (menu) menu.style.display = 'none';
+
+    // Carrega dados do broker do Firestore se não estiver em cache
+    if (!_brokerDataCache[brokerId]) {
+      try {
+        const snap = await getDoc(doc(db, 'brokers', brokerId));
+        if (snap.exists()) _brokerDataCache[brokerId] = { id: snap.id, ...snap.data() };
+      } catch (e) { showToast('Erro ao carregar dados do corretor', 'error'); return; }
+    }
+    const b = _brokerDataCache[brokerId];
+    if (!b) { showToast('Corretor não encontrado', 'error'); return; }
+
+    if (action === 'details') {
+      openBrokerDetailsModal(b);
+    } else if (action === 'edit') {
+      openBrokerEditModal(b);
+    } else if (action === 'toggle') {
+      confirmBrokerToggle(b);
+    } else if (action === 'resend') {
+      confirmResendInvite(b);
+    } else if (action === 'delete') {
+      await confirmBrokerDelete(b);
+    }
+  };
+
+  // ── MODAL: Ver Detalhes ────────────────────────────────────────────────────
+
+  function openBrokerDetailsModal(b) {
+    const overlay = document.getElementById('broker-details-modal');
+    if (!overlay) return;
+    const esc2 = s => (s || '—').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    document.getElementById('bdm-name').textContent     = b.name || '—';
+    document.getElementById('bdm-email').textContent    = b.email || '—';
+    document.getElementById('bdm-phone').textContent    = b.phone || '—';
+    document.getElementById('bdm-creci').textContent    = b.creci || '—';
+    document.getElementById('bdm-commission').textContent = (b.commissionPct ?? b.commission ?? '—') + '%';
+    document.getElementById('bdm-status').textContent   = b.active !== false ? 'Ativo' : 'Inativo';
+    document.getElementById('bdm-status').style.color   = b.active !== false ? '#4CAF50' : '#ef5350';
+    document.getElementById('bdm-id').textContent       = b.id || '—';
+    document.getElementById('bdm-ownerid').textContent  = b.ownerId || '—';
+    overlay.style.display = 'flex';
+  }
+
+  // ── MODAL: Editar ──────────────────────────────────────────────────────────
+
+  function openBrokerEditModal(b) {
+    const overlay = document.getElementById('broker-edit-modal');
+    if (!overlay) return;
+    document.getElementById('bem-broker-id').value  = b.id;
+    document.getElementById('bem-name').value        = b.name || '';
+    document.getElementById('bem-phone').value       = b.phone || '';
+    document.getElementById('bem-commission').value  = b.commissionPct ?? b.commission ?? 5;
+    overlay.style.display = 'flex';
+  }
+
+  window.saveBrokerEdit = async () => {
+    const brokerId   = document.getElementById('bem-broker-id').value;
+    const name       = document.getElementById('bem-name').value.trim();
+    const phone      = document.getElementById('bem-phone').value.trim();
+    const commission = parseFloat(document.getElementById('bem-commission').value);
+
+    if (!name) { showToast('Nome é obrigatório', 'error'); return; }
+    if (isNaN(commission) || commission < 0 || commission > 100) { showToast('Percentual inválido', 'error'); return; }
+
+    try {
+      const res = await fetch('/api/ilocarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'update-broker', brokerId, name, phone, commissionPct: commission })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      delete _brokerDataCache[brokerId];
+      showToast('Corretor atualizado!', 'success');
+      document.getElementById('broker-edit-modal').style.display = 'none';
+      loadBrokersTab();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+  };
+
+  // ── ATIVAR / DESATIVAR ─────────────────────────────────────────────────────
+
+  function confirmBrokerToggle(b) {
+    const activating = b.active === false;
+    const action = activating ? 'ativar' : 'desativar';
+    const msg = activating
+      ? `Ativar o corretor "${b.name}"?\n\nEle voltará a ter acesso ao app e receberá leads.`
+      : `Desativar o corretor "${b.name}"?\n\nO histórico de leads e contratos será preservado. Ele não receberá novos leads.`;
+    if (!confirm(msg)) return;
+    updateBrokerActive(b.id, activating);
+  }
+
+  async function updateBrokerActive(brokerId, active) {
+    try {
+      const res = await fetch('/api/ilocarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'update-broker', brokerId, active })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      delete _brokerDataCache[brokerId];
+      showToast(active ? 'Corretor ativado.' : 'Corretor desativado.', 'success');
+      loadBrokersTab();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+  }
+
+  // ── REENVIAR CONVITE ───────────────────────────────────────────────────────
+
+  function confirmResendInvite(b) {
+    if (!confirm(`Reenviar e-mail de convite para "${b.name || b.email}"?`)) return;
+    doResendInvite(b.id);
+  }
+
+  async function doResendInvite(brokerId) {
+    try {
+      const res = await fetch('/api/ilocarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'resend-invite', brokerId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showToast('Convite reenviado!', 'success');
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+  }
+
+  // ── EXCLUIR COM VERIFICAÇÃO DE DEPENDÊNCIAS ────────────────────────────────
+
+  async function confirmBrokerDelete(b) {
+    try {
+      showToast('Verificando dependências…', 'info');
+      const res = await fetch('/api/ilocarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'check-broker-deps', brokerId: b.id })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      if (data.hasHistory) {
+        const parts = [];
+        if (data.hasLeads)     parts.push('leads');
+        if (data.hasContracts) parts.push('contratos');
+        if (data.hasChats)     parts.push('chats');
+        const msg = `O corretor "${b.name}" possui ${parts.join(', ')} vinculados.\n\nAo excluir, o histórico permanece no sistema mas o corretor perderá o acesso.\n\nConfirma a exclusão?`;
+        if (!confirm(msg)) return;
+      } else if (!confirm(`Excluir o corretor "${b.name}"?\n\nEsta ação não pode ser desfeita.`)) return;
+
+      const delRes = await fetch('/api/ilocarpay-broker', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 'delete-broker', brokerId: b.id })
+      });
+      const delData = await delRes.json();
+      if (!delRes.ok) throw new Error(delData.error);
+      delete _brokerDataCache[b.id];
+      showToast('Corretor excluído.', 'success');
+      loadBrokersTab();
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+  }
 
   // ── Validação CPF ──────────────────────────────────────────
   function validarCpf(cpf) {
@@ -3173,6 +3513,11 @@
             if (hasDoc) return `<button class="btn-sm" style="color:#FFD54F;border-color:#FFD54F" onclick="regenContract('${c.id}',this)">📄 Reenviar</button>`;
             return `<button class="btn-sm" style="color:#4CAF50;border-color:#4CAF50" onclick="generateContractForTenant('${c.id}',this)">📄 Gerar contrato</button>`;
           })()}
+          ${(()=>{
+            const c = contracts.find(x => x.tenantId === t.id && x.active);
+            if (!c) return '';
+            return `<button class="btn-sm" style="color:#CE93D8;border-color:#6a1b9a" onclick="gerarCobrancaManual('${c.id}','${c.ownerId||currentOwnerId||''}','${(t.name||'').replace(/'/g,"\\'")}')">💳 Cobrança</button>`;
+          })()}
           <button class="btn-sm" style="background:#c0392b;border-color:#c0392b;color:#fff" onclick="deleteTenant('${t.id}','${(t.name||'').replace(/'/g,'')}')">Excluir</button>
         </td>
       `;
@@ -3812,6 +4157,30 @@
     finally { btn.disabled = false; btn.textContent = 'Exportar CSV'; }
   }
 
+  window.gerarCobrancaManual = async function gerarCobrancaManual(contractId, ownerId, tenantName) {
+    const now = new Date();
+    const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const monthStr = window.prompt(`Mês para gerar cobrança de ${tenantName}\n(formato AAAA-MM, ex: 2026-09)\nDeixe vazio para mês atual:`, defaultMonth);
+    if (monthStr === null) return; // cancelado
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const body = { step: 'generate-charge-manual', contractId, ownerId };
+      if (monthStr.trim()) body.monthStr = monthStr.trim();
+      const r = await fetch('/api/ilocarpay-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Erro desconhecido');
+      if (d.created > 0) {
+        showToast(`Cobrança gerada! PIX sendo criado em segundo plano.`, 'success');
+      } else {
+        showToast(d.reason || 'Cobrança já existe para este mês.', 'info');
+      }
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+  };
+
   async function generateCharges() {
     const btn = $('btn-generate-charges');
     btn.disabled = true;
@@ -4221,7 +4590,7 @@
   $('btn-logout').addEventListener('click', () => signOut(auth));
 
   // ── Theme system ─────────────────────────────────────────────────────────────
-  (function(){var K='ilocarpay-theme',I={system:'◐',light:'☀',dark:'☾'};function g(){try{return localStorage.getItem(K)||'system';}catch(e){return'system';}}function s(m){try{localStorage.setItem(K,m);}catch(e){}}function r(p){return p==='light'?'light':p==='dark'?'dark':window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';}function a(p){document.documentElement.setAttribute('data-theme',r(p));var ic=document.getElementById('ip-theme-icon');if(ic)ic.textContent=I[p]||I.system;document.querySelectorAll('[data-theme-option]').forEach(function(b){var ok=b.getAttribute('data-theme-option')===p;b.classList.toggle('ip-theme-active',ok);b.setAttribute('aria-pressed',ok?'true':'false');});}a(g());var t=document.getElementById('ip-theme-toggle'),pan=document.getElementById('ip-theme-panel');if(t&&pan){t.addEventListener('click',function(e){e.stopPropagation();pan.classList.toggle('open');});document.addEventListener('click',function(){pan.classList.remove('open');});pan.querySelectorAll('[data-theme-option]').forEach(function(b){b.addEventListener('click',function(e){e.stopPropagation();var m=b.getAttribute('data-theme-option');s(m);a(m);pan.classList.remove('open');});});}try{window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(){if(g()==='system')a('system');});}catch(e){}})();
+  (function(){var K='ilocarpay-theme';function g(){try{var v=localStorage.getItem(K);return(v==='light'||v==='dark')?v:window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';}catch(e){return'light';}}function s(m){try{localStorage.setItem(K,m);}catch(e){}}function a(p){document.documentElement.setAttribute('data-theme',p);document.querySelectorAll('[data-theme-option]').forEach(function(b){var ok=b.getAttribute('data-theme-option')===p;b.classList.toggle('ip-theme-active',ok);b.setAttribute('aria-pressed',ok?'true':'false');});}a(g());document.querySelectorAll('[data-theme-option]').forEach(function(b){b.addEventListener('click',function(){var m=b.getAttribute('data-theme-option');s(m);a(m);});});})();
 
   // OTP login
   let otpEmail = '';
@@ -5452,13 +5821,10 @@
     --warn-bg:     rgba(245,158,11,.08);
     --blue-bg:     rgba(59,130,246,.08);
   }
-  .ip-theme-btn { background:var(--s2); border:1px solid var(--border2); color:var(--text2); width:34px; height:34px; border-radius:50%; cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; transition:color .2s; }
-  .ip-theme-btn:hover { color:var(--text1); }
-  .ip-theme-panel { position:absolute; right:0; top:calc(100% + 6px); background:var(--s1); border:1px solid var(--border2); border-radius:12px; padding:6px; display:none; flex-direction:column; gap:2px; min-width:130px; box-shadow:0 8px 24px rgba(0,0,0,.2); z-index:100; }
-  .ip-theme-panel.open { display:flex; }
-  .ip-theme-panel button { background:none; border:none; color:var(--text2); cursor:pointer; padding:7px 10px; border-radius:8px; font-size:12.5px; text-align:left; transition:background .15s,color .15s; }
-  .ip-theme-panel button:hover { background:var(--s2); color:var(--text1); }
-  .ip-theme-panel button.ip-theme-active { color:var(--accent2); font-weight:600; }
+  .ip-theme-toggle-wrap { display:flex; gap:4px; align-items:center; }
+  .ip-theme-opt { background:var(--s2); border:1px solid var(--border2); color:var(--text2); height:32px; padding:0 10px; border-radius:8px; cursor:pointer; font-size:12px; transition:background .15s,color .15s; white-space:nowrap; }
+  .ip-theme-opt:hover { background:var(--s3,var(--s2)); color:var(--text1); }
+  .ip-theme-opt.ip-theme-active { background:var(--accent2); color:#fff; border-color:var(--accent2); font-weight:600; }
 
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -5774,11 +6140,9 @@
     <span class="owner-chip" id="owner-name-badge"></span>
     <span id="user-email"></span>
     <div style="position:relative">
-      <button class="ip-theme-btn" id="ip-theme-toggle" title="Tema" aria-label="Alterar tema"><span id="ip-theme-icon">◐</span></button>
-      <div class="ip-theme-panel" id="ip-theme-panel">
-        <button data-theme-option="system" aria-pressed="false">☀︎ Sistema</button>
-        <button data-theme-option="light"  aria-pressed="false">☀ Claro</button>
-        <button data-theme-option="dark"   aria-pressed="false">☾ Escuro</button>
+      <div class="ip-theme-toggle-wrap" id="ip-theme-toggle-wrap">
+        <button class="ip-theme-opt" data-theme-option="light"  aria-pressed="false" title="Tema claro">☀ Claro</button>
+        <button class="ip-theme-opt" data-theme-option="dark"   aria-pressed="false" title="Tema escuro">☾ Escuro</button>
       </div>
     </div>
     <button class="btn-logout" id="btn-logout">Sair</button>
@@ -5970,12 +6334,13 @@
       <span id="overdue-count" style="font-size:13px;color:#888;align-self:center"></span>
       <span id="overdue-total" style="font-size:13px;color:#ef9a9a;font-weight:600;align-self:center"></span>
       <button class="btn btn-secondary" onclick="loadOverdue()">↻ Atualizar</button>
+      <button class="btn btn-secondary" id="btn-recalc-juros" onclick="recalcularJuros()" title="Recalcula multa + juros de mora + IPCA (Lei 8.245/91) para todas as cobranças em atraso">⚡ Recalcular Juros</button>
       <button class="btn btn-secondary" id="btn-notify-all-overdue" onclick="notifyAllOverdue()" title="Envia push de cobrança para todos os inadimplentes">📢 Notificar Todos</button>
       <button class="btn btn-secondary" onclick="exportOverdueCSV()" title="Exporta lista de inadimplentes em CSV">⬇ Exportar CSV</button>
     </div>
     <table>
       <thead>
-        <tr><th>Inquilino</th><th>Valor</th><th>Vencimento</th><th>Atraso</th><th>Multa</th><th>Ações</th></tr>
+        <tr><th>Inquilino</th><th>Valor Total</th><th>Vencimento</th><th>Atraso</th><th>Encargos (Lei 8.245/91)</th><th>Ações</th></tr>
       </thead>
       <tbody id="overdue-tbody">
         <tr><td colspan="6" class="empty">Carregando...</td></tr>
@@ -5994,6 +6359,30 @@
 
       <h2 style="font-size:20px;font-weight:700;margin-bottom:6px">⚙ Configurações</h2>
       <p style="font-size:13px;color:#555;margin-bottom:28px">Personalize como sua imobiliária usa a plataforma.</p>
+
+      <!-- Logo da imobiliária -->
+      <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:16px;padding:28px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <span style="font-size:22px">🏠</span>
+          <div>
+            <div style="font-size:16px;font-weight:700;color:#f0f0f0">Logo da imobiliária</div>
+            <div style="font-size:12px;color:#666">Exibida no app para inquilinos e corretores</div>
+          </div>
+        </div>
+        <div style="border-top:1px solid #2a2d3e;margin:20px 0"></div>
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+          <div id="owner-logo-preview-wrap" style="width:72px;height:72px;border-radius:50%;overflow:hidden;background:#0f1117;border:2px solid #2a2d3e;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <img id="owner-logo-preview" src="" alt="Logo" style="width:100%;height:100%;object-fit:cover;display:none">
+            <span id="owner-logo-placeholder" style="font-size:28px">🏠</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn" onclick="document.getElementById('owner-logo-input').click()" style="font-size:13px">Alterar logo</button>
+            <button class="btn-outline" id="btn-remove-logo" onclick="removeOwnerLogo()" style="font-size:13px;display:none">Remover logo</button>
+          </div>
+          <input type="file" id="owner-logo-input" accept="image/*" style="display:none" onchange="handleOwnerLogoChange(this)">
+        </div>
+        <div id="owner-logo-status" style="margin-top:10px;font-size:12px;color:#555"></div>
+      </div>
 
       <!-- Análise de crédito -->
       <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:16px;padding:28px;margin-bottom:20px">
@@ -6227,6 +6616,88 @@
         </div>
         <button id="bm-save-btn" onclick="saveBrokerModal()" style="margin-top:4px;width:100%;padding:14px;background:linear-gradient(135deg,#2D6A2D,#388E3C);border:none;color:#fff;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
           Cadastrar Corretor
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Ver Detalhes do Corretor -->
+  <div id="broker-details-modal" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:16px">
+    <div style="background:#12151e;border:1px solid #2a2d3e;border-radius:20px;padding:32px;width:100%;max-width:440px;position:relative;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+      <button onclick="document.getElementById('broker-details-modal').style.display='none'" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#666;font-size:20px;cursor:pointer;line-height:1;padding:4px 8px;border-radius:6px" onmouseover="this.style.color='#ccc'" onmouseout="this.style.color='#666'">✕</button>
+      <div style="margin-bottom:24px">
+        <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#1a1a3a,#2a2D6A);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px">🔎</div>
+        <h3 style="font-size:18px;font-weight:800;color:#f0f0f0;margin:0 0 4px">Detalhes do Corretor</h3>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
+          <span style="font-size:11px;font-weight:700;color:#555;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">Nome</span>
+          <span id="bdm-name" style="font-size:14px;color:#e0e0e0;font-weight:600;word-break:break-all"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
+          <span style="font-size:11px;font-weight:700;color:#555;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">E-mail</span>
+          <span id="bdm-email" style="font-size:13px;color:#aaa;word-break:break-all"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
+          <span style="font-size:11px;font-weight:700;color:#555;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">Telefone</span>
+          <span id="bdm-phone" style="font-size:14px;color:#e0e0e0"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
+          <span style="font-size:11px;font-weight:700;color:#555;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">CRECI</span>
+          <span id="bdm-creci" style="font-size:14px;color:#e0e0e0"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
+          <span style="font-size:11px;font-weight:700;color:#555;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">Comissão</span>
+          <span id="bdm-commission" style="font-size:14px;color:#FFD54F;font-weight:700"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
+          <span style="font-size:11px;font-weight:700;color:#555;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">Status</span>
+          <span id="bdm-status" style="font-size:14px;font-weight:700"></span>
+        </div>
+        <div style="height:1px;background:#2a2d3e;margin:4px 0"></div>
+        <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
+          <span style="font-size:11px;font-weight:700;color:#444;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">Broker ID</span>
+          <span id="bdm-id" style="font-size:11px;color:#555;font-family:monospace;word-break:break-all"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
+          <span style="font-size:11px;font-weight:700;color:#444;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">Owner ID</span>
+          <span id="bdm-ownerid" style="font-size:11px;color:#555;font-family:monospace;word-break:break-all"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Editar Corretor -->
+  <div id="broker-edit-modal" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:16px">
+    <div style="background:#12151e;border:1px solid #2a2d3e;border-radius:20px;padding:32px;width:100%;max-width:440px;position:relative;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+      <button onclick="document.getElementById('broker-edit-modal').style.display='none'" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#666;font-size:20px;cursor:pointer;line-height:1;padding:4px 8px;border-radius:6px" onmouseover="this.style.color='#ccc'" onmouseout="this.style.color='#666'">✕</button>
+      <div style="margin-bottom:24px">
+        <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#1a2a1a,#2D5A2D);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px">✏️</div>
+        <h3 style="font-size:18px;font-weight:800;color:#f0f0f0;margin:0 0 4px">Editar Corretor</h3>
+        <p style="font-size:13px;color:#666;margin:0">E-mail não pode ser alterado.</p>
+      </div>
+      <input type="hidden" id="bem-broker-id">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#888;letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:6px">Nome completo *</label>
+          <input id="bem-name" type="text" placeholder="João Silva" autocomplete="off"
+            style="width:100%;background:#0f1117;border:1.5px solid #2a2d3e;color:#e0e0e0;padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
+            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#888;letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:6px">WhatsApp</label>
+          <input id="bem-phone" type="tel" placeholder="(11) 99999-9999"
+            style="width:100%;background:#0f1117;border:1.5px solid #2a2d3e;color:#e0e0e0;padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
+            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#888;letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:6px">Comissão %</label>
+          <input id="bem-commission" type="number" min="0" max="100" step="0.5"
+            style="width:120px;background:#0f1117;border:1.5px solid #2a2d3e;color:#FFD54F;padding:12px 14px;border-radius:10px;font-size:15px;font-weight:700;outline:none;transition:border-color .2s;text-align:center"
+            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+        </div>
+        <button onclick="saveBrokerEdit()" style="margin-top:4px;width:100%;padding:14px;background:linear-gradient(135deg,#2D6A2D,#388E3C);border:none;color:#fff;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
+          Salvar alterações
         </button>
       </div>
     </div>

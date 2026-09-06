@@ -1031,6 +1031,94 @@ async function handleSyncStatus(db, body) {
 // ── GENERATE CHARGES ─────────────────────────────────────────────────────────
 // Para cada contrato ativo do owner, verifica se já existe cobrança do mês
 // corrente (ou próximo). Se não, cria automaticamente.
+async function handleGenerateChargeManual(db, body) {
+  const { contractId, ownerId, monthStr } = body;
+  if (!contractId || !ownerId) throw Object.assign(new Error('contractId e ownerId obrigatórios'), { status: 400 });
+
+  const contractSnap = await db.collection('contracts').doc(contractId).get();
+  if (!contractSnap.exists) throw Object.assign(new Error('contrato não encontrado'), { status: 404 });
+  const contract = contractSnap.data();
+  const { tenantId, tenantEmail, baseRent, dueDay = 10, propertyDescription = '' } = contract;
+  if (!tenantId || !baseRent) throw Object.assign(new Error('contrato sem tenantId ou baseRent'), { status: 400 });
+
+  // Determina mês alvo (YYYY-MM) — padrão: mês atual
+  const now = new Date();
+  const targetMonth = monthStr || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const [yearStr, monStr] = targetMonth.split('-');
+  const year  = parseInt(yearStr, 10);
+  const month = parseInt(monStr, 10) - 1; // 0-indexed
+
+  // Calcula dueDate
+  let dueDate = new Date(year, month, dueDay);
+  if (dueDate.getMonth() !== month) dueDate = new Date(year, month + 1, 0);
+  const dueSecs = Math.floor(dueDate.getTime() / 1000);
+
+  // Verifica duplicata
+  const existingByMonth = await db.collection('charges')
+    .where('contractId', '==', contractId)
+    .where('monthRef', '==', targetMonth)
+    .limit(1).get();
+  if (!existingByMonth.empty) return { ok: true, created: 0, reason: 'cobrança já existe para este mês' };
+
+  const monthStart = Math.floor(new Date(year, month, 1).getTime() / 1000);
+  const monthEnd   = Math.floor(new Date(year, month + 1, 0, 23, 59, 59).getTime() / 1000);
+  const existingByDate = await db.collection('charges')
+    .where('contractId', '==', contractId)
+    .where('dueDate', '>=', { seconds: monthStart, nanoseconds: 0 })
+    .where('dueDate', '<=', { seconds: monthEnd,   nanoseconds: 0 })
+    .limit(1).get();
+  if (!existingByDate.empty) {
+    const doc = existingByDate.docs[0];
+    if (!doc.data().monthRef) await doc.ref.update({ monthRef: targetMonth });
+    return { ok: true, created: 0, reason: 'cobrança já existe para este mês (por data)' };
+  }
+
+  // Lock atômico
+  const lockKey  = `${contractId}_${targetMonth}`;
+  const lockRef  = db.collection('charge-locks').doc(lockKey);
+  const chargeRef = db.collection('charges').doc();
+  let claimed = false;
+
+  await db.runTransaction(async (tx) => {
+    const lockDoc = await tx.get(lockRef);
+    if (lockDoc.exists) return;
+    tx.set(lockRef, { contractId, monthStr: targetMonth, chargeId: chargeRef.id, claimedAt: Timestamp.now() });
+    tx.set(chargeRef, {
+      id:                  chargeRef.id,
+      contractId,
+      tenantId,
+      tenantEmail:         tenantEmail || '',
+      dueDate:             { seconds: dueSecs, nanoseconds: 0 },
+      baseRent,
+      extras:              [],
+      totalAmount:         baseRent,
+      status:              'pending',
+      asaasChargeId:       '',
+      pixCopyPaste:        '',
+      pixQrCode:           '',
+      ownerId,
+      monthRef:            targetMonth,
+      propertyDescription: propertyDescription || '',
+      generatedAt:         new Date()
+    });
+    claimed = true;
+  });
+
+  if (!claimed) return { ok: true, created: 0, reason: 'lock já existia' };
+
+  // Gera PIX
+  const ownerSnap = await db.collection('owners').doc(ownerId).get().catch(() => null);
+  const ownerCfg  = ownerSnap?.exists ? ownerSnap.data() : {};
+  const apiKey    = await getAsaasKey(db, ownerId).catch(() => null);
+  if (apiKey) {
+    createPixForCharge(db, chargeRef.id, tenantId, baseRent, dueDate, apiKey, ownerCfg).catch(e =>
+      console.error('[PIX] handleGenerateChargeManual:', e.message)
+    );
+  }
+
+  return { ok: true, created: 1, chargeId: chargeRef.id, monthRef: targetMonth };
+}
+
 async function handleGenerateCharges(db, body) {
   const { ownerId, monthOffset = 0 } = body;
   // monthOffset=0 → mês atual, 1 → próximo mês
@@ -2816,7 +2904,8 @@ export default async function handler(req, res) {
     if (step === 'check-contract-status') return res.status(200).json(await handleCheckContractStatus(db, req.body));
     if (step === 'mark-overdue')      return res.status(200).json(await handleMarkOverdue(db, req.body));
     if (step === 'send-push')         return res.status(200).json(await handleSendPush(db, req.body));
-    if (step === 'generate-charges')  return res.status(200).json(await handleGenerateCharges(db, req.body));
+    if (step === 'generate-charges')      return res.status(200).json(await handleGenerateCharges(db, req.body));
+    if (step === 'generate-charge-manual') return res.status(200).json(await handleGenerateChargeManual(db, req.body));
     if (step === 'notify-upcoming')   return res.status(200).json(await handleNotifyUpcoming(db, req.body));
     if (step === 'send-receipt')      return res.status(200).json(await handleSendReceipt(db, req.body));
     if (step === 'close-contract')    return res.status(200).json(await handleCloseContract(db, req.body));
