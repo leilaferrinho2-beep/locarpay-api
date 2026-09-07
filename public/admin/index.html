@@ -507,7 +507,7 @@
       { label: 'Leads em análise', value: leadsCount,            icon: IC_LEADS,    color: leadsCount>0?'var(--warn)':'var(--text3)', tab: 'leads', loadFn: 'loadLeads', spark: mkSparkline('#f59e0b','rgba(245,158,11,.10)',leadsCount>0?'up':'flat') },
       { label: 'Cobranças pend.',  value: pendingCount,          icon: IC_CLOCK,    color: 'var(--warn)',    tab: 'overdue', loadFn: 'loadOverdue', spark: mkSparkline('#f59e0b','rgba(245,158,11,.10)','flat') },
       { label: 'Pagas no mês',     value: paidCount,             icon: IC_CHECK,    color: 'var(--accent3)', tab: 'overdue', loadFn: 'loadOverdue', spark: mkSparkline('#10b981','rgba(16,185,129,.12)','up') },
-      { label: 'Aluguel/mês',      value: fmt.format(totalRent), icon: IC_MONEY,    color: '#c4b5fd',        tab: 'tenants', loadFn: 'loadTenants', spark: mkSparkline('#8b5cf6','rgba(139,92,246,.12)','up') },
+      { label: 'Aluguel/mês',      value: fmt.format(totalRent), icon: IC_MONEY,    color: 'var(--purple)', tab: 'tenants', loadFn: 'loadTenants', spark: mkSparkline('#8b5cf6','rgba(139,92,246,.12)','up') },
     ];
     $('metrics-row').innerHTML = cards.map((c,i) => `
       <div class="metric-card metric-card--link" data-tab="${c.tab}" data-loadfn="${c.loadFn}" title="Ver ${esc(c.label)}" style="cursor:pointer;animation-delay:${i*60}ms">
@@ -6095,6 +6095,7 @@
     --warn:        #92400e;
     --warn-bg:     rgba(146,64,14,.10);
     --blue-bg:     rgba(59,130,246,.10);
+    --purple:      #6d28d9;
   }
   .ip-theme-toggle-wrap { display:flex; gap:4px; align-items:center; }
   .ip-theme-opt { background:var(--s2); border:1px solid var(--border2); color:var(--text2); height:32px; padding:0 10px; border-radius:8px; cursor:pointer; font-size:12px; transition:background .15s,color .15s; white-space:nowrap; }
