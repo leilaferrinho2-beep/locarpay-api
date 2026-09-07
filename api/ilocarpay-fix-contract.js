@@ -243,21 +243,59 @@ async function requireMasterAuth(req) {
   return decoded;
 }
 
+async function requireUserAuth(req) {
+  const { getAuth } = await import('firebase-admin/auth');
+  const authHeader = (req.headers['authorization'] || '').trim();
+  if (!authHeader.startsWith('Bearer '))
+    throw Object.assign(new Error('Token de autenticação ausente'), { status: 401 });
+  const idToken = authHeader.slice(7);
+  return getAuth().verifyIdToken(idToken).catch(() => {
+    throw Object.assign(new Error('Token inválido'), { status: 401 });
+  });
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // P0-4: todas as operações exigem autenticação de super admin
+  initFirebase();
+
+  // GET: download do contrato — aceita qualquer usuário Firebase autenticado
+  if (req.method === 'GET') {
+    try {
+      const caller = await requireUserAuth(req);
+      // Verifica que o caller é o inquilino do contrato (ou master)
+      const { contractId } = req.query;
+      if (contractId && !MASTER_EMAILS.has(caller.email)) {
+        const db = getFirestore();
+        const contractSnap = await db.collection('contracts').doc(contractId).get();
+        if (contractSnap.exists) {
+          const { tenantId, ownerId } = contractSnap.data();
+          // Aceita se o uid bate com qualquer doc users do mesmo email (múltiplos docs)
+          if (caller.uid !== tenantId && caller.uid !== ownerId) {
+            const tenantsSnap = await db.collection('users')
+              .where('email', '==', caller.email).where('role', '==', 'tenant').get();
+            const tenantIds = tenantsSnap.docs.map(d => d.id);
+            if (!tenantIds.includes(tenantId)) {
+              return res.status(403).json({ error: 'Acesso negado ao contrato' });
+            }
+          }
+        }
+      }
+    } catch (authErr) {
+      return res.status(authErr.status || 401).json({ error: authErr.message });
+    }
+    return handleGetContractPdf(req, res);
+  }
+
+  // POST: operações de manutenção — exigem master auth
   try {
-    initFirebase();
     await requireMasterAuth(req);
   } catch (authErr) {
     return res.status(authErr.status || 401).json({ error: authErr.message });
   }
-
-  if (req.method === 'GET') return handleGetContractPdf(req, res);
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
