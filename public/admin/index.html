@@ -217,7 +217,7 @@
     if (sst) {
       const ok = currentOwnerData?.serasaClientId && currentOwnerData?.serasaClientSecret;
       sst.textContent = ok ? '✅ Credenciais configuradas.' : '🟡 Modo sandbox ativo (sem credenciais reais).';
-      sst.style.color  = ok ? '#4CAF50' : '#FFD54F';
+      sst.style.color = ok ? '#4CAF50' : 'var(--warn)';
     }
 
     loadBrokers();
@@ -239,7 +239,7 @@
     if (bst) {
       const ok = currentOwnerData?.boavistaClientId && currentOwnerData?.boavistaClientSecret;
       bst.textContent = ok ? '✅ Credenciais configuradas.' : '🟡 Modo sandbox ativo (sem credenciais reais).';
-      bst.style.color  = ok ? '#4CAF50' : '#FFD54F';
+      bst.style.color = ok ? '#4CAF50' : 'var(--warn)';
     }
 
     // WhatsApp — status box
@@ -250,13 +250,21 @@
     const waLabel   = $('wa-status-label');
     const waSub     = $('wa-status-sub');
     const waBtnDisc = $('btn-wa-disconnect');
-    if (waBadge)   { waBadge.textContent = connected ? '🟢' : '🔴'; waBadge.title = connected ? 'Conectado' : 'Desconectado'; }
-    if (waIcon)    waIcon.textContent  = connected ? '✅' : '📵';
-    if (waLabel)   waLabel.textContent = connected ? 'WhatsApp conectado' : 'Não conectado';
-    if (waSub)     waSub.textContent   = connected
-      ? `Mensagens automáticas ativas para esta imobiliária`
-      : 'Clique em Conectar para escanear o QR Code com o WhatsApp desta imobiliária';
-    if (waBtnDisc) waBtnDisc.style.display = connected ? 'inline-block' : 'none';
+    const waBtnConn = $('btn-wa-connect');
+    if (waBadge) {
+      waBadge.textContent = connected ? '● Ativo' : '● Desconectado';
+      waBadge.className   = connected ? 'wa-badge wa-badge--on' : 'wa-badge wa-badge--off';
+      waBadge.title       = connected ? 'WhatsApp conectado' : 'WhatsApp desconectado';
+    }
+    if (waIcon)  waIcon.textContent = connected ? '✅' : '📵';
+    if (waLabel) waLabel.textContent = connected ? 'WhatsApp conectado' : 'Não conectado';
+    if (waSub)   waSub.textContent  = connected
+      ? 'Mensagens automáticas estão ativas para esta imobiliária.'
+      : 'Conecte um número para habilitar o envio automático de mensagens da imobiliária.';
+    const waBox = $('wa-status-box');
+    if (waBox) waBox.className = connected ? 'wa-status-box wa-status-box--on' : 'wa-status-box wa-status-box--off';
+    if (waBtnConn) waBtnConn.style.display = connected ? 'none' : '';
+    if (waBtnDisc) waBtnDisc.style.display = connected ? 'flex' : 'none';
   }
 
   window.disconnectWhatsapp = async () => {
@@ -279,7 +287,7 @@
     const key   = ($('wa-api-key')?.value  || '').trim();
     const inst  = ($('wa-instance')?.value || '').trim();
     const msg   = $('wa-config-msg');
-    if (!url || !key || !inst) { if (msg) { msg.textContent = '⚠️ Preencha todos os campos.'; msg.style.color = '#FFD54F'; } return; }
+    if (!url || !key || !inst) { if (msg) { msg.textContent = '⚠️ Preencha todos os campos.'; msg.style.color = 'var(--warn)'; } return; }
     if (msg) { msg.textContent = 'Salvando...'; msg.style.color = '#888'; }
     try {
       await updateDoc(doc(db, 'owners', currentOwnerId), {
@@ -290,7 +298,7 @@
       currentOwnerData = { ...currentOwnerData, evolutionApiUrl: url, evolutionApiKey: key, evolutionInstance: inst };
       if (msg) { msg.textContent = '✅ Credenciais salvas com sucesso!'; msg.style.color = '#4CAF50'; }
       const badge = $('wa-config-badge');
-      if (badge) { badge.textContent = '🟡'; badge.title = 'Configurado, não conectado'; }
+      if (badge) { badge.textContent = '● Configurado'; badge.className = 'wa-badge wa-badge--idle'; badge.title = 'Configurado, não conectado'; }
     } catch (e) {
       if (msg) { msg.textContent = 'Erro: ' + e.message; msg.style.color = '#ff5252'; }
     }
@@ -336,11 +344,15 @@
         currentOwnerId   = e.target.value;
         currentOwnerData = allOwners.find(o => o.id === currentOwnerId);
         $('owner-name-badge').textContent = currentOwnerData?.name || currentOwnerId;
+        _updateHeaderLogo(currentOwnerData?.logoUrl || '');
+        startOwnerRealtimeListener();
+        startTenantsRealtimeListener();
         await loadTenants();
         loadConfigTab();
       });
     }
     $('owner-name-badge').textContent = currentOwnerData?.name || currentOwnerId || '—';
+    _updateHeaderLogo(currentOwnerData?.logoUrl || '');
   }
 
   // ── Inquilinos ─────────────────────────────────────────────
@@ -426,6 +438,7 @@
     // Inquilinos sem email (edge case)
     allTenants.filter(t => !t.email).forEach(t => tenantByEmail.set(t.id, t));
     tenants = Array.from(tenantByEmail.values());
+    tenants.forEach(t => { _tcdTenantCache[t.id] = t; });
     renderTenants();
     renderMetrics();
     renderPlanBar();
@@ -1154,7 +1167,7 @@
 
   window.testBureauCredentials = async (bureau) => {
     const st = $(bureau + '-status');
-    st.textContent = 'Testando conexão...'; st.style.color = '#FFD54F';
+    st.textContent = 'Testando conexão...'; st.style.color = 'var(--warn)';
     const step = bureau === 'serasa' ? 'check-serasa' : 'check-boavista';
     try {
       const res = await fetch('/api/ilocarpay-credit', {
@@ -1163,7 +1176,7 @@
         body: JSON.stringify({ step, ownerId: currentOwnerId, tenantId: 'test', cpf: '11144477735' })
       });
       const d = await res.json();
-      if (d.sandbox) { st.textContent = '🟡 Modo sandbox ativo (sem credenciais reais).'; st.style.color = '#FFD54F'; }
+      if (d.sandbox) { st.textContent = '🟡 Modo sandbox ativo (sem credenciais reais).'; st.style.color = 'var(--warn)'; }
       else           { st.textContent = `✅ Conexão com ${bureau === 'serasa' ? 'Serasa' : 'Boa Vista'} estabelecida.`; st.style.color = '#4CAF50'; }
     } catch (e) {
       st.textContent = '❌ Falha: ' + e.message; st.style.color = '#ef5350';
@@ -1176,13 +1189,13 @@
     if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
     if (!report || !box) return;
     const scoreColor = (report.score >= 700) ? '#4CAF50' : (report.score >= 500) ? '#FFD54F' : '#ef5350';
-    const sandboxTag = report.sandbox ? '<span style="background:#2a2d3e;color:#888;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:6px">SANDBOX</span>' : '';
+    const sandboxTag = report.sandbox ? '<span style="background:var(--border2);color:#888;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:6px">SANDBOX</span>' : '';
     const bureauTag  = `<span style="background:#20233a;color:#4CAF50;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px">${report.bureau === 'serasa' ? 'SERASA' : 'BOA VISTA'}</span>`;
     const pendHtml = report.pendencias?.length
       ? report.pendencias.map(p =>
-          `<div style="background:#0f1117;border:1px solid #2a2d3e;border-radius:6px;padding:10px 12px;margin-top:6px">
+          `<div style="background:var(--bg);border:1px solid var(--border2);border-radius:6px;padding:10px 12px;margin-top:6px">
             <div style="font-size:12px;color:#aaa;font-weight:600">${p.tipo}</div>
-            <div style="font-size:13px;color:#e0e0e0;margin-top:2px">${p.credor} — <span style="color:#ef5350">R$ ${(+p.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div>
+            <div style="font-size:13px;color:var(--text1);margin-top:2px">${p.credor} — <span style="color:#ef5350">R$ ${(+p.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div>
             <div style="font-size:11px;color:#555;margin-top:2px">${p.dataOcorrencia}</div>
           </div>`).join('')
       : '<p style="font-size:13px;color:#4CAF50;margin-top:6px">✅ Nenhuma pendência encontrada.</p>';
@@ -1437,7 +1450,7 @@
         <div style="font-size:28px;line-height:1">📋</div>
         <div style="flex:1">
           <div style="color:#4CAF50;font-weight:700;font-size:15px">Novo lead recebido!</div>
-          <div style="color:#e0e0e0;font-size:13px;margin-top:4px"><strong>${esc(name)}</strong></div>
+          <div style="color:var(--text1);font-size:13px;margin-top:4px"><strong>${esc(name)}</strong></div>
           ${prop ? `<div style="color:#aaa;font-size:12px">${esc(prop)}</div>` : ''}
           <div style="color:#aaa;font-size:12px;margin-top:6px">${count} lead${count>1?'s':''} aguardando análise</div>
           <div style="display:flex;gap:8px;margin-top:10px">
@@ -1523,15 +1536,23 @@
     tbody.innerHTML = leads.map(l => {
       const [col, lbl] = statusCfg[l.status] || statusCfg.pending;
       const [cCol, cLbl] = l.contractStatus ? (contractStatusCfg[l.contractStatus] || [col, lbl]) : [col, lbl];
+      const propCep = (l.property?.cep || '').replace(/\D/g,'');
+      const cepSuffix = propCep.length === 8
+        ? ` - CEP ${propCep.slice(0,5)}-${propCep.slice(5)}`
+        : '';
+      const cepAlert = propCep.length !== 8
+        ? `<span style="font-size:10px;color:#ef5350;font-weight:600"> ⚠️ Sem CEP</span>`
+        : '';
       const prop = l.property
         ? [l.property.street, l.property.number, l.property.neighborhood, l.property.city].filter(Boolean).join(', ')
         : (l.propertyDescription || '—');
       const rent = l.property?.rentValue ? `R$ ${l.property.rentValue}` : '';
       const cs = l.contractStatus || '';
+      const noCep = propCep.length !== 8;
       const btns = l.status === 'pending' ? `
         <button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="viewLeadDetail('${l.id}')">🔍 Detalhes</button>
         <button class="btn-sm" style="color:#FFB74D;border-color:#FFB74D;margin-left:4px" onclick="openEditLeadModal('${l.id}')">✏️ Editar</button>
-        <button class="btn-sm" style="color:#4CAF50;border-color:#4CAF50;margin-left:4px" onclick="openApproveModal('${l.id}')">✅ Aprovar</button>
+        <button class="btn-sm" style="color:#4CAF50;border-color:#4CAF50;margin-left:4px" ${noCep ? 'disabled title="Informe o CEP do imóvel antes de aprovar"' : `onclick="openApproveModal('${l.id}')"`}>✅ Aprovar</button>
         <button class="btn-sm" style="color:#ef5350;border-color:#ef5350;margin-left:4px" onclick="rejectLead('${l.id}')">❌ Rejeitar</button>
       ` : l.status === 'approved' && l.contractId ? `
         <button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="viewLeadDetail('${l.id}')">🔍 Detalhes</button>
@@ -1547,7 +1568,7 @@
         : `<span style="color:${col};font-weight:600">${lbl}</span>`;
       return `<tr>
         <td><strong>${esc(l.tenant?.name)||'—'}</strong><br><span style="font-size:11px;color:#888">${esc(l.tenant?.email)||''}</span><br><span style="font-size:11px;color:#666">${esc(l.tenant?.cpf)||''}</span></td>
-        <td><span style="font-size:12px">${esc(prop)}</span>${rent ? `<br><span style="color:#4CAF50;font-size:12px;font-weight:600">${esc(rent)}/mês</span>` : ''}</td>
+        <td><span style="font-size:12px;word-break:break-word">${esc(prop)}${esc(cepSuffix)}</span>${cepAlert}${rent ? `<br><span style="color:#4CAF50;font-size:12px;font-weight:600">${esc(rent)}/mês</span>` : ''}</td>
         <td>${esc(((window._brokerNameMap||{})[(l.brokerEmail||'').toLowerCase()])||l.brokerName||l.brokerEmail||'—')}</td>
         <td>${statusLine}<br><span style="font-size:11px;color:#666">${(l.docs||[]).length} doc(s)</span></td>
         <td style="white-space:nowrap">${btns}</td>
@@ -1575,7 +1596,7 @@
 
     const fmtRow = (label, val) => val ? `
       <tr><td style="color:#888;font-size:12px;padding:4px 12px 4px 0;white-space:nowrap;width:160px;min-width:160px;vertical-align:top">${label}</td>
-          <td style="color:#e0e0e0;font-size:13px;padding:4px 0;vertical-align:top">${esc(val)}</td></tr>` : '';
+          <td style="color:var(--text1);font-size:13px;padding:4px 0;vertical-align:top">${esc(val)}</td></tr>` : '';
 
     const section = (title, rows) => rows ? `
       <div style="margin-bottom:16px">
@@ -1636,7 +1657,12 @@
         fmtRow('Empresa', t.company) +
         fmtRow('Renda mensal', t.income ? `R$ ${t.income}` : '') +
         fmtRow('Vínculo', t.employmentType) +
-        fmtRow('End. atual', t.currentAddress)
+        fmtRow('End. atual', (() => {
+          if (!t.currentAddress) return '';
+          const cep = (t.currentCep || '').replace(/\D/g,'');
+          if (cep.length === 8) return t.currentAddress + ' - CEP ' + cep.slice(0,5) + '-' + cep.slice(5);
+          return t.currentAddress + '<br><span style="color:#ef5350;font-size:11px">⚠️ CEP não informado</span>';
+        })())
       )}
 
       ${s ? section('💑 Cônjuge / Companheiro(a)',
@@ -1729,7 +1755,7 @@
           <div style="display:grid;grid-template-columns:140px 1fr;gap:8px;margin-bottom:10px">
             <div>
               <div style="font-size:11px;color:#888;margin-bottom:4px">Parecer</div>
-              <select id="ca-lead-status-${l.id}" style="width:100%;background:#111;color:#e0e0e0;border:1px solid #2a2a2a;border-radius:8px;padding:8px;font-size:13px">
+              <select id="ca-lead-status-${l.id}" style="width:100%;background:#111;color:var(--text1);border:1px solid #2a2a2a;border-radius:8px;padding:8px;font-size:13px">
                 <option value="pending"   ${(ca.status||'pending')==='pending'  ?'selected':''}>⏳ Em análise</option>
                 <option value="approved"  ${ca.status==='approved' ?'selected':''}>✅ Aprovado</option>
                 <option value="analyzing" ${ca.status==='analyzing'?'selected':''}>🔎 Pendências</option>
@@ -1739,7 +1765,7 @@
             <div>
               <div style="font-size:11px;color:#888;margin-bottom:4px">Observações</div>
               <textarea id="ca-lead-notes-${l.id}" rows="2" placeholder="Anote aqui observações sobre o inquilino..."
-                style="width:100%;background:#111;color:#e0e0e0;border:1px solid #2a2a2a;border-radius:8px;padding:8px;font-size:12px;resize:vertical;box-sizing:border-box">${esc(ca.notes||'')}</textarea>
+                style="width:100%;background:#111;color:var(--text1);border:1px solid #2a2a2a;border-radius:8px;padding:8px;font-size:12px;resize:vertical;box-sizing:border-box">${esc(ca.notes||'')}</textarea>
             </div>
           </div>
 
@@ -1836,7 +1862,7 @@
       landlordWarning.textContent = hasLandlordData
         ? '✅ Dados do proprietário recebidos do app. Confirme antes de aprovar:'
         : '⚠️ Dados do proprietário não encontrados neste lead. Preencha para gerar o contrato:';
-      landlordWarning.style.color = hasLandlordData ? '#4ade80' : '#f59e0b';
+      landlordWarning.style.color = hasLandlordData ? '#4ade80' : 'var(--warn)';
     }
     $('approve-landlord-name').value  = l.landlord?.name  || '';
     $('approve-landlord-email').value = l.landlord?.email || '';
@@ -1894,6 +1920,8 @@
     $('el-tenant-cpf').value   = l.tenant?.cpf   || '';
     $('el-tenant-phone').value = l.tenant?.phone || '';
     $('el-prop-address').value = l.propertyDescription || (l.property ? [l.property.street,l.property.number,l.property.neighborhood,l.property.city].filter(Boolean).join(', ') : '');
+    const rawCep = (l.property?.cep || '').replace(/\D/g,'');
+    $('el-prop-cep').value = rawCep.length === 8 ? rawCep.slice(0,5) + '-' + rawCep.slice(5) : rawCep;
     $('el-rent-value').value   = l.property?.rentValue || '';
     $('el-due-day').value      = l.property?.dueDay || '10';
     $('el-landlord-name').value  = l.landlord?.name  || '';
@@ -1910,6 +1938,8 @@
     const btn = $('edit-lead-save-btn');
     btn.disabled = true; btn.textContent = 'Salvando...';
     try {
+      const cepDigits = $('el-prop-cep').value.replace(/\D/g,'');
+      if (cepDigits.length !== 8) { showToast('CEP do imóvel inválido. Informe 8 dígitos.', 'error'); btn.disabled = false; btn.textContent = 'Salvar'; return; }
       const { doc: firestoreDoc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
       await updateDoc(firestoreDoc(db, 'leads', leadId), {
         'tenant.name':  $('el-tenant-name').value.trim(),
@@ -1917,6 +1947,7 @@
         'tenant.cpf':   $('el-tenant-cpf').value.trim(),
         'tenant.phone': $('el-tenant-phone').value.trim(),
         'propertyDescription': $('el-prop-address').value.trim(),
+        'property.cep':        cepDigits,
         'property.rentValue':  parseFloat($('el-rent-value').value) || 0,
         'property.dueDay':     parseInt($('el-due-day').value) || 10,
         'landlord.name':  $('el-landlord-name').value.trim(),
@@ -1956,6 +1987,7 @@
       showToast('Lead rejeitado.', 'info');
       closeRejectModal();
       await loadLeads();
+      await renderMetrics();
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     finally { btn.disabled = false; btn.textContent = 'Confirmar rejeição'; }
   };
@@ -1971,6 +2003,7 @@
         if (!res.ok) throw new Error(data.error);
         showToast('Lead removido.', 'info');
         await loadLeads();
+        await renderMetrics();
       } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     }, { danger: true, okText: 'Remover' });
   };
@@ -2111,6 +2144,7 @@
     try {
       const snap = await getDocs(query(collection(db, 'brokers'), where('ownerId', '==', currentOwnerId)));
       brokers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      brokers.forEach(b => { _bcdBrokerCache[b.id] = b; });
     } catch (e) {
       wrap.innerHTML = `<p style="color:#ef5350;font-size:13px">Erro ao carregar corretores: ${e.message}</p>`;
       return;
@@ -2119,7 +2153,7 @@
     wrap.innerHTML = `
       <table style="width:100%;border-collapse:collapse;margin-top:4px">
         <thead>
-          <tr style="border-bottom:1px solid #2a2d3e">
+          <tr style="border-bottom:1px solid var(--border2)">
             <th style="text-align:left;font-size:11px;color:#778;font-weight:600;padding:6px 0;letter-spacing:.4px">NOME</th>
             <th style="text-align:left;font-size:11px;color:#778;font-weight:600;padding:6px 0;letter-spacing:.4px">E-MAIL / WHATSAPP</th>
             <th style="text-align:center;font-size:11px;color:#778;font-weight:600;padding:6px 0;letter-spacing:.4px">STATUS</th>
@@ -2128,7 +2162,7 @@
         </thead>
         <tbody>
           ${brokers.map(b => `
-          <tr style="border-bottom:1px solid #1e2130" id="broker-row-${b.id}">
+          <tr style="border-bottom:1px solid var(--border)" id="broker-row-${b.id}">
             <td style="padding:11px 0;font-weight:600;font-size:14px">${esc(b.name)||'—'}</td>
             <td style="padding:11px 0;font-size:12px;color:#aaa">${esc(b.email)}${b.phone ? '<br><span style="color:#666">'+esc(b.phone)+'</span>' : ''}</td>
             <td style="padding:11px 0;text-align:center">
@@ -2140,7 +2174,7 @@
                 ✏️ Editar
               </button>
               <button id="chat-btn-${b.id}" onclick="openBrokerChat('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}')"
-                style="background:#1a2540;border:1px solid #1565c055;color:#90caf9;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;margin-right:6px">
+                style="background:var(--blue-bg);border:1px solid #1565c055;color:#90caf9;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;margin-right:6px">
                 💬 Chat <span id="chat-unread-${b.id}" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;font-weight:700"></span>
               </button>
               <button onclick="deleteBroker('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}')"
@@ -2210,7 +2244,7 @@
         wrap.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 24px;text-align:center">
             <div style="width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#12201a,#1a3a1a);border:2px dashed #2D6A2D;display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:20px">🤝</div>
-            <div style="font-size:18px;font-weight:700;color:#e0e0e0;margin-bottom:8px">Nenhum corretor ainda</div>
+            <div style="font-size:18px;font-weight:700;color:var(--text1);margin-bottom:8px">Nenhum corretor ainda</div>
             <p style="font-size:14px;color:#666;max-width:340px;line-height:1.6;margin-bottom:24px">
               Cadastre sua equipe de corretores para distribuir leads, acompanhar locações fechadas e controlar comissões automaticamente.
             </p>
@@ -2238,7 +2272,7 @@
         const allContracts = contracts.filter(c => (c.brokerEmail || '').toLowerCase() === email);
         const histHtml = allContracts.length
           ? allContracts.map(c => `
-              <tr style="border-bottom:1px solid #1a1d2e">
+              <tr style="border-bottom:1px solid var(--s4)">
                 <td style="padding:7px 10px;font-size:12px">${esc(c.propertyCode || (() => { if (c.propertyLogradouro) { let a = c.propertyLogradouro; if (c.propertyNumero) a += `, ${c.propertyNumero}`; if (c.propertyBairro) a += `, ${c.propertyBairro}`; const cu = [c.propertyCidade, c.propertyEstado].filter(Boolean).join('/'); if (cu) a += `, ${cu}`; if (c.propertyCep) a += ` - CEP ${fmtCep(c.propertyCep)}`; return a; } return c.propertyAddress || ''; })() || '—')}</td>
                 <td style="padding:7px 10px;font-size:12px">${esc(c.tenantName || '—')}</td>
                 <td style="padding:7px 10px;font-size:12px;color:#4CAF50">${fmt(c.baseRent)}/mês</td>
@@ -2252,20 +2286,24 @@
               </tr>`).join('')
           : `<tr><td colspan="6" style="padding:10px;color:#555;font-size:12px;text-align:center">Nenhuma locação fechada ainda</td></tr>`;
 
-        const initials = (b.name || '?').split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase();
+        const initials = (b.name || '?').split(' ').filter(Boolean).slice(0,2).map(w => w[0]).join('').toUpperCase();
         const convRate = myLeads.length > 0 ? Math.round((approved.length / myLeads.length) * 100) : 0;
         const avatarColors = ['#1a3a1a','#1a2a3a','#2a1a3a','#3a1a1a','#1a3a3a'];
         const avatarBg = avatarColors[Math.abs(b.email.charCodeAt(0) + b.email.charCodeAt(1)) % avatarColors.length];
+        const _initDiv = `display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:17px;font-weight:800;color:#4CAF50;letter-spacing:-.5px`;
+        const avatarHtml = b.photoUrl
+          ? `<div data-broker-avatar="${b.id}" style="width:48px;height:48px;border-radius:14px;flex-shrink:0;overflow:hidden;border:2px solid rgba(45,106,45,0.25)"><img src="${esc(b.photoUrl)}" alt="${initials}" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\\'${_initDiv}\\'>${initials}</span>')"></div>`
+          : `<div data-broker-avatar="${b.id}" style="width:48px;height:48px;border-radius:14px;background:${avatarBg};border:2px solid rgba(45,106,45,0.25);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;color:#4CAF50;flex-shrink:0;letter-spacing:-.5px">${initials}</div>`;
 
         return `
-          <div style="background:#12151e;border:1px solid #1e2130;border-radius:18px;overflow:hidden;margin-bottom:16px;transition:border-color .2s" onmouseover="this.style.borderColor='#2a2d50'" onmouseout="this.style.borderColor='#1e2130'">
+          <div style="background:var(--s2);border:1px solid var(--border);border-radius:18px;overflow:hidden;margin-bottom:16px;transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent-glow)'" onmouseout="this.style.borderColor='var(--border)'">
             <!-- Header do card -->
-            <div style="padding:20px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;border-bottom:1px solid #1a1d2e">
+            <div style="padding:20px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;border-bottom:1px solid var(--s4)">
               <div style="display:flex;align-items:center;gap:14px">
-                <div style="width:48px;height:48px;border-radius:14px;background:${avatarBg};border:2px solid #2D6A2D40;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;color:#4CAF50;flex-shrink:0;letter-spacing:-.5px">${initials}</div>
+                ${avatarHtml}
                 <div>
-                  <div style="font-weight:800;font-size:15px;color:#f0f0f0;margin-bottom:2px">${esc(b.name) || '—'}</div>
-                  <div style="font-size:12px;color:#666">${esc(b.email)}${b.phone ? ' · ' + esc(b.phone) : ''}</div>
+                  <div style="font-weight:800;font-size:15px;color:var(--text1);margin-bottom:2px">${esc(b.name) || '—'}</div>
+                  <div style="font-size:12px;color:var(--text3)">${esc(b.email)}${b.phone ? ' · ' + esc(b.phone) : ''}</div>
                 </div>
                 <span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${b.active !== false ? '#0d2b0d' : '#2a1212'};color:${b.active !== false ? '#4CAF50' : '#ef5350'};border:1px solid ${b.active !== false ? '#1a4a1a' : '#4a1a1a'}">
                   ${b.active !== false ? '● Ativo' : '● Inativo'}
@@ -2273,74 +2311,74 @@
               </div>
               <div style="display:flex;gap:8px;align-items:center">
                 <button id="chat-btn2-${b.id}" onclick="openBrokerChat('${b.id}','${(b.name||'').replace(/'/g,'&#39;')}')"
-                  style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:#0d1a2a;border:1px solid #1a3a5a;color:#64B5F6;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s"
-                  onmouseover="this.style.background='#111e30'" onmouseout="this.style.background='#0d1a2a'">
+                  style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--blue-bg);border:1px solid rgba(59,130,246,0.3);color:#3b82f6;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s"
+                  onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">
                   💬 Chat <span id="chat-unread2-${b.id}" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;font-weight:700"></span>
                 </button>
                 <!-- ⋮ Menu de ações -->
                 <div style="position:relative" id="broker-menu-wrap-${b.id}">
                   <button onclick="toggleBrokerMenu('${b.id}')"
-                    style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;background:#1a1d2e;border:1px solid #2a2d3e;color:#aaa;border-radius:9px;font-size:18px;cursor:pointer;line-height:1;transition:background .15s"
-                    title="Ações" onmouseover="this.style.background='#22253a'" onmouseout="this.style.background='#1a1d2e'">⋮</button>
-                  <div id="broker-menu-${b.id}" style="display:none;position:absolute;right:0;top:40px;background:#1a1d2e;border:1px solid #2a2d3e;border-radius:12px;min-width:190px;z-index:100;box-shadow:0 8px 32px #00000055;overflow:hidden">
-                    <button onclick="brokerAction('details','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:#ccc;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='#22253a'" onmouseout="this.style.background='none'">🔎 Ver detalhes</button>
-                    <button onclick="brokerAction('edit','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:#ccc;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='#22253a'" onmouseout="this.style.background='none'">✏️ Editar</button>
-                    <button onclick="brokerAction('toggle','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:${b.active !== false ? '#FFD54F' : '#4CAF50'};font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='#22253a'" onmouseout="this.style.background='none'">${b.active !== false ? '⏸ Desativar' : '▶ Ativar'}</button>
-                    <button onclick="brokerAction('resend','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:#64B5F6;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='#22253a'" onmouseout="this.style.background='none'">📧 Reenviar convite</button>
-                    <div style="height:1px;background:#2a2d3e;margin:2px 0"></div>
+                    style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;background:var(--s4);border:1px solid var(--border2);color:#aaa;border-radius:9px;font-size:18px;cursor:pointer;line-height:1;transition:background .15s"
+                    title="Ações" onmouseover="this.style.background='var(--s4)'" onmouseout="this.style.background='var(--s4)'">⋮</button>
+                  <div id="broker-menu-${b.id}" style="display:none;position:absolute;right:0;top:40px;background:var(--s4);border:1px solid var(--border2);border-radius:12px;min-width:190px;z-index:100;box-shadow:0 8px 32px #00000055;overflow:hidden">
+                    <button onclick="brokerAction('details','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='var(--s4)'" onmouseout="this.style.background='none'">🔎 Ver detalhes</button>
+                    <button onclick="brokerAction('edit','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='var(--s4)'" onmouseout="this.style.background='none'">✏️ Editar</button>
+                    <button onclick="brokerAction('toggle','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:${b.active !== false ? '#FFD54F' : '#4CAF50'};font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='var(--s4)'" onmouseout="this.style.background='none'">${b.active !== false ? '⏸ Desativar' : '▶ Ativar'}</button>
+                    <button onclick="brokerAction('resend','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:#3b82f6;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='var(--s4)'" onmouseout="this.style.background='none'">📧 Reenviar convite</button>
+                    <div style="height:1px;background:var(--border2);margin:2px 0"></div>
                     <button onclick="brokerAction('delete','${b.id}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;background:none;border:none;color:#ef5350;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='#2a1515'" onmouseout="this.style.background='none'">🗑 Excluir</button>
                   </div>
                 </div>
               </div>
             </div>
             <!-- Métricas -->
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:0;border-bottom:1px solid #1a1d2e">
-              <div style="padding:16px 20px;border-right:1px solid #1a1d2e;text-align:center">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:0;border-bottom:1px solid var(--s4)">
+              <div style="padding:16px 20px;border-right:1px solid var(--s4);text-align:center">
                 <div style="font-size:24px;font-weight:800;color:#64B5F6;line-height:1">${myLeads.length}</div>
                 <div style="font-size:10px;color:#555;font-weight:700;letter-spacing:.6px;margin-top:4px">LEADS</div>
               </div>
-              <div style="padding:16px 20px;border-right:1px solid #1a1d2e;text-align:center">
+              <div style="padding:16px 20px;border-right:1px solid var(--s4);text-align:center">
                 <div style="font-size:24px;font-weight:800;color:#4CAF50;line-height:1">${approved.length}</div>
                 <div style="font-size:10px;color:#555;font-weight:700;letter-spacing:.6px;margin-top:4px">APROVADOS</div>
               </div>
-              <div style="padding:16px 20px;border-right:1px solid #1a1d2e;text-align:center">
+              <div style="padding:16px 20px;border-right:1px solid var(--s4);text-align:center">
                 <div style="font-size:24px;font-weight:800;color:#81C784;line-height:1">${myContracts.length}</div>
                 <div style="font-size:10px;color:#555;font-weight:700;letter-spacing:.6px;margin-top:4px">CONTRATOS</div>
               </div>
-              <div style="padding:16px 20px;border-right:1px solid #1a1d2e;text-align:center">
-                <div style="font-size:20px;font-weight:800;color:#e0e0e0;line-height:1">${fmt(totalRent)}</div>
+              <div style="padding:16px 20px;border-right:1px solid var(--s4);text-align:center">
+                <div style="font-size:20px;font-weight:800;color:var(--text1);line-height:1">${fmt(totalRent)}</div>
                 <div style="font-size:10px;color:#555;font-weight:700;letter-spacing:.6px;margin-top:4px">ALUGUEL TOTAL</div>
               </div>
-              <div style="padding:16px 20px;text-align:center;background:#0d1a0d">
-                <div style="font-size:20px;font-weight:800;color:#FFD54F;line-height:1">${fmt(commission)}</div>
-                <div style="font-size:10px;color:#666;font-weight:700;letter-spacing:.6px;margin-top:4px">COMISSÃO/MÊS</div>
+              <div style="padding:16px 20px;text-align:center;background:var(--accent-bg)">
+                <div style="font-size:20px;font-weight:800;color:var(--accent3);line-height:1">${fmt(commission)}</div>
+                <div style="font-size:10px;color:var(--text3);font-weight:700;letter-spacing:.6px;margin-top:4px">COMISSÃO/MÊS</div>
               </div>
             </div>
             <!-- Tabela de locações -->
             <div style="overflow-x:auto">
               <table style="width:100%;border-collapse:collapse">
                 <thead>
-                  <tr style="background:#0a0c12">
-                    <th style="padding:10px 16px;text-align:left;font-size:10px;color:#444;font-weight:700;letter-spacing:.5px">IMÓVEL</th>
-                    <th style="padding:10px 16px;text-align:left;font-size:10px;color:#444;font-weight:700;letter-spacing:.5px">INQUILINO</th>
-                    <th style="padding:10px 16px;text-align:left;font-size:10px;color:#444;font-weight:700;letter-spacing:.5px">ALUGUEL</th>
-                    <th style="padding:10px 16px;text-align:left;font-size:10px;color:#444;font-weight:700;letter-spacing:.5px">INÍCIO</th>
-                    <th style="padding:10px 16px;text-align:left;font-size:10px;color:#444;font-weight:700;letter-spacing:.5px">STATUS</th>
-                    <th style="padding:10px 16px;text-align:left;font-size:10px;color:#444;font-weight:700;letter-spacing:.5px">COMISSÃO</th>
+                  <tr style="background:var(--s3)">
+                    <th style="padding:10px 16px;text-align:left;font-size:10px;color:var(--text3);font-weight:700;letter-spacing:.5px">IMÓVEL</th>
+                    <th style="padding:10px 16px;text-align:left;font-size:10px;color:var(--text3);font-weight:700;letter-spacing:.5px">INQUILINO</th>
+                    <th style="padding:10px 16px;text-align:left;font-size:10px;color:var(--text3);font-weight:700;letter-spacing:.5px">ALUGUEL</th>
+                    <th style="padding:10px 16px;text-align:left;font-size:10px;color:var(--text3);font-weight:700;letter-spacing:.5px">INÍCIO</th>
+                    <th style="padding:10px 16px;text-align:left;font-size:10px;color:var(--text3);font-weight:700;letter-spacing:.5px">STATUS</th>
+                    <th style="padding:10px 16px;text-align:left;font-size:10px;color:var(--text3);font-weight:700;letter-spacing:.5px">COMISSÃO</th>
                   </tr>
                 </thead>
                 <tbody>${histHtml}</tbody>
               </table>
             </div>
             <!-- Footer: editar comissão -->
-            <div style="padding:14px 22px;display:flex;align-items:center;gap:10px;background:#0a0c12;flex-wrap:wrap">
+            <div style="padding:14px 22px;display:flex;align-items:center;gap:10px;background:var(--s3);flex-wrap:wrap">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               <span style="font-size:12px;color:#555">Taxa de conversão: <strong style="color:${convRate>=50?'#4CAF50':convRate>=25?'#FFD54F':'#888'}">${convRate}%</strong></span>
               <span style="margin-left:auto;font-size:12px;color:#555">Comissão:</span>
               <input type="number" min="0" max="100" step="0.5" value="${commPct}"
-                style="width:66px;background:#12151e;border:1.5px solid #2a2d3e;color:#e0e0e0;padding:6px 10px;border-radius:8px;font-size:13px;font-weight:700;outline:none;text-align:center"
+                style="width:66px;background:var(--s2);border:1.5px solid var(--border2);color:var(--text1);padding:6px 10px;border-radius:8px;font-size:13px;font-weight:700;outline:none;text-align:center"
                 onchange="saveBrokerCommission('${b.id}', this.value)"
-                onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+                onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
               <span style="font-size:13px;color:#555">%</span>
             </div>
           </div>`;
@@ -2359,7 +2397,7 @@
 
       wrap.innerHTML = `
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px">
-          <div style="background:#12151e;border:1px solid #1e2130;border-radius:16px;padding:18px 20px;display:flex;align-items:center;gap:14px">
+          <div style="background:var(--s2);border:1px solid var(--border);border-radius:16px;padding:18px 20px;display:flex;align-items:center;gap:14px">
             <div style="width:40px;height:40px;border-radius:12px;background:#0d1a2a;display:flex;align-items:center;justify-content:center;flex-shrink:0">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64B5F6" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             </div>
@@ -2368,7 +2406,7 @@
               <div style="font-size:11px;color:#555;font-weight:700;letter-spacing:.5px;margin-top:3px">CORRETORES<br><span style="color:#444;font-weight:500">${activeCount} ativos</span></div>
             </div>
           </div>
-          <div style="background:#12151e;border:1px solid #1e2130;border-radius:16px;padding:18px 20px;display:flex;align-items:center;gap:14px">
+          <div style="background:var(--s2);border:1px solid var(--border);border-radius:16px;padding:18px 20px;display:flex;align-items:center;gap:14px">
             <div style="width:40px;height:40px;border-radius:12px;background:#0d2b0d;display:flex;align-items:center;justify-content:center;flex-shrink:0">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4CAF50" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
             </div>
@@ -2377,13 +2415,13 @@
               <div style="font-size:11px;color:#555;font-weight:700;letter-spacing:.5px;margin-top:3px">LEADS TOTAIS<br><span style="color:#444;font-weight:500">${totalApproved} aprovados</span></div>
             </div>
           </div>
-          <div style="background:#12151e;border:1px solid #1e2130;border-radius:16px;padding:18px 20px;display:flex;align-items:center;gap:14px">
+          <div style="background:var(--s2);border:1px solid var(--border);border-radius:16px;padding:18px 20px;display:flex;align-items:center;gap:14px">
             <div style="width:40px;height:40px;border-radius:12px;background:#1a1500;display:flex;align-items:center;justify-content:center;flex-shrink:0">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFD54F" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
             </div>
             <div>
-              <div style="font-size:22px;font-weight:800;color:#FFD54F;line-height:1">${fmt(totalComm)}</div>
-              <div style="font-size:11px;color:#555;font-weight:700;letter-spacing:.5px;margin-top:3px">COMISSÕES/MÊS<br><span style="color:#444;font-weight:500">Total da equipe</span></div>
+              <div style="font-size:22px;font-weight:800;color:var(--accent3);line-height:1">${fmt(totalComm)}</div>
+              <div style="font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.5px;margin-top:3px">COMISSÕES/MÊS<br><span style="color:var(--text2);font-weight:500">Total da equipe</span></div>
             </div>
           </div>
         </div>
@@ -3388,12 +3426,13 @@
     const gap     = Math.floor(chartW / keys.length);
 
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#1a1d2e';
+    const _cs = getComputedStyle(document.documentElement);
+    ctx.fillStyle = _cs.getPropertyValue('--s4').trim() || '#1a1d2e';
     ctx.fillRect(0, 0, W, H);
 
     // Grid lines
     const gridSteps = 4;
-    ctx.strokeStyle = '#2a2d3e';
+    ctx.strokeStyle = _cs.getPropertyValue('--border2').trim() || '#2a2d3e';
     ctx.lineWidth = 1;
     ctx.fillStyle = '#555';
     ctx.font = '11px system-ui';
@@ -3485,8 +3524,13 @@
       const leadDocs      = (tenantLeadId && leadDocsMap[tenantLeadId]) || [];
       const docsCount     = Object.keys(docs).length + leadDocs.length;
       const row = document.createElement('tr');
+      const _tInits = (t.name || '?').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?';
+      const _tAvDiv = `width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--s3);border:1px solid var(--border2);overflow:hidden`;
+      const _tAvHtml = t.photoUrl
+        ? `<div data-tenant-avatar="${t.id}" style="${_tAvDiv}"><img src="${esc(t.photoUrl)}" alt="${_tInits}" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\\'font-size:12px;font-weight:700;color:var(--text2)\\'>${_tInits}</span>')"></div>`
+        : `<div data-tenant-avatar="${t.id}" style="${_tAvDiv}">${_tInits}</div>`;
       row.innerHTML = `
-        <td>${esc(t.name) || '—'}</td>
+        <td><div style="display:flex;align-items:center;gap:8px">${_tAvHtml}<span>${esc(t.name) || '—'}</span></div></td>
         <td style="font-size:12px;color:#888">${esc(t.email) || '—'}</td>
         <td style="font-size:12px">${property}</td>
         <td>${rent}</td>
@@ -3773,7 +3817,7 @@
     $('history-list').innerHTML = `
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead>
-          <tr style="border-bottom:1px solid #2a2d3e">
+          <tr style="border-bottom:1px solid var(--border2)">
             <th style="text-align:left;padding:8px 6px;color:#888;font-weight:500">Mês</th>
             <th style="text-align:left;padding:8px 6px;color:#888;font-weight:500">Vencimento</th>
             <th style="text-align:right;padding:8px 6px;color:#888;font-weight:500">Total</th>
@@ -4592,7 +4636,7 @@
   $('btn-logout').addEventListener('click', () => signOut(auth));
 
   // ── Theme system ─────────────────────────────────────────────────────────────
-  (function(){var K='ilocarpay-theme';function g(){try{var v=localStorage.getItem(K);return(v==='light'||v==='dark')?v:window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';}catch(e){return'dark';}}function a(p){document.documentElement.setAttribute('data-theme',p);var btn=document.getElementById('btn-theme-toggle');if(btn)btn.textContent=p==='dark'?'☾ Escuro':'☀ Claro';}a(g());document.addEventListener('DOMContentLoaded',function(){var btn=document.getElementById('btn-theme-toggle');if(btn){var cur=document.documentElement.getAttribute('data-theme')||'dark';btn.textContent=cur==='dark'?'☾ Escuro':'☀ Claro';}});})();
+  (function(){var K='ilocarpay-theme';function g(){try{var v=localStorage.getItem(K);return(v==='light'||v==='dark')?v:window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';}catch(e){return'dark';}}function a(p){document.documentElement.setAttribute('data-theme',p);var btn=document.getElementById('btn-theme-toggle');if(btn)btn.textContent=p==='dark'?'☾':'☀';}a(g());document.addEventListener('DOMContentLoaded',function(){var btn=document.getElementById('btn-theme-toggle');if(btn){var cur=document.documentElement.getAttribute('data-theme')||'dark';btn.textContent=cur==='dark'?'☾':'☀';}});})();
 
   // OTP login
   let otpEmail = '';
@@ -4764,7 +4808,7 @@
     const toast = document.createElement('div');
     toast.style.cssText = `
       position:fixed;top:20px;right:20px;z-index:9999;
-      background:#1a1d2e;border:1px solid #1565c0;border-radius:12px;
+      background:var(--s4);border:1px solid #1565c0;border-radius:12px;
       padding:14px 18px;min-width:260px;max-width:340px;
       box-shadow:0 8px 32px rgba(0,0,0,.6);
       animation:slideIn .3s ease;
@@ -4773,7 +4817,7 @@
       <div style="display:flex;align-items:flex-start;gap:10px">
         <div style="font-size:22px">💬</div>
         <div style="flex:1">
-          <div style="font-weight:700;color:#e0e0e0;font-size:14px">Nova mensagem</div>
+          <div style="font-weight:700;color:var(--text1);font-size:14px">Nova mensagem</div>
           <div style="color:#90caf9;font-size:12px;margin-top:2px">${c.tenantName || c.tenantEmail || 'Inquilino'} · #${shortId}</div>
           <div style="color:#b0b3c6;font-size:12px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px">${c.lastMessage || ''}</div>
         </div>
@@ -4891,7 +4935,7 @@
     const ab = $('ch-action-btn');
     if (ab) {
       if (c.status === 'resolved') {
-        ab.textContent = '↩ Reabrir'; ab.style.background = '#2a2d3e'; ab.style.color = '#aaa'; ab.style.borderColor = '#3a3d52';
+        ab.textContent = '↩ Reabrir'; ab.style.background = 'var(--border2)'; ab.style.color = '#aaa'; ab.style.borderColor = 'var(--border2)';
         ab.onclick = () => updateChamadoStatus(chamadoId, 'open');
       } else if (c.status === 'open') {
         ab.textContent = '▶ Iniciar'; ab.style.background = '#ffb74d22'; ab.style.color = '#ffb74d'; ab.style.borderColor = '#ffb74d44';
@@ -4925,7 +4969,7 @@
     const el = $('ch-msgs');
     if (!el) return;
     if (!msgs.length) {
-      el.innerHTML = '<div style="text-align:center;color:#3a3d52;font-size:13px;padding:40px 0">Nenhuma mensagem ainda. Inicie a conversa!</div>';
+      el.innerHTML = '<div style="text-align:center;color:var(--border2);font-size:13px;padding:40px 0">Nenhuma mensagem ainda. Inicie a conversa!</div>';
       return;
     }
     el.innerHTML = msgs.map(m => {
@@ -5054,7 +5098,12 @@
   let _bcdBrokerId = null;
   let _bcdChatId   = null;
   let _bcdListener = null;
+  const _bcdBrokerCache = {};
   let _bcdUnreadListener = null;
+  let _brokersRealtimeUnsub = null;
+  const _tcdTenantCache = {};
+  let _tenantsRealtimeUnsub = null;
+  let _ownerRealtimeUnsub = null;
 
   // Listener global de mensagens não lidas de corretores
   // Rastreia unreadOwner anterior por brokerId para detectar mensagens NOVAS
@@ -5075,7 +5124,7 @@
       <div style="font-size:26px;flex-shrink:0">💬</div>
       <div style="flex:1;overflow:hidden">
         <div style="font-size:13px;font-weight:700;color:#90caf9;margin-bottom:2px">Nova mensagem de corretor</div>
-        <div style="font-size:12px;font-weight:600;color:#e0e0e0;margin-bottom:3px">${_esc(brokerName)}</div>
+        <div style="font-size:12px;font-weight:600;color:var(--text1);margin-bottom:3px">${_esc(brokerName)}</div>
         <div style="font-size:12px;color:#aaa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(lastMessage)}</div>
       </div>
       <button onclick="document.getElementById('${id}').remove()" style="background:none;border:none;color:#555;font-size:18px;cursor:pointer;flex-shrink:0;padding:0;margin-top:-2px">×</button>`;
@@ -5097,6 +5146,125 @@
     } catch (_) {}
     // Auto-remove após 8s
     setTimeout(() => { if (document.getElementById(id)) document.getElementById(id).remove(); }, 8000);
+  }
+
+  // ── Broker realtime photo/data listener ──────────────────────────────────
+  function _updateBrokerAvatarInDom(brokerId, photoUrl, name) {
+    const initials = (name || '?').split(' ').filter(Boolean).slice(0,2).map(w => w[0]).join('').toUpperCase();
+    const _mkImg = (url, size, radius) =>
+      `<img src="${url}" alt="${initials}" style="width:${size};height:${size};border-radius:${radius};object-fit:cover;display:block"` +
+      ` onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\\'display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:17px;font-weight:800;color:#4CAF50;letter-spacing:-.5px\\'>${initials}</span>')">`;
+    // Cards corretores
+    document.querySelectorAll(`[data-broker-avatar="${brokerId}"]`).forEach(wrap => {
+      if (photoUrl) {
+        wrap.style.background = ''; wrap.style.overflow = 'hidden';
+        wrap.innerHTML = _mkImg(photoUrl, '100%', 'inherit');
+      } else {
+        wrap.style.overflow = '';
+        wrap.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:17px;font-weight:800;color:#4CAF50;letter-spacing:-.5px">${initials}</span>`;
+      }
+    });
+    // Chat header (se esse broker estiver ativo)
+    if (_bcdBrokerId === brokerId) {
+      const wrap = document.getElementById('bcd-avatar-wrap');
+      if (wrap) {
+        if (photoUrl) {
+          wrap.innerHTML = _mkImg(photoUrl, '38px', '50%').replace('inherit', '50%');
+        } else {
+          wrap.innerHTML = `<span class="bcd-avatar-initials">${initials}</span>`;
+        }
+      }
+    }
+  }
+
+  function startBrokersRealtimeListener() {
+    if (_brokersRealtimeUnsub) { _brokersRealtimeUnsub(); _brokersRealtimeUnsub = null; }
+    if (!currentOwnerId) return;
+    const db = getFirestore();
+    const q = query(collection(db, 'brokers'), where('ownerId', '==', currentOwnerId));
+    _brokersRealtimeUnsub = onSnapshot(q, snap => {
+      snap.docChanges().forEach(change => {
+        if (change.type === 'removed') return;
+        const data = { id: change.doc.id, ...change.doc.data() };
+        _bcdBrokerCache[data.id] = data;
+        _updateBrokerAvatarInDom(data.id, data.photoUrl, data.name);
+      });
+    }, err => {
+      console.warn('BROKER_REALTIME_LISTENER_ERROR', err.code || err.message);
+    });
+  }
+
+  function _updateTenantAvatarInDom(tenantId, photoUrl, name) {
+    const initials = (name || '?').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?';
+    const _mkImg = (url, size, radius) =>
+      `<img src="${url}" alt="${initials}" style="width:${size};height:${size};border-radius:${radius};object-fit:cover;display:block"` +
+      ` onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\\'font-size:12px;font-weight:700;color:var(--text2)\\'>${initials}</span>')">`;
+    document.querySelectorAll(`[data-tenant-avatar="${tenantId}"]`).forEach(wrap => {
+      if (photoUrl) {
+        wrap.style.background = ''; wrap.style.overflow = 'hidden';
+        wrap.innerHTML = _mkImg(photoUrl, '100%', 'inherit');
+      } else {
+        wrap.style.overflow = '';
+        wrap.innerHTML = `<span style="font-size:12px;font-weight:700;color:var(--text2)">${initials}</span>`;
+      }
+    });
+    if (_tcdTenantId === tenantId) {
+      const wrap = document.getElementById('tcd-avatar-wrap');
+      if (wrap) {
+        wrap.innerHTML = photoUrl
+          ? _mkImg(photoUrl, '38px', '50%')
+          : `<span class="bcd-avatar-initials">${initials}</span>`;
+      }
+    }
+  }
+
+  function startTenantsRealtimeListener() {
+    if (_tenantsRealtimeUnsub) { _tenantsRealtimeUnsub(); _tenantsRealtimeUnsub = null; }
+    if (!currentOwnerId) return;
+    const db = getFirestore();
+    const q = query(collection(db, 'users'), where('ownerId', '==', currentOwnerId), where('role', '==', 'tenant'));
+    _tenantsRealtimeUnsub = onSnapshot(q, snap => {
+      snap.docChanges().forEach(change => {
+        if (change.type === 'removed') return;
+        const data = { id: change.doc.id, ...change.doc.data() };
+        _tcdTenantCache[data.id] = data;
+        _updateTenantAvatarInDom(data.id, data.photoUrl, data.name);
+      });
+    }, err => {
+      console.warn('TENANT_REALTIME_LISTENER_ERROR', err.code || err.message);
+    });
+  }
+
+  function _updateHeaderLogo(logoUrl) {
+    const wrap = document.getElementById('header-owner-logo');
+    if (!wrap) return;
+    const ownerName = currentOwnerData?.companyName || currentOwnerData?.name || '';
+    const initials = ownerName.split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase() || '??';
+    if (logoUrl) {
+      wrap.innerHTML = `<img src="${esc(logoUrl)}" alt="${esc(ownerName)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\\'font-size:11px;font-weight:700;color:var(--text2)\\'>${initials}</span>')">`;
+      wrap.style.display = 'flex';
+    } else if (ownerName) {
+      wrap.innerHTML = `<span style="font-size:11px;font-weight:700;color:var(--text2)">${initials}</span>`;
+      wrap.style.display = 'flex';
+    } else {
+      wrap.style.display = 'none';
+    }
+  }
+
+  function startOwnerRealtimeListener() {
+    if (_ownerRealtimeUnsub) { _ownerRealtimeUnsub(); _ownerRealtimeUnsub = null; }
+    if (!currentOwnerId) return;
+    const db = getFirestore();
+    _ownerRealtimeUnsub = onSnapshot(doc(db, 'owners', currentOwnerId), snap => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (data.logoUrl !== undefined) {
+        loadOwnerLogoUI(data.logoUrl || '');
+        _updateHeaderLogo(data.logoUrl || '');
+      }
+    }, err => {
+      console.warn('OWNER_REALTIME_LISTENER_ERROR', err.code || err.message);
+    });
   }
 
   function startBrokerChatUnreadListener() {
@@ -5144,6 +5312,33 @@
     _bcdBrokerId = brokerId;
     _bcdChatId   = currentOwnerId + '_' + brokerId;
     document.getElementById('bcd-broker-name').textContent = brokerName;
+    // Avatar: foto real ou iniciais
+    const _bcdAvatarWrap = document.getElementById('bcd-avatar-wrap');
+    if (_bcdAvatarWrap) {
+      const initials = (brokerName || '?').split(' ').filter(Boolean).slice(0,2).map(w => w[0]).join('').toUpperCase();
+      function _applyBcdAvatar(photoUrl) {
+        if (!_bcdAvatarWrap) return;
+        if (photoUrl) {
+          _bcdAvatarWrap.innerHTML = `<img src="${photoUrl}" alt="${initials}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;display:block" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=\\'bcd-avatar-initials\\'>${initials}</span>')">`;
+        } else {
+          _bcdAvatarWrap.innerHTML = `<span class="bcd-avatar-initials">${initials}</span>`;
+        }
+      }
+      const cached = _bcdBrokerCache[brokerId];
+      if (cached) {
+        _applyBcdAvatar(cached.photoUrl);
+      } else {
+        _applyBcdAvatar(null); // iniciais temporárias
+        const _db = getFirestore();
+        getDoc(doc(_db, 'brokers', brokerId)).then(snap => {
+          if (snap.exists()) {
+            const data = snap.data();
+            _bcdBrokerCache[brokerId] = { id: brokerId, ...data };
+            if (document.getElementById('bcd-avatar-wrap') === _bcdAvatarWrap) _applyBcdAvatar(data.photoUrl);
+          }
+        }).catch(() => {});
+      }
+    }
     document.getElementById('broker-chat-drawer').classList.add('open');
     document.getElementById('broker-chat-overlay').classList.add('open');
     document.getElementById('bcd-msgs').innerHTML =
@@ -5185,6 +5380,16 @@
     _tcdTenantName = tenantName;
     _tcdContractId = contractId || null;
     document.getElementById('tcd-tenant-name').textContent = tenantName;
+    const _tcdAvatarWrap = document.getElementById('tcd-avatar-wrap');
+    if (_tcdAvatarWrap) {
+      const _tInits = (tenantName || '?').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?';
+      const cached = _tcdTenantCache[tenantId];
+      if (cached?.photoUrl) {
+        _tcdAvatarWrap.innerHTML = `<img src="${esc(cached.photoUrl)}" alt="${_tInits}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;display:block" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=\\'bcd-avatar-initials\\'>${_tInits}</span>')">`;
+      } else {
+        _tcdAvatarWrap.innerHTML = `<span class="bcd-avatar-initials">${_tInits}</span>`;
+      }
+    }
     document.getElementById('tenant-chat-drawer').classList.add('open');
     document.getElementById('tenant-chat-overlay').classList.add('open');
     document.getElementById('tcd-msgs').innerHTML =
@@ -5440,7 +5645,7 @@
     const toast = document.createElement('div');
     toast.style.cssText = `
       position:fixed;top:20px;right:20px;z-index:9999;
-      background:#1a1d2e;border:1px solid #ef5350;border-radius:12px;
+      background:var(--s4);border:1px solid #ef5350;border-radius:12px;
       padding:16px 20px;min-width:280px;max-width:360px;
       box-shadow:0 8px 32px rgba(0,0,0,.6);
       animation:slideIn .3s ease;
@@ -5450,7 +5655,7 @@
         <div style="font-size:24px">🔧</div>
         <div style="flex:1">
           <div style="font-weight:700;color:#fff;font-size:14px;margin-bottom:4px">Novo chamado #${shortId}</div>
-          <div style="color:#aaa;font-size:13px;margin-bottom:2px"><b style="color:#e0e0e0">${c.tenantName || c.tenantEmail || 'Inquilino'}</b></div>
+          <div style="color:#aaa;font-size:13px;margin-bottom:2px"><b style="color:var(--text1)">${c.tenantName || c.tenantEmail || 'Inquilino'}</b></div>
           <div style="color:#888;font-size:12px">${c.category || ''} — ${(c.description||'').slice(0,60)}${(c.description||'').length>60?'…':''}</div>
         </div>
         <button onclick="this.closest('div[data-toast]').remove()" style="background:none;border:none;color:#888;cursor:pointer;font-size:18px;padding:0;line-height:1">×</button>
@@ -5507,16 +5712,16 @@
           <h2 style="margin-bottom:8px">Licenças de Admin</h2>
           <p style="color:#888;font-size:13px;margin-bottom:16px">Emails que podem acessar o app como admin. Owners cadastrados têm acesso automático.</p>
           <div style="display:flex;gap:8px;margin-bottom:24px">
-            <input id="lic-email-input" type="email" placeholder="novo@email.com" style="flex:1;background:#1a1d2e;border:1px solid #3a3d52;color:#e0e0e0;border-radius:6px;padding:8px 12px;font-size:13px">
+            <input id="lic-email-input" type="email" placeholder="novo@email.com" style="flex:1;background:var(--s4);border:1px solid var(--border2);color:var(--text1);border-radius:6px;padding:8px 12px;font-size:13px">
             <button class="btn" onclick="addLicense()">+ Adicionar</button>
           </div>
           <p id="lic-msg" style="font-size:13px;margin-bottom:16px;display:none"></p>
         </div>
 
         <h3 style="font-size:13px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Licenças manuais</h3>
-        <div style="border:1px solid #2a2d3e;border-radius:8px;overflow:hidden;margin-bottom:24px">
+        <div style="border:1px solid var(--border2);border-radius:8px;overflow:hidden;margin-bottom:24px">
           ${licenses.length === 0 ? '<p style="padding:16px;color:#555;font-size:13px">Nenhuma licença cadastrada.</p>' : licenses.map(l => `
-          <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid #2a2d3e;gap:12px">
+          <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border2);gap:12px">
             <div style="flex:1">
               <div style="font-size:14px">${l.id}</div>
               <div style="font-size:12px;color:${l.active ? '#81c784' : '#ef9a9a'};margin-top:2px">${l.active ? '✓ Ativo' : '✗ Inativo'}</div>
@@ -5527,9 +5732,9 @@
         </div>
 
         <h3 style="font-size:13px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Owners cadastrados (acesso automático)</h3>
-        <div style="border:1px solid #2a2d3e;border-radius:8px;overflow:hidden">
+        <div style="border:1px solid var(--border2);border-radius:8px;overflow:hidden">
           ${owners.length === 0 ? '<p style="padding:16px;color:#555;font-size:13px">Nenhum owner cadastrado.</p>' : owners.map(o => `
-          <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid #2a2d3e;gap:12px">
+          <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border2);gap:12px">
             <div style="flex:1">
               <div style="font-size:14px">${o.email || '—'}</div>
               <div style="font-size:12px;color:#888;margin-top:2px">${o.name || ''} · ID: ${o.id}</div>
@@ -5740,7 +5945,12 @@
   }
 
   onAuthStateChanged(auth, async user => {
-    if (!user) { showSection('login-section'); return; }
+    if (!user) {
+      if (_brokersRealtimeUnsub) { _brokersRealtimeUnsub(); _brokersRealtimeUnsub = null; }
+      if (_tenantsRealtimeUnsub) { _tenantsRealtimeUnsub(); _tenantsRealtimeUnsub = null; }
+      if (_ownerRealtimeUnsub) { _ownerRealtimeUnsub(); _ownerRealtimeUnsub = null; }
+      showSection('login-section'); return;
+    }
     localStorage.setItem('ilp_visited', '1');
     $('user-email').textContent = user.email;
 
@@ -5763,6 +5973,9 @@
     startLeadsBadge();
     if (currentOwnerId) startChamadosListener(currentOwnerId);
     startBrokerChatUnreadListener();
+    startBrokersRealtimeListener();
+    startTenantsRealtimeListener();
+    startOwnerRealtimeListener();
     // Inicializa FCM Web Push e salva token do owner no Firestore
     initFcmWebPush();
 
@@ -5800,6 +6013,7 @@
     --blue:        #3b82f6;
     --blue-bg:     rgba(59,130,246,0.10);
     --purple:      #8b5cf6;
+    --header-bg:   rgba(10,13,22,0.90);
     --sidebar-w:   240px;
     --header-h:    60px;
     --r:           12px;
@@ -5807,6 +6021,7 @@
     --r-lg:        16px;
   }
   html[data-theme="light"] {
+    --header-bg:   rgba(244,246,251,0.92);
     --bg:          #F4F6FB;
     --s1:          #FFFFFF;
     --s2:          #F0F2F9;
@@ -5815,13 +6030,16 @@
     --border:      rgba(0,0,0,.08);
     --border2:     rgba(0,0,0,.14);
     --text1:       #0F1225;
-    --text2:       #4A5280;
-    --text3:       #9099C0;
-    --accent-bg:   rgba(5,150,105,.08);
-    --accent-glow: rgba(5,150,105,.14);
-    --danger-bg:   rgba(244,63,94,.08);
-    --warn-bg:     rgba(245,158,11,.08);
-    --blue-bg:     rgba(59,130,246,.08);
+    --text2:       #3D4574;
+    --text3:       #5B6690;
+    --accent2:     #059669;
+    --accent3:     #047857;
+    --accent-bg:   rgba(5,150,105,.10);
+    --accent-glow: rgba(5,150,105,.18);
+    --danger-bg:   rgba(244,63,94,.10);
+    --warn:        #92400e;
+    --warn-bg:     rgba(146,64,14,.10);
+    --blue-bg:     rgba(59,130,246,.10);
   }
   .ip-theme-toggle-wrap { display:flex; gap:4px; align-items:center; }
   .ip-theme-opt { background:var(--s2); border:1px solid var(--border2); color:var(--text2); height:32px; padding:0 10px; border-radius:8px; cursor:pointer; font-size:12px; transition:background .15s,color .15s; white-space:nowrap; }
@@ -5848,7 +6066,7 @@
   /* ── Header ── */
   header {
     position: fixed; top: 0; left: 0; right: 0; height: var(--header-h);
-    background: rgba(10,13,22,0.90); backdrop-filter: blur(16px) saturate(1.4);
+    background: var(--header-bg); backdrop-filter: blur(16px) saturate(1.4);
     -webkit-backdrop-filter: blur(16px) saturate(1.4);
     border-bottom: 1px solid var(--border);
     display: flex; align-items: center; justify-content: space-between;
@@ -5965,10 +6183,12 @@
   .btn-sm-alt:hover { border-color: rgba(16,185,129,0.35); color: var(--accent3); }
 
   /* ── Chat Drawers ── */
-  #broker-chat-drawer, #tenant-chat-drawer { position: fixed; top: 0; right: 0; width: 380px; height: 100vh; background: var(--s1); border-left: 1px solid var(--border); display: flex; flex-direction: column; z-index: 500; transform: translateX(100%); transition: transform .28s cubic-bezier(.4,0,.2,1); box-shadow: -12px 0 48px rgba(0,0,0,.55); }
-  #broker-chat-drawer.open, #tenant-chat-drawer.open { transform: translateX(0); }
+  #broker-chat-drawer, #tenant-chat-drawer { position: fixed; top: 0; right: 0; width: 380px; height: 100vh; background: var(--s1); border-left: 1px solid var(--border); display: flex; flex-direction: column; z-index: 500; transform: translateX(100%); transition: transform .28s cubic-bezier(.4,0,.2,1); box-shadow: none; }
+  #broker-chat-drawer.open, #tenant-chat-drawer.open { transform: translateX(0); box-shadow: -12px 0 48px rgba(0,0,0,.55); }
+  html[data-theme="light"] #broker-chat-drawer.open, html[data-theme="light"] #tenant-chat-drawer.open { box-shadow: -8px 0 32px rgba(0,0,0,.18); }
   #broker-chat-drawer .bcd-header, #tenant-chat-drawer .bcd-header { padding: 16px 18px; background: var(--s2); border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; align-items: center; gap: 12px; }
-  #broker-chat-drawer .bcd-avatar, #tenant-chat-drawer .bcd-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--blue-bg); border: 1px solid rgba(59,130,246,0.2); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+  #broker-chat-drawer .bcd-avatar, #tenant-chat-drawer .bcd-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--s3); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; overflow: hidden; }
+  .bcd-avatar-initials { font-size: 13px; font-weight: 700; color: var(--text2); letter-spacing: -.3px; }
   #broker-chat-drawer .bcd-info, #tenant-chat-drawer .bcd-info { flex: 1; min-width: 0; }
   #broker-chat-drawer .bcd-name, #tenant-chat-drawer .bcd-name { font-size: 14px; font-weight: 700; color: var(--text1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #broker-chat-drawer .bcd-sub,  #tenant-chat-drawer .bcd-sub  { font-size: 11px; color: var(--text3); margin-top: 1px; }
@@ -5978,9 +6198,9 @@
   #broker-chat-drawer .bcd-msgs::-webkit-scrollbar, #tenant-chat-drawer .bcd-msgs::-webkit-scrollbar { width: 4px; }
   #broker-chat-drawer .bcd-msgs::-webkit-scrollbar-thumb, #tenant-chat-drawer .bcd-msgs::-webkit-scrollbar-thumb { background: var(--s4); border-radius: 2px; }
   #broker-chat-drawer .bcd-input-row, #tenant-chat-drawer .bcd-input-row { padding: 10px 12px; background: var(--s2); border-top: 1px solid var(--border); flex-shrink: 0; display: flex; gap: 8px; align-items: flex-end; }
-  #bcd-input, #tcd-input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text1); border-radius: var(--r-sm); padding: 9px 12px; font-size: 13px; outline: none; resize: none; line-height: 1.5; max-height: 80px; font-family: inherit; transition: border-color .15s; }
+  #bcd-input, #tcd-input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text1); border-radius: var(--r-sm); padding: 10px 12px; font-size: 13px; outline: none; resize: none; line-height: 1.4; min-height: 40px; max-height: 80px; box-sizing: border-box; font-family: inherit; transition: border-color .15s; overflow: hidden; }
   #bcd-input:focus, #tcd-input:focus { border-color: rgba(59,130,246,0.4); }
-  #bcd-send, #tcd-send { background: var(--blue); color: #fff; border: none; border-radius: var(--r-sm); padding: 0 16px; height: 38px; font-size: 13px; font-weight: 600; cursor: pointer; flex-shrink: 0; transition: background .15s; font-family: inherit; }
+  #bcd-send, #tcd-send { background: var(--blue); color: #fff; border: none; border-radius: var(--r-sm); padding: 0 16px; height: 40px; font-size: 13px; font-weight: 600; cursor: pointer; flex-shrink: 0; transition: background .15s; font-family: inherit; }
   #bcd-send:hover, #tcd-send:hover { background: #2563eb; }
   #bcd-send:disabled, #tcd-send:disabled { background: var(--s4); color: var(--text3); cursor: not-allowed; }
   #broker-chat-overlay, #tenant-chat-overlay { position: fixed; inset: 0; z-index: 499; display: none; }
@@ -6085,7 +6305,7 @@
   .upcoming-item:first-child { border-top: none; padding-top: 0; }
   .due-badge  { padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 700; flex-shrink: 0; }
   .due-today  { background: var(--danger-bg); color: #fca5a5; }
-  .due-soon   { background: var(--warn-bg);   color: #fcd34d; }
+  .due-soon   { background: var(--warn-bg);   color: var(--warn); }
   .due-normal { background: var(--accent-bg); color: #86efac; }
   .quick-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
@@ -6128,6 +6348,150 @@
   html[data-theme="light"] .ll-stat-num  { color: #fff; }
   @media (max-width: 860px) { #login-section { grid-template-columns: 1fr; } .login-left { display: none; } .login-right { padding: 40px 28px; } }
   @media (max-width: 768px) { :root { --sidebar-w: 0px; } .tabs { display: none; } #dashboard-section { margin-left: 0; } }
+
+  /* ── Light mode component overrides ── */
+  html[data-theme="light"] .tab:hover { background: rgba(0,0,0,0.04); }
+  html[data-theme="light"] .tab.active { color: #047857; }
+  html[data-theme="light"] .tab.active::after { background: linear-gradient(180deg, #047857, #065f46); box-shadow: 0 0 8px rgba(5,150,105,0.4); }
+  html[data-theme="light"] .tab-icon { opacity: 0.6; }
+  html[data-theme="light"] .tab:hover .tab-icon { opacity: 0.85; }
+  html[data-theme="light"] .sidebar-label { opacity: 1; }
+  html[data-theme="light"] tr:hover td { background: rgba(0,0,0,0.025); }
+  html[data-theme="light"] .badge.active { color: #047857; }
+  html[data-theme="light"] .badge.inactive { color: #b91c1c; }
+  html[data-theme="light"] .badge.digital { color: #1d4ed8; }
+  html[data-theme="light"] .ch-filter-btn.active,
+  html[data-theme="light"] .ch-filter-btn:hover { color: #1d4ed8; }
+  html[data-theme="light"] .ch-ticket-card .ch-card-category { color: #1d4ed8; }
+  html[data-theme="light"] .plan-banner-warning { color: #92400e; }
+  html[data-theme="light"] .plan-banner-error   { color: #9b1c1c; }
+  html[data-theme="light"] .due-today  { color: #9b1c1c; }
+  html[data-theme="light"] .due-soon   { color: #78350f; }
+  html[data-theme="light"] .due-normal { color: #065f46; }
+  html[data-theme="light"] .toast.success { color: #065f46; }
+  html[data-theme="light"] .toast.error   { color: #9b1c1c; }
+  html[data-theme="light"] .toast.info    { color: #065f46; }
+  html[data-theme="light"] #ch-msgs .ch-ticks.read { color: #059669; }
+  html[data-theme="light"] .recent-value { color: #047857; }
+  html[data-theme="light"] .metric-card--link:hover { box-shadow: 0 8px 24px rgba(0,0,0,.10), 0 0 0 1px rgba(5,150,105,.20); }
+  /* Warning color: global catch para #FFD54F e #f59e0b inline em light mode */
+  html[data-theme="light"] [style*="color:#FFD54F"] { color: #92400e !important; }
+  html[data-theme="light"] [style*="color:#f59e0b"] { color: #92400e !important; }
+  html[data-theme="light"] [style*="color:#fcd34d"] { color: #92400e !important; }
+
+  /* === LIGHT MODE: broker tab ================================================ */
+  html[data-theme="light"] #brokers-tab-content table thead tr { background: var(--s3) !important; }
+  html[data-theme="light"] #brokers-tab-content table thead th { color: var(--text3) !important; background: var(--s3) !important; }
+  /* Broker card footer + table dark-bg rows */
+  html[data-theme="light"] #brokers-tab-content [style*="background:#0a0c12"] { background: var(--s3) !important; }
+  html[data-theme="light"] #brokers-tab-content [style*="background:#0a0c12"] * { color: var(--text2) !important; }
+  /* COMISSÃO/MÊS KPI cell */
+  html[data-theme="light"] #brokers-tab-content [style*="background:#0d1a0d"] { background: var(--accent-bg) !important; }
+  /* Chat button dark bg */
+  html[data-theme="light"] #brokers-tab-content [style*="background:#0d1a2a"] { background: var(--blue-bg) !important; border-color: rgba(59,130,246,0.35) !important; color: #1d4ed8 !important; }
+  /* KPI icon bg boxes (summary cards) */
+  html[data-theme="light"] #brokers-tab-content [style*="background:#0d2b0d"] { background: var(--accent-bg) !important; }
+  html[data-theme="light"] #brokers-tab-content [style*="background:#1a1500"] { background: rgba(245,158,11,.10) !important; }
+  /* Active/inactive badges */
+  html[data-theme="light"] #brokers-tab-content [style*="background:#0d2b0d"][style*="#4CAF50"] { background: var(--accent-bg) !important; color: #047857 !important; border-color: rgba(5,150,105,.35) !important; }
+  html[data-theme="light"] #brokers-tab-content [style*="background:#2a1212"] { background: var(--danger-bg) !important; color: #b91c1c !important; border-color: rgba(185,28,28,.3) !important; }
+  /* Broker name */
+  html[data-theme="light"] #brokers-tab-content [style*="color:#f0f0f0"] { color: var(--text1) !important; }
+  /* Menu items */
+  html[data-theme="light"] #brokers-tab-content [style*="color:#ccc"] { color: var(--text2) !important; }
+  /* Commission in yellow (invisible on light) */
+  html[data-theme="light"] #brokers-tab-content [style*="color:#FFD54F"] { color: var(--accent3) !important; }
+  /* Contract status cells */
+  html[data-theme="light"] #brokers-tab-content [style*="background:#1a3a1a"][style*="#4CAF50"] { background: var(--accent-bg) !important; color: #047857 !important; }
+  html[data-theme="light"] #brokers-tab-content [style*="background:#2a1a1a"] { background: var(--danger-bg) !important; color: #b91c1c !important; }
+  /* Broker avatar: dark initials on dark bg */
+  html[data-theme="light"] #brokers-tab-content [style*="color:#4CAF50"][style*="font-weight:800"][style*="border-radius:14px"] { background: var(--accent-bg) !important; color: #047857 !important; border-color: rgba(5,150,105,.35) !important; }
+  /* Details modal labels */
+  html[data-theme="light"] #broker-details-modal [style*="color:#555"],
+  html[data-theme="light"] #broker-details-modal [style*="color:#444"] { color: var(--text3) !important; }
+  html[data-theme="light"] #broker-details-modal [style*="color:#aaa"] { color: var(--text2) !important; }
+
+  /* === LIGHT MODE: configurações panel ======================================= */
+  html[data-theme="light"] #panel-config [style*="color:#f0f0f0"] { color: var(--text1) !important; }
+  html[data-theme="light"] #panel-config [style*="color:#ccc"] { color: var(--text2) !important; }
+  html[data-theme="light"] #panel-config [style*="color:#aaa"] { color: var(--text3) !important; }
+  html[data-theme="light"] #panel-config [style*="color:#777"] { color: var(--text3) !important; }
+  html[data-theme="light"] #panel-config [style*="color:#555"] { color: var(--text3) !important; }
+  html[data-theme="light"] #panel-config [style*="color:#666"] { color: var(--text3) !important; }
+  /* WhatsApp button in config */
+  html[data-theme="light"] #panel-config [style*="background:#1a3a2a"] { background: rgba(37,211,102,.10) !important; }
+
+  /* === LIGHT MODE: Meu Plano panel =========================================== */
+  html[data-theme="light"] #panel-plano [style*="color:#fff"] { color: var(--text1) !important; }
+  html[data-theme="light"] #panel-plano [style*="color:#aaa"] { color: var(--text3) !important; }
+  html[data-theme="light"] #panel-plano #plano-status-box { border-color: var(--border2) !important; }
+
+  /* === LIGHT MODE: Chamados panel ============================================ */
+  html[data-theme="light"] #panel-chamados [style*="color:#fff"] { color: var(--text1) !important; }
+  html[data-theme="light"] #panel-chamados [style*="color:#333"] { color: var(--text2) !important; }
+  html[data-theme="light"] #panel-chamados [style*="color:#444"] { color: var(--text2) !important; }
+  html[data-theme="light"] #panel-chamados [style*="color:#555"] { color: var(--text3) !important; }
+  html[data-theme="light"] #panel-chamados [style*="color:#777"] { color: var(--text3) !important; }
+  html[data-theme="light"] #panel-chamados [style*="color:#aaa"] { color: var(--text3) !important; }
+  /* Chamados header area */
+  html[data-theme="light"] #panel-chamados [style*="background:#1565c0"] { background: #1d4ed8 !important; }
+  html[data-theme="light"] #panel-chamados [style*="color:#90caf9"] { color: #1d4ed8 !important; }
+  /* Category badge bg */
+  html[data-theme="light"] #panel-chamados [style*="background:#1565c015"] { background: rgba(29,78,216,.10) !important; }
+
+  /* === LIGHT MODE: modals geral ============================================== */
+  html[data-theme="light"] .modal-box [style*="color:#666"],
+  html[data-theme="light"] #broker-modal-overlay [style*="color:#666"],
+  html[data-theme="light"] #broker-edit-modal [style*="color:#666"] { color: var(--text3) !important; }
+  html[data-theme="light"] .modal-box [style*="color:#888"],
+  html[data-theme="light"] #broker-modal-overlay [style*="color:#888"],
+  html[data-theme="light"] #broker-edit-modal [style*="color:#888"] { color: var(--text3) !important; }
+  html[data-theme="light"] .modal-box [style*="color:#ccc"],
+  html[data-theme="light"] #broker-modal-overlay [style*="color:#ccc"],
+  html[data-theme="light"] #broker-edit-modal [style*="color:#ccc"] { color: var(--text2) !important; }
+  html[data-theme="light"] .modal-box [style*="color:#f0f0f0"],
+  html[data-theme="light"] #broker-modal-overlay [style*="color:#f0f0f0"],
+  html[data-theme="light"] #broker-edit-modal [style*="color:#f0f0f0"] { color: var(--text1) !important; }
+  html[data-theme="light"] .modal-box [style*="color:#aaa"],
+  html[data-theme="light"] #broker-modal-overlay [style*="color:#aaa"],
+  html[data-theme="light"] #broker-edit-modal [style*="color:#aaa"] { color: var(--text2) !important; }
+  /* Mini-window restore/close btn */
+  html[data-theme="light"] [style*="background:#3a3d4e"] { background: var(--s3) !important; color: var(--text2) !important; }
+
+  /* === WhatsApp Card ============================================================ */
+  .wa-card { background:var(--s1); border:1px solid var(--border2); border-radius:16px; padding:24px; margin-bottom:20px; }
+  .wa-card-header { display:flex; align-items:center; gap:12px; }
+  .wa-card-icon { display:flex; align-items:center; justify-content:center; width:40px; height:40px; background:rgba(37,211,102,.12); border-radius:10px; flex-shrink:0; font-size:20px; }
+  .wa-card-title-group { flex:1; min-width:0; }
+  .wa-card-title { font-size:15px; font-weight:700; color:var(--text1); }
+  .wa-card-subtitle { font-size:12px; color:var(--text3); margin-top:2px; }
+  .wa-badge { display:inline-flex; align-items:center; font-size:11px; font-weight:700; letter-spacing:.03em; padding:4px 10px; border-radius:100px; white-space:nowrap; flex-shrink:0; }
+  .wa-badge--on   { background:var(--accent-bg); color:var(--accent3); border:1px solid rgba(5,150,105,.22); }
+  .wa-badge--off  { background:var(--s3); color:var(--text3); border:1px solid var(--border2); }
+  .wa-badge--idle { background:rgba(146,64,14,.10); color:#92400e; border:1px solid rgba(146,64,14,.22); }
+  html[data-theme="dark"] .wa-badge--on   { color:#4ade80; border-color:rgba(74,222,128,.22); }
+  html[data-theme="dark"] .wa-badge--idle { background:rgba(245,158,11,.10); color:var(--warn); border-color:rgba(245,158,11,.22); }
+  .wa-divider { border:none; border-top:1px solid var(--border); margin:18px 0; }
+  .wa-status-box { display:flex; align-items:center; gap:14px; border-radius:12px; padding:16px; margin-bottom:14px; transition:background .2s; }
+  .wa-status-box--on  { background:var(--accent-bg); border:1px solid rgba(5,150,105,.18); }
+  .wa-status-box--off { background:var(--s2); border:1px solid var(--border); }
+  html[data-theme="dark"] .wa-status-box--on { background:rgba(5,150,105,.10); }
+  .wa-status-emoji { font-size:24px; flex-shrink:0; line-height:1; }
+  .wa-status-text { flex:1; min-width:0; }
+  .wa-status-label { font-size:14px; font-weight:700; color:var(--text1); }
+  .wa-status-box--on .wa-status-label { color:var(--accent3); }
+  html[data-theme="dark"] .wa-status-box--on .wa-status-label { color:#4ade80; }
+  .wa-status-sub { font-size:12px; color:var(--text3); margin-top:3px; }
+  .wa-config-msg { font-size:12px; color:var(--text3); min-height:4px; margin-bottom:6px; }
+  .wa-actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .wa-btn-connect { background:rgba(37,211,102,.12); border:1px solid rgba(37,211,102,.35); color:#15803d; font-size:13px; font-weight:600; padding:10px 20px; border-radius:10px; cursor:pointer; transition:background .15s,box-shadow .15s; }
+  .wa-btn-connect:hover { background:rgba(37,211,102,.20); box-shadow:0 2px 8px rgba(37,211,102,.18); }
+  .wa-btn-connect:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  html[data-theme="dark"] .wa-btn-connect { color:#4ade80; border-color:rgba(74,222,128,.3); background:rgba(37,211,102,.10); }
+  .wa-btn-disconnect { display:flex; align-items:center; gap:6px; padding:10px 18px; background:transparent; border:1px solid rgba(244,63,94,.4); color:#b91c1c; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; transition:background .15s,box-shadow .15s; }
+  .wa-btn-disconnect:hover { background:var(--danger-bg); box-shadow:0 2px 8px rgba(244,63,94,.15); }
+  .wa-btn-disconnect:focus-visible { outline:2px solid #f43f5e; outline-offset:2px; }
+  html[data-theme="dark"] .wa-btn-disconnect { color:#f87171; border-color:rgba(244,63,94,.35); }
 </style>
 </head>
 <body>
@@ -6139,10 +6503,11 @@
   </div>
   <div class="hd-right">
     <div id="owner-selector-wrap"></div>
+    <div id="header-owner-logo" style="width:28px;height:28px;border-radius:50%;overflow:hidden;background:var(--s3);border:1px solid var(--border2);display:none;align-items:center;justify-content:center;flex-shrink:0"></div>
     <span class="owner-chip" id="owner-name-badge"></span>
     <span id="user-email"></span>
     <div style="position:relative">
-      <button id="btn-theme-toggle" title="Alternar tema" style="background:var(--s2);border:1px solid var(--border2);color:var(--text2);height:32px;padding:0 12px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;transition:background .15s,color .15s" onclick="(function(){var K='ilocarpay-theme';var cur=document.documentElement.getAttribute('data-theme')||'dark';var next=cur==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',next);try{localStorage.setItem(K,next);}catch(e){}document.getElementById('btn-theme-toggle').textContent=next==='dark'?'☾ Escuro':'☀ Claro';})()"></button>
+      <button id="btn-theme-toggle" title="Alternar tema" style="background:var(--s2);border:1px solid var(--border2);color:var(--text2);height:32px;padding:0 12px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;transition:background .15s,color .15s" onclick="(function(){var K='ilocarpay-theme';var cur=document.documentElement.getAttribute('data-theme')||'dark';var next=cur==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',next);try{localStorage.setItem(K,next);}catch(e){}document.getElementById('btn-theme-toggle').textContent=next==='dark'?'☾':'☀';})()"></button>
     </div>
     <button class="btn-logout" id="btn-logout">Sair</button>
   </div>
@@ -6179,12 +6544,12 @@
     <div class="lr-divider"><span>ou</span></div>
     <!-- OTP Login -->
     <div id="otp-email-step">
-      <input id="otp-email-input" type="email" placeholder="Seu e-mail cadastrado" style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid #1a2030;background:#0d1420;color:#e0e6f0;font-size:14px;box-sizing:border-box;margin-bottom:10px;outline:none;">
+      <input id="otp-email-input" type="email" placeholder="Seu e-mail cadastrado" style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border2);background:var(--bg);color:var(--text1);font-size:14px;box-sizing:border-box;margin-bottom:10px;outline:none;">
       <button id="btn-send-otp" style="width:100%;padding:12px;border-radius:10px;border:1px solid #4CAF50;background:transparent;color:#4CAF50;font-size:14px;font-weight:600;cursor:pointer;">Entrar com código por e-mail</button>
     </div>
     <div id="otp-code-step" style="display:none">
-      <div style="font-size:13px;color:#7a90a8;margin-bottom:10px;">Código enviado para <span id="otp-sent-to" style="color:#4CAF50"></span></div>
-      <input id="otp-code-input" type="text" inputmode="numeric" maxlength="6" placeholder="000000" style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid #4CAF50;background:#080e0a;color:#e0e6f0;font-size:22px;letter-spacing:8px;text-align:center;box-sizing:border-box;margin-bottom:10px;outline:none;">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px;">Código enviado para <span id="otp-sent-to" style="color:#4CAF50"></span></div>
+      <input id="otp-code-input" type="text" inputmode="numeric" maxlength="6" placeholder="000000" style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid #4CAF50;background:var(--bg);color:var(--text1);font-size:22px;letter-spacing:8px;text-align:center;box-sizing:border-box;margin-bottom:10px;outline:none;">
       <button id="btn-verify-otp" style="width:100%;padding:12px;border-radius:10px;border:none;background:#4CAF50;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Verificar código</button>
       <div style="text-align:center;margin-top:10px"><button id="btn-resend-otp" style="background:none;border:none;color:#4CAF50;font-size:12px;cursor:pointer;text-decoration:underline;">Reenviar código</button></div>
     </div>
@@ -6198,7 +6563,7 @@
 <div id="plan-banner" class="plan-banner" style="display:none">
   <span id="plan-banner-msg"></span>
   <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-    <select id="my-plan-select" style="background:#0f1117;color:#e0e0e0;border:1px solid #3a3d52;border-radius:6px;padding:5px 8px;font-size:12px">
+    <select id="my-plan-select" style="background:var(--bg);color:var(--text1);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:12px">
       <option value="basic">Basic — R$49/mês</option>
       <option value="pro">Pro — R$99/mês</option>
       <option value="enterprise">Enterprise — R$199/mês</option>
@@ -6360,7 +6725,7 @@
       <p style="font-size:13px;color:#555;margin-bottom:28px">Personalize como sua imobiliária usa a plataforma.</p>
 
       <!-- Logo da imobiliária -->
-      <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:16px;padding:28px;margin-bottom:20px">
+      <div style="background:var(--s4);border:1px solid var(--border2);border-radius:16px;padding:28px;margin-bottom:20px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
           <span style="font-size:22px">🏠</span>
           <div>
@@ -6368,9 +6733,9 @@
             <div style="font-size:12px;color:#666">Exibida no app para inquilinos e corretores</div>
           </div>
         </div>
-        <div style="border-top:1px solid #2a2d3e;margin:20px 0"></div>
+        <div style="border-top:1px solid var(--border2);margin:20px 0"></div>
         <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
-          <div id="owner-logo-preview-wrap" style="width:72px;height:72px;border-radius:50%;overflow:hidden;background:#0f1117;border:2px solid #2a2d3e;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <div id="owner-logo-preview-wrap" style="width:72px;height:72px;border-radius:50%;overflow:hidden;background:var(--bg);border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0">
             <img id="owner-logo-preview" src="" alt="Logo" style="width:100%;height:100%;object-fit:cover;display:none">
             <span id="owner-logo-placeholder" style="font-size:28px">🏠</span>
           </div>
@@ -6384,7 +6749,7 @@
       </div>
 
       <!-- Análise de crédito -->
-      <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:16px;padding:28px;margin-bottom:20px">
+      <div style="background:var(--s4);border:1px solid var(--border2);border-radius:16px;padding:28px;margin-bottom:20px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
           <span style="font-size:22px">📋</span>
           <div>
@@ -6392,7 +6757,7 @@
             <div style="font-size:12px;color:#666">Checklist de documentos e status de aprovação por inquilino</div>
           </div>
         </div>
-        <div style="border-top:1px solid #2a2d3e;margin:20px 0"></div>
+        <div style="border-top:1px solid var(--border2);margin:20px 0"></div>
         <div class="toggle-row">
           <div>
             <span style="font-size:14px;color:#ccc">Ativar análise de crédito</span>
@@ -6406,7 +6771,7 @@
       </div>
 
       <!-- Assinafy -->
-      <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:16px;padding:28px;margin-bottom:20px">
+      <div style="background:var(--s4);border:1px solid var(--border2);border-radius:16px;padding:28px;margin-bottom:20px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
           <span style="font-size:22px">✍️</span>
           <div>
@@ -6414,12 +6779,12 @@
             <div style="font-size:12px;color:#666">Assinatura eletrônica de contratos</div>
           </div>
         </div>
-        <div style="border-top:1px solid #2a2d3e;margin:20px 0"></div>
+        <div style="border-top:1px solid var(--border2);margin:20px 0"></div>
         <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">API KEY</label>
         <div style="position:relative;margin-bottom:6px">
           <input id="assinafy-api-key" type="password" placeholder="Cole aqui a chave API do Assinafy" autocomplete="off"
-            style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 42px 11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box"
-            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 42px 11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box"
+            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
           <button onclick="const el=$('assinafy-api-key');el.type=el.type==='password'?'text':'password'"
             style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;cursor:pointer;font-size:15px">👁</button>
         </div>
@@ -6428,7 +6793,7 @@
       </div>
 
       <!-- Serasa -->
-      <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:16px;padding:28px;margin-bottom:20px">
+      <div style="background:var(--s4);border:1px solid var(--border2);border-radius:16px;padding:28px;margin-bottom:20px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
           <span style="font-size:22px">🔍</span>
           <div>
@@ -6436,17 +6801,17 @@
             <div style="font-size:12px;color:#666">Score e histórico de crédito automático por inquilino</div>
           </div>
         </div>
-        <div style="border-top:1px solid #2a2d3e;margin:20px 0"></div>
+        <div style="border-top:1px solid var(--border2);margin:20px 0"></div>
         <p style="font-size:13px;color:#777;margin-bottom:18px;line-height:1.6">
           Use suas credenciais da API Serasa. Sem credenciais, o sistema opera em <span style="color:#4CAF50">modo sandbox</span> com dados simulados.
         </p>
         <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">CLIENT ID</label>
         <input id="serasa-client-id" type="text" placeholder="a1b2c3d4-e5f6-..." autocomplete="off"
-          style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;margin-bottom:14px;transition:border-color .2s" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+          style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;margin-bottom:14px;transition:border-color .2s" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
         <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">CLIENT SECRET</label>
         <div style="position:relative;margin-bottom:6px">
           <input id="serasa-client-secret" type="password" placeholder="••••••••••••••••" autocomplete="off"
-            style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 42px 11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 42px 11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
           <button onclick="toggleBureauSecret('serasa')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;cursor:pointer;font-size:15px">👁</button>
         </div>
         <div id="serasa-status" style="margin-bottom:14px;font-size:12px;color:#555"></div>
@@ -6457,7 +6822,7 @@
       </div>
 
       <!-- Cobranças em Atraso -->
-      <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:16px;padding:28px;margin-bottom:20px">
+      <div style="background:var(--s4);border:1px solid var(--border2);border-radius:16px;padding:28px;margin-bottom:20px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
           <span style="font-size:22px">💰</span>
           <div>
@@ -6465,21 +6830,21 @@
             <div style="font-size:12px;color:#666">Multa, juros e correção monetária aplicados após o vencimento</div>
           </div>
         </div>
-        <div style="border-top:1px solid #2a2d3e;margin:20px 0"></div>
+        <div style="border-top:1px solid var(--border2);margin:20px 0"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
           <div>
             <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">MULTA (%)</label>
-            <input id="config-fine" type="number" min="0" max="10" step="0.1" placeholder="2" style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            <input id="config-fine" type="number" min="0" max="10" step="0.1" placeholder="2" style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
             <small style="color:#555;font-size:11px">Padrão: 2%</small>
           </div>
           <div>
             <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">JUROS (% ao mês)</label>
-            <input id="config-interest" type="number" min="0" max="5" step="0.1" placeholder="1" style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            <input id="config-interest" type="number" min="0" max="5" step="0.1" placeholder="1" style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
             <small style="color:#555;font-size:11px">Padrão: 1%/mês</small>
           </div>
           <div>
             <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">CORREÇÃO IPCA-E (% ao mês)</label>
-            <input id="config-correction" type="number" min="0" max="5" step="0.01" placeholder="0.35" style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            <input id="config-correction" type="number" min="0" max="5" step="0.01" placeholder="0.35" style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
             <small style="color:#555;font-size:11px">Padrão: 0,35%/mês (≈ 4,2% ao ano)</small>
           </div>
         </div>
@@ -6488,7 +6853,7 @@
       </div>
 
       <!-- Boa Vista -->
-      <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:16px;padding:28px;margin-bottom:20px">
+      <div style="background:var(--s4);border:1px solid var(--border2);border-radius:16px;padding:28px;margin-bottom:20px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
           <span style="font-size:22px">🔎</span>
           <div>
@@ -6496,17 +6861,17 @@
             <div style="font-size:12px;color:#666">Consultas complementares de crédito (Equifax)</div>
           </div>
         </div>
-        <div style="border-top:1px solid #2a2d3e;margin:20px 0"></div>
+        <div style="border-top:1px solid var(--border2);margin:20px 0"></div>
         <p style="font-size:13px;color:#777;margin-bottom:18px;line-height:1.6">
           Use suas credenciais da API Boa Vista. Sem credenciais, opera em <span style="color:#4CAF50">modo sandbox</span>.
         </p>
         <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">CLIENT ID</label>
         <input id="boavista-client-id" type="text" placeholder="bv_prod_xxxxxxxxxxxx" autocomplete="off"
-          style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;margin-bottom:14px;transition:border-color .2s" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+          style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;margin-bottom:14px;transition:border-color .2s" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
         <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">CLIENT SECRET</label>
         <div style="position:relative;margin-bottom:6px">
           <input id="boavista-client-secret" type="password" placeholder="••••••••••••••••" autocomplete="off"
-            style="background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 42px 11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 42px 11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
           <button onclick="toggleBureauSecret('boavista')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;cursor:pointer;font-size:15px">👁</button>
         </div>
         <div id="boavista-status" style="margin-bottom:14px;font-size:12px;color:#555"></div>
@@ -6517,37 +6882,37 @@
       </div>
 
       <!-- WhatsApp próprio -->
-      <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:16px;padding:28px;margin-bottom:20px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-          <span style="font-size:22px">📱</span>
-          <div>
-            <div style="font-size:16px;font-weight:700;color:#f0f0f0">WhatsApp</div>
-            <div style="font-size:12px;color:#666">Conecte o número desta imobiliária para enviar mensagens automáticas</div>
+      <div class="wa-card">
+        <div class="wa-card-header">
+          <span class="wa-card-icon" aria-hidden="true">📱</span>
+          <div class="wa-card-title-group">
+            <div class="wa-card-title">WhatsApp</div>
+            <div class="wa-card-subtitle">Conecte o número desta imobiliária para enviar mensagens automáticas</div>
           </div>
-          <span id="wa-config-badge" style="margin-left:auto;font-size:20px" title="Status">⬜</span>
+          <span id="wa-config-badge" class="wa-badge wa-badge--off" title="WhatsApp desconectado">● Desconectado</span>
         </div>
-        <div style="border-top:1px solid #2a2d3e;margin:20px 0"></div>
 
-        <!-- Campos técnicos ocultos — mantidos para compatibilidade com saveWaConfig -->
+        <div class="wa-divider"></div>
+
         <input id="wa-api-url"  type="hidden">
         <input id="wa-api-key"  type="hidden">
         <input id="wa-instance" type="hidden">
 
-        <div id="wa-status-box" style="background:#0f1117;border-radius:12px;padding:18px;margin-bottom:18px;display:flex;align-items:center;gap:14px">
-          <span id="wa-status-icon" style="font-size:28px">📵</span>
-          <div>
-            <div id="wa-status-label" style="font-weight:700;color:#e0e0e0;font-size:14px">Não conectado</div>
-            <div id="wa-status-sub" style="font-size:12px;color:#666;margin-top:2px">Clique em Conectar para escanear o QR Code com o WhatsApp desta imobiliária</div>
+        <div id="wa-status-box" class="wa-status-box wa-status-box--off">
+          <span id="wa-status-icon" class="wa-status-emoji" aria-hidden="true">📵</span>
+          <div class="wa-status-text">
+            <div id="wa-status-label" class="wa-status-label">Não conectado</div>
+            <div id="wa-status-sub" class="wa-status-sub">Conecte um número para habilitar o envio automático de mensagens da imobiliária.</div>
           </div>
         </div>
 
-        <div id="wa-config-msg" style="font-size:12px;margin-bottom:14px;color:#555"></div>
+        <div id="wa-config-msg" class="wa-config-msg"></div>
 
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn" onclick="openWhatsappQr(currentOwnerId)" style="background:#1a3a2a;border:1px solid #25D366;color:#25D366;font-size:14px;padding:11px 22px">
+        <div class="wa-actions">
+          <button id="btn-wa-connect" class="wa-btn-connect" onclick="openWhatsappQr(currentOwnerId)">
             📷 Conectar WhatsApp
           </button>
-          <button id="btn-wa-disconnect" onclick="disconnectWhatsapp()" style="display:none;padding:11px 18px;background:transparent;border:1px solid #555;color:#888;border-radius:10px;font-size:13px;cursor:pointer">
+          <button id="btn-wa-disconnect" class="wa-btn-disconnect" onclick="disconnectWhatsapp()" style="display:none" aria-label="Desconectar WhatsApp">
             Desconectar
           </button>
         </div>
@@ -6579,7 +6944,7 @@
 
   <!-- Modal: Cadastrar Corretor -->
   <div id="broker-modal-overlay" onclick="if(event.target===this)closeBrokerModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:16px">
-    <div style="background:#12151e;border:1px solid #2a2d3e;border-radius:20px;padding:32px;width:100%;max-width:440px;position:relative;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+    <div style="background:var(--s2);border:1px solid var(--border2);border-radius:20px;padding:32px;width:100%;max-width:440px;position:relative;box-shadow:0 24px 80px rgba(0,0,0,.6)">
       <button onclick="closeBrokerModal()" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#666;font-size:20px;cursor:pointer;line-height:1;padding:4px 8px;border-radius:6px" onmouseover="this.style.color='#ccc'" onmouseout="this.style.color='#666'">✕</button>
       <div style="margin-bottom:24px">
         <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#1a3a1a,#2D6A2D);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px">🤝</div>
@@ -6590,27 +6955,27 @@
         <div>
           <label style="font-size:11px;font-weight:700;color:#888;letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:6px">Nome completo *</label>
           <input id="bm-name" type="text" placeholder="João Silva" autocomplete="off"
-            style="width:100%;background:#0f1117;border:1.5px solid #2a2d3e;color:#e0e0e0;padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
-            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            style="width:100%;background:var(--bg);border:1.5px solid var(--border2);color:var(--text1);padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
+            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
         </div>
         <div>
           <label style="font-size:11px;font-weight:700;color:#888;letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:6px">E-mail *</label>
           <input id="bm-email" type="email" placeholder="joao@exemplo.com" autocomplete="off"
-            style="width:100%;background:#0f1117;border:1.5px solid #2a2d3e;color:#e0e0e0;padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
-            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            style="width:100%;background:var(--bg);border:1.5px solid var(--border2);color:var(--text1);padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
+            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div>
             <label style="font-size:11px;font-weight:700;color:#888;letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:6px">WhatsApp</label>
             <input id="bm-phone" type="tel" placeholder="(11) 99999-9999"
-              style="width:100%;background:#0f1117;border:1.5px solid #2a2d3e;color:#e0e0e0;padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
-              onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+              style="width:100%;background:var(--bg);border:1.5px solid var(--border2);color:var(--text1);padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
+              onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
           </div>
           <div>
             <label style="font-size:11px;font-weight:700;color:#888;letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:6px">Comissão %</label>
             <input id="bm-commission" type="number" min="0" max="100" step="0.5" placeholder="5" value="5"
-              style="width:100%;background:#0f1117;border:1.5px solid #2a2d3e;color:#e0e0e0;padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
-              onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+              style="width:100%;background:var(--bg);border:1.5px solid var(--border2);color:var(--text1);padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
+              onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
           </div>
         </div>
         <button id="bm-save-btn" onclick="saveBrokerModal()" style="margin-top:4px;width:100%;padding:14px;background:linear-gradient(135deg,#2D6A2D,#388E3C);border:none;color:#fff;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
@@ -6622,7 +6987,7 @@
 
   <!-- Modal: Ver Detalhes do Corretor -->
   <div id="broker-details-modal" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:16px">
-    <div style="background:#12151e;border:1px solid #2a2d3e;border-radius:20px;padding:32px;width:100%;max-width:440px;position:relative;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+    <div style="background:var(--s2);border:1px solid var(--border2);border-radius:20px;padding:32px;width:100%;max-width:440px;position:relative;box-shadow:0 24px 80px rgba(0,0,0,.6)">
       <button onclick="document.getElementById('broker-details-modal').style.display='none'" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#666;font-size:20px;cursor:pointer;line-height:1;padding:4px 8px;border-radius:6px" onmouseover="this.style.color='#ccc'" onmouseout="this.style.color='#666'">✕</button>
       <div style="margin-bottom:24px">
         <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#1a1a3a,#2a2D6A);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px">🔎</div>
@@ -6631,7 +6996,7 @@
       <div style="display:flex;flex-direction:column;gap:12px">
         <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
           <span style="font-size:11px;font-weight:700;color:#555;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">Nome</span>
-          <span id="bdm-name" style="font-size:14px;color:#e0e0e0;font-weight:600;word-break:break-all"></span>
+          <span id="bdm-name" style="font-size:14px;color:var(--text1);font-weight:600;word-break:break-all"></span>
         </div>
         <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
           <span style="font-size:11px;font-weight:700;color:#555;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">E-mail</span>
@@ -6639,11 +7004,11 @@
         </div>
         <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
           <span style="font-size:11px;font-weight:700;color:#555;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">Telefone</span>
-          <span id="bdm-phone" style="font-size:14px;color:#e0e0e0"></span>
+          <span id="bdm-phone" style="font-size:14px;color:var(--text1)"></span>
         </div>
         <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
           <span style="font-size:11px;font-weight:700;color:#555;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">CRECI</span>
-          <span id="bdm-creci" style="font-size:14px;color:#e0e0e0"></span>
+          <span id="bdm-creci" style="font-size:14px;color:var(--text1)"></span>
         </div>
         <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
           <span style="font-size:11px;font-weight:700;color:#555;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">Comissão</span>
@@ -6653,7 +7018,7 @@
           <span style="font-size:11px;font-weight:700;color:#555;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">Status</span>
           <span id="bdm-status" style="font-size:14px;font-weight:700"></span>
         </div>
-        <div style="height:1px;background:#2a2d3e;margin:4px 0"></div>
+        <div style="height:1px;background:var(--border2);margin:4px 0"></div>
         <div style="display:grid;grid-template-columns:140px 1fr;align-items:start;gap:8px">
           <span style="font-size:11px;font-weight:700;color:#444;letter-spacing:.5px;text-transform:uppercase;padding-top:2px">Broker ID</span>
           <span id="bdm-id" style="font-size:11px;color:#555;font-family:monospace;word-break:break-all"></span>
@@ -6668,7 +7033,7 @@
 
   <!-- Modal: Editar Corretor -->
   <div id="broker-edit-modal" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:16px">
-    <div style="background:#12151e;border:1px solid #2a2d3e;border-radius:20px;padding:32px;width:100%;max-width:440px;position:relative;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+    <div style="background:var(--s2);border:1px solid var(--border2);border-radius:20px;padding:32px;width:100%;max-width:440px;position:relative;box-shadow:0 24px 80px rgba(0,0,0,.6)">
       <button onclick="document.getElementById('broker-edit-modal').style.display='none'" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#666;font-size:20px;cursor:pointer;line-height:1;padding:4px 8px;border-radius:6px" onmouseover="this.style.color='#ccc'" onmouseout="this.style.color='#666'">✕</button>
       <div style="margin-bottom:24px">
         <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#1a2a1a,#2D5A2D);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px">✏️</div>
@@ -6680,20 +7045,20 @@
         <div>
           <label style="font-size:11px;font-weight:700;color:#888;letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:6px">Nome completo *</label>
           <input id="bem-name" type="text" placeholder="João Silva" autocomplete="off"
-            style="width:100%;background:#0f1117;border:1.5px solid #2a2d3e;color:#e0e0e0;padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
-            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            style="width:100%;background:var(--bg);border:1.5px solid var(--border2);color:var(--text1);padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
+            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
         </div>
         <div>
           <label style="font-size:11px;font-weight:700;color:#888;letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:6px">WhatsApp</label>
           <input id="bem-phone" type="tel" placeholder="(11) 99999-9999"
-            style="width:100%;background:#0f1117;border:1.5px solid #2a2d3e;color:#e0e0e0;padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
-            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            style="width:100%;background:var(--bg);border:1.5px solid var(--border2);color:var(--text1);padding:12px 14px;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box"
+            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
         </div>
         <div>
           <label style="font-size:11px;font-weight:700;color:#888;letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:6px">Comissão %</label>
           <input id="bem-commission" type="number" min="0" max="100" step="0.5"
-            style="width:120px;background:#0f1117;border:1.5px solid #2a2d3e;color:#FFD54F;padding:12px 14px;border-radius:10px;font-size:15px;font-weight:700;outline:none;transition:border-color .2s;text-align:center"
-            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+            style="width:120px;background:var(--bg);border:1.5px solid var(--border2);color:#FFD54F;padding:12px 14px;border-radius:10px;font-size:15px;font-weight:700;outline:none;transition:border-color .2s;text-align:center"
+            onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
         </div>
         <button onclick="saveBrokerEdit()" style="margin-top:4px;width:100%;padding:14px;background:linear-gradient(135deg,#2D6A2D,#388E3C);border:none;color:#fff;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
           Salvar alterações
@@ -6734,7 +7099,7 @@
       <div id="plano-status-text" style="font-size:15px"></div>
     </div>
     <div id="plano-upgrade-area"></div>
-    <div style="margin-top:32px;background:#1a1d2e;border-radius:12px;padding:20px">
+    <div style="margin-top:32px;background:var(--s4);border-radius:12px;padding:20px">
       <div style="font-size:13px;font-weight:600;color:#fff;margin-bottom:12px">Recursos incluídos em todos os planos</div>
       <ul style="list-style:none;display:flex;flex-direction:column;gap:8px">
         <li style="color:#aaa;font-size:13px">✅ Cobranças automáticas mensais via PIX</li>
@@ -6749,10 +7114,10 @@
 
   <!-- Painel: Chamados de manutenção -->
   <div class="panel" id="panel-chamados" style="display:none;padding:0">
-    <div id="chamados-layout" style="display:flex;height:calc(100vh - 64px);overflow:hidden;border-radius:12px;border:1px solid #2a2d3e">
+    <div id="chamados-layout" style="display:flex;height:calc(100vh - 64px);overflow:hidden;border-radius:12px;border:1px solid var(--border2)">
       <!-- Sidebar: lista de chamados -->
-      <div style="width:340px;min-width:280px;border-right:1px solid #2a2d3e;display:flex;flex-direction:column;background:#0d1017;flex-shrink:0">
-        <div style="padding:16px 14px 10px;border-bottom:1px solid #2a2d3e;flex-shrink:0">
+      <div style="width:340px;min-width:280px;border-right:1px solid var(--border2);display:flex;flex-direction:column;background:var(--bg);flex-shrink:0">
+        <div style="padding:16px 14px 10px;border-bottom:1px solid var(--border2);flex-shrink:0">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
             <span style="font-size:14px;font-weight:700;color:#fff">🔧 Chamados</span>
             <span id="chamados-badge" style="display:none;background:#ef5350;color:#fff;border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700"></span>
@@ -6767,7 +7132,7 @@
         <div id="chamados-list" style="flex:1;overflow-y:auto;padding:8px"></div>
       </div>
       <!-- Painel direito: chat -->
-      <div style="flex:1;display:flex;flex-direction:column;background:#12152a;overflow:hidden">
+      <div style="flex:1;display:flex;flex-direction:column;background:var(--s2);overflow:hidden">
         <div id="ch-empty" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#333">
           <div style="font-size:52px">💬</div>
           <div style="font-size:14px;font-weight:600;color:#444">Selecione um chamado</div>
@@ -6775,11 +7140,11 @@
         </div>
         <div id="ch-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
           <!-- Header do chamado -->
-          <div style="padding:14px 20px;border-bottom:1px solid #1e2138;background:#1a1d2e;flex-shrink:0">
+          <div style="padding:14px 20px;border-bottom:1px solid var(--border);background:var(--s4);flex-shrink:0">
             <div style="display:flex;align-items:flex-start;gap:12px">
               <div style="flex:1;min-width:0">
                 <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;flex-wrap:wrap">
-                  <span id="ch-id" style="font-family:monospace;font-size:10px;color:#555;background:#0d1017;padding:2px 7px;border-radius:4px;letter-spacing:.5px"></span>
+                  <span id="ch-id" style="font-family:monospace;font-size:10px;color:#555;background:var(--bg);padding:2px 7px;border-radius:4px;letter-spacing:.5px"></span>
                   <span id="ch-category" style="font-size:10px;color:#90caf9;background:#1565c015;padding:2px 8px;border-radius:20px;font-weight:600"></span>
                   <span id="ch-status-badge" style="font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600"></span>
                 </div>
@@ -6798,13 +7163,13 @@
             <div id="ch-msgs-loading" style="text-align:center;color:#444;font-size:13px;padding:20px 0">Carregando mensagens…</div>
           </div>
           <!-- Input -->
-          <div style="padding:12px 16px;border-top:1px solid #1e2138;background:#1a1d2e;flex-shrink:0;display:flex;gap:8px;align-items:flex-end">
+          <div style="padding:12px 16px;border-top:1px solid var(--border);background:var(--s4);flex-shrink:0;display:flex;gap:8px;align-items:flex-end">
             <textarea id="ch-input" rows="1" placeholder="Mensagem para o inquilino… (Enter para enviar, Shift+Enter para nova linha)"
-              style="flex:1;background:#0d1017;border:1px solid #2a2d3e;color:#e0e0e0;border-radius:10px;padding:10px 14px;font-size:13px;outline:none;resize:none;line-height:1.5;max-height:96px;font-family:inherit;transition:border-color .15s"
+              style="flex:1;background:var(--bg);border:1px solid var(--border2);color:var(--text1);border-radius:10px;padding:10px 14px;font-size:13px;outline:none;resize:none;line-height:1.5;max-height:96px;font-family:inherit;transition:border-color .15s"
               oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,96)+'px'"
               onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chamadoSendMsg()}"
               onfocus="this.style.borderColor='#1565c0'"
-              onblur="this.style.borderColor='#2a2d3e'"></textarea>
+              onblur="this.style.borderColor='var(--border2)'"></textarea>
             <button onclick="chamadoSendMsg()" style="background:#1565c0;color:#fff;border:none;border-radius:10px;padding:0 20px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s;height:40px;flex-shrink:0" onmouseover="this.style.background='#1976d2'" onmouseout="this.style.background='#1565c0'">Enviar</button>
           </div>
         </div>
@@ -6832,7 +7197,7 @@
 <div id="modal-lead-detail" class="modal-overlay" style="display:none">
   <div id="lead-detail-box" class="modal-box" style="width:98vw;height:96vh;max-width:98vw;max-height:96vh;overflow-y:auto;padding:0;display:flex;flex-direction:column;transition:width .2s,height .2s,max-width .2s,max-height .2s" data-maximized="1">
     <!-- Barra de título estilo janela -->
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid #2a2d3e;flex-shrink:0;background:#131621;border-radius:14px 14px 0 0">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border2);flex-shrink:0;background:var(--s3);border-radius:14px 14px 0 0">
       <h3 style="margin:0;font-size:15px">📋 Detalhes do Lead</h3>
       <div style="display:flex;gap:8px;align-items:center">
         <!-- Minimizar (restaurar ao tamanho padrão) -->
@@ -6887,7 +7252,7 @@
 <div id="modal-approve-lead" class="modal-overlay">
   <div class="modal-box" style="max-width:500px">
     <h3>✅ Aprovar Lead e Gerar Contrato</h3>
-    <div style="background:#0f1117;border:1px solid #2a2d3e;border-radius:8px;padding:14px;margin:16px 0">
+    <div style="background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:14px;margin:16px 0">
       <div style="display:flex;gap:20px;flex-wrap:wrap">
         <div><div style="font-size:11px;color:#888">Inquilino</div><div id="approve-lead-name" style="font-weight:700"></div></div>
         <div><div style="font-size:11px;color:#888">E-mail</div><div id="approve-lead-email" style="font-size:13px"></div></div>
@@ -6920,7 +7285,7 @@
       </div>
     </div>
 
-    <div id="approve-landlord-section" style="margin-top:14px;padding:12px;background:#0f1117;border:1px solid #ffffff22;border-radius:8px;display:none">
+    <div id="approve-landlord-section" style="margin-top:14px;padding:12px;background:var(--bg);border:1px solid #ffffff22;border-radius:8px;display:none">
       <p id="approve-landlord-warning" style="font-size:12px;color:#aaa;margin:0 0 10px">Confirme os dados do proprietário antes de aprovar:</p>
       <label>Nome do proprietário</label>
       <input id="approve-landlord-name" type="text" placeholder="Nome completo">
@@ -6933,15 +7298,15 @@
     </div>
 
     <!-- Modo de aprovação -->
-    <div style="margin-top:16px;border:1px solid #2a2d3e;border-radius:10px;overflow:hidden">
-      <label id="approve-mode-assinafy-lbl" style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;cursor:pointer;border-bottom:1px solid #2a2d3e;background:#0f1117">
+    <div style="margin-top:16px;border:1px solid var(--border2);border-radius:10px;overflow:hidden">
+      <label id="approve-mode-assinafy-lbl" style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--border2);background:var(--bg)">
         <input type="radio" name="approve-mode" value="assinafy" checked style="margin-top:3px;accent-color:#4CAF50">
         <div>
           <div style="font-weight:700;color:#4CAF50">✍️ Gerar contrato digital (Assinafy)</div>
           <div style="font-size:12px;color:#888;margin-top:2px">PDF gerado e enviado para assinatura digital das duas partes. Após ambos assinarem, clique em Entregar Chaves.</div>
         </div>
       </label>
-      <label id="approve-mode-direct-lbl" style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;cursor:pointer;background:#0f1117">
+      <label id="approve-mode-direct-lbl" style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;cursor:pointer;background:var(--bg)">
         <input type="radio" name="approve-mode" value="direct" style="margin-top:3px;accent-color:#FFB74D">
         <div>
           <div style="font-weight:700;color:#FFB74D">🚀 Aprovar sem assinatura digital</div>
@@ -6961,7 +7326,7 @@
 <div id="modal-billing" class="modal-overlay">
   <div class="modal-box">
     <h3>Gestão de Plano</h3>
-    <p style="font-size:13px;color:#888;margin-bottom:4px">Imobiliária: <strong id="billing-owner-name" style="color:#e0e0e0"></strong></p>
+    <p style="font-size:13px;color:#888;margin-bottom:4px">Imobiliária: <strong id="billing-owner-name" style="color:var(--text1)"></strong></p>
     <p style="font-size:11px;color:#555;margin-bottom:16px" id="billing-status-info"></p>
     <input type="hidden" id="billing-owner-id">
     <label>Plano</label>
@@ -7020,7 +7385,7 @@
           💳 Cartão
         </button>
       </div>
-      <div id="upg-card-note" style="display:none;font-size:12px;color:#8FAF8F;margin:-16px 0 16px;padding:8px 12px;background:#0f1117;border:1px solid #2A4A2A;border-radius:8px"></div>
+      <div id="upg-card-note" style="display:none;font-size:12px;color:#8FAF8F;margin:-16px 0 16px;padding:8px 12px;background:var(--bg);border:1px solid #2A4A2A;border-radius:8px"></div>
 
       <label style="font-size:12px;color:#8FAF8F;text-transform:uppercase;letter-spacing:.05em">CPF ou CNPJ do responsável</label>
       <input id="upg-cpf" type="text" inputmode="numeric" maxlength="18" placeholder="000.000.000-00 ou 00.000.000/0001-00"
@@ -7146,10 +7511,10 @@
 <!-- Modal: Novo Inquilino -->
 <div id="modal-tenant" class="modal-overlay">
   <div class="modal-box" id="modal-tenant-box" style="width:700px;max-width:95%;overflow-y:auto;max-height:92vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;position:sticky;top:0;background:#161b27;z-index:10;padding-bottom:12px;border-bottom:1px solid #2a2d3e">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;position:sticky;top:0;background:var(--s2);z-index:10;padding-bottom:12px;border-bottom:1px solid var(--border2)">
       <h3 style="margin:0">Novo Inquilino</h3>
       <div style="display:flex;gap:8px;align-items:center">
-        <button onclick="toggleModalExpand('modal-tenant-box')" title="Expandir" style="background:none;border:1px solid #2a2d3e;color:#aaa;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">⛶</button>
+        <button onclick="toggleModalExpand('modal-tenant-box')" title="Expandir" style="background:none;border:1px solid var(--border2);color:#aaa;width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">⛶</button>
         <button onclick="document.getElementById('modal-tenant').style.display='none';resetTenantForm()" style="background:none;border:none;color:#aaa;font-size:22px;cursor:pointer;line-height:1;padding:0 4px">×</button>
       </div>
     </div>
@@ -7168,7 +7533,7 @@
       <div><label>Data de nascimento <span>*</span></label><input id="t-birth" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="maskDateInput(this)"></div>
       <div>
         <label>Estado civil <span>*</span></label>
-        <select id="t-marital" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:10px;border-radius:8px;font-size:14px">
+        <select id="t-marital" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:10px;border-radius:8px;font-size:14px">
           <option value="Solteiro(a)">Solteiro(a)</option>
           <option value="Casado(a)">Casado(a)</option>
           <option value="União estável">União estável</option>
@@ -7220,7 +7585,7 @@
       </div>
       <div>
         <label>Finalidade</label>
-        <select id="t-purpose" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:10px;border-radius:8px;font-size:14px">
+        <select id="t-purpose" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:10px;border-radius:8px;font-size:14px">
           <option value="Residencial">Residencial</option>
           <option value="Comercial">Comercial</option>
         </select>
@@ -7261,11 +7626,11 @@
     <div class="row2">
       <div>
         <label>Data de início <span>*</span></label>
-        <input id="t-start" type="date" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:10px;border-radius:8px;font-size:14px">
+        <input id="t-start" type="date" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:10px;border-radius:8px;font-size:14px">
       </div>
       <div>
         <label>Duração <span>*</span></label>
-        <select id="t-duration" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:10px;border-radius:8px;font-size:14px">
+        <select id="t-duration" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:10px;border-radius:8px;font-size:14px">
           <option value="12">12 meses</option>
           <option value="24">24 meses</option>
           <option value="30">30 meses</option>
@@ -7320,7 +7685,7 @@
       <label class="switch"><input type="checkbox" id="t-digital"><span class="slider"></span></label>
     </div>
 
-    <div class="modal-actions" style="position:sticky;bottom:0;background:#161b27;padding-top:12px;border-top:1px solid #2a2d3e;margin-top:20px">
+    <div class="modal-actions" style="position:sticky;bottom:0;background:var(--s2);padding-top:12px;border-top:1px solid var(--border2);margin-top:20px">
       <button class="btn-outline" id="tenant-cancel">Cancelar</button>
       <button class="btn" id="tenant-save">Cadastrar</button>
     </div>
@@ -7421,7 +7786,7 @@
 <div id="modal-credit-analysis" class="modal-overlay">
   <div class="modal-box" style="max-width:500px">
     <h3 style="margin-bottom:4px">📋 Análise de Crédito</h3>
-    <p style="font-size:13px;color:#888;margin-bottom:20px">Inquilino: <strong id="ca-tenant-name" style="color:#e0e0e0"></strong></p>
+    <p style="font-size:13px;color:#888;margin-bottom:20px">Inquilino: <strong id="ca-tenant-name" style="color:var(--text1)"></strong></p>
 
     <label>Status da Análise</label>
     <select id="ca-status">
@@ -7460,14 +7825,14 @@
     <textarea id="ca-notes" rows="3" placeholder="Notas sobre a análise, pendências, restrições encontradas…"></textarea>
 
     <!-- Bureaus de crédito -->
-    <div id="ca-serasa-wrap" style="display:none;margin-top:20px;padding-top:20px;border-top:1px solid #2a2d3e">
+    <div id="ca-serasa-wrap" style="display:none;margin-top:20px;padding-top:20px;border-top:1px solid var(--border2)">
       <p style="font-size:12px;color:#555;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Consultas de Crédito</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <button id="ca-serasa-btn" class="btn-sm" style="color:#4CAF50;border-color:#4CAF50" onclick="consultarSerasa()">🔍 Serasa Experian</button>
         <button id="ca-boavista-btn" class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" onclick="consultarBoaVista()">🔎 Boa Vista SCPC</button>
       </div>
-      <div id="ca-serasa-result"   style="display:none;background:#0f1117;border:1px solid #2a2d3e;border-radius:8px;padding:14px;margin-bottom:8px"></div>
-      <div id="ca-boavista-result" style="display:none;background:#0f1117;border:1px solid #1a2a3e;border-radius:8px;padding:14px"></div>
+      <div id="ca-serasa-result"   style="display:none;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:14px;margin-bottom:8px"></div>
+      <div id="ca-boavista-result" style="display:none;background:var(--bg);border:1px solid #1a2a3e;border-radius:8px;padding:14px"></div>
     </div>
 
     <div class="modal-actions">
@@ -7480,19 +7845,20 @@
 <!-- Modal: Reajuste de Aluguel -->
 <div id="modal-whatsapp-qr" class="modal-overlay">
   <div class="modal-box" style="max-width:380px;text-align:center;padding:28px">
-    <h3 style="margin-bottom:4px">📱 WhatsApp — Conectar</h3>
-    <p style="color:#aaa;font-size:12px;margin-bottom:16px">WhatsApp → ⋮ → Aparelhos conectados → Conectar aparelho</p>
-    <p id="whatsapp-qr-status" style="color:#aaa;font-size:13px;margin:0 0 12px">⏳ Buscando QR Code...</p>
-    <img id="whatsapp-qr-img" src="" alt="QR Code" style="display:none;width:240px;height:240px;border-radius:10px;border:6px solid #fff;margin:0 auto 8px;display:none">
-    <div id="whatsapp-qr-timer" style="font-size:28px;font-weight:bold;margin:6px 0"></div>
-    <div id="whatsapp-qr-connected" style="display:none;background:#1b5e20;border-radius:10px;padding:16px;margin:12px 0">
+    <div style="font-size:22px;margin-bottom:4px">📱</div>
+    <h3 style="margin-bottom:4px;color:var(--text1)">Conectar WhatsApp</h3>
+    <p style="color:var(--text3);font-size:12px;margin-bottom:16px">WhatsApp → ⋮ → Aparelhos conectados → Conectar aparelho</p>
+    <p id="whatsapp-qr-status" style="color:var(--text3);font-size:13px;margin:0 0 12px">⏳ Buscando QR Code...</p>
+    <img id="whatsapp-qr-img" src="" alt="QR Code" style="display:none;width:240px;height:240px;border-radius:10px;border:6px solid var(--s1);margin:0 auto 8px">
+    <div id="whatsapp-qr-timer" style="font-size:28px;font-weight:bold;color:var(--text1);margin:6px 0"></div>
+    <div id="whatsapp-qr-connected" style="display:none;background:var(--accent-bg);border:1px solid rgba(5,150,105,.2);border-radius:10px;padding:16px;margin:12px 0">
       <div style="font-size:32px">✅</div>
-      <div style="font-weight:bold;color:#69f0ae;font-size:16px;margin-top:4px">WhatsApp Conectado!</div>
-      <div style="color:#aaa;font-size:12px;margin-top:4px">Mensagens serão enviadas automaticamente</div>
+      <div style="font-weight:700;color:var(--accent3);font-size:16px;margin-top:4px">WhatsApp Conectado!</div>
+      <div style="color:var(--text3);font-size:12px;margin-top:4px">Mensagens serão enviadas automaticamente</div>
     </div>
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:center">
-      <button onclick="_fetchQr()" style="padding:9px 18px;background:#25D366;border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:13px">🔄 Novo QR</button>
-      <button id="btn-wa-modal-close" style="padding:9px 18px;background:#333;border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:13px">Fechar</button>
+      <button onclick="_fetchQr()" style="padding:9px 18px;background:rgba(37,211,102,.15);border:1px solid rgba(37,211,102,.35);color:#15803d;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">🔄 Novo QR</button>
+      <button id="btn-wa-modal-close" style="padding:9px 18px;background:var(--s3);border:1px solid var(--border2);color:var(--text2);border-radius:8px;cursor:pointer;font-size:13px">Fechar</button>
     </div>
   </div>
 </div>
@@ -7601,7 +7967,7 @@
 <div id="tenant-chat-overlay" onclick="closeTenantChat()"></div>
 <div id="tenant-chat-drawer">
   <div class="bcd-header">
-    <div class="bcd-avatar">📢</div>
+    <div class="bcd-avatar" id="tcd-avatar-wrap"><span class="bcd-avatar-initials">?</span></div>
     <div class="bcd-info">
       <div class="bcd-name" id="tcd-tenant-name">Inquilino</div>
       <div class="bcd-sub">Mural de Avisos</div>
@@ -7624,7 +7990,7 @@
 <div id="broker-chat-overlay" onclick="closeBrokerChat()"></div>
 <div id="broker-chat-drawer">
   <div class="bcd-header">
-    <div class="bcd-avatar">💬</div>
+    <div class="bcd-avatar" id="bcd-avatar-wrap"><span class="bcd-avatar-initials">?</span></div>
     <div class="bcd-info">
       <div class="bcd-name" id="bcd-broker-name">Corretor</div>
       <div class="bcd-sub">Chat direto com a imobiliária</div>
@@ -7638,13 +8004,13 @@
     </div>
   </div>
   <!-- Preview de arquivo antes de enviar -->
-  <div id="bcd-file-preview" style="display:none;padding:8px 12px;background:#1a1d2e;border-top:1px solid #1e2138">
-    <div style="display:flex;align-items:center;gap:8px;background:#0d1017;border:1px solid #2a2d3e;border-radius:8px;padding:8px 10px">
+  <div id="bcd-file-preview" style="display:none;padding:8px 12px;background:var(--s4);border-top:1px solid var(--border)">
+    <div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:8px 10px">
       <span id="bcd-file-icon" style="font-size:18px">📎</span>
       <span id="bcd-file-name" style="flex:1;font-size:12px;color:#90caf9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
       <button onclick="bcdClearFile()" style="background:none;border:none;color:#555;cursor:pointer;font-size:16px;padding:0">×</button>
     </div>
-    <div id="bcd-upload-bar" style="display:none;margin-top:6px;height:3px;background:#1e2138;border-radius:2px;overflow:hidden">
+    <div id="bcd-upload-bar" style="display:none;margin-top:6px;height:3px;background:var(--border);border-radius:2px;overflow:hidden">
       <div id="bcd-upload-fill" style="height:100%;background:#1565c0;width:0%;transition:width .2s"></div>
     </div>
   </div>
@@ -7652,9 +8018,9 @@
     <input type="file" id="bcd-file-input" accept="image/*,application/pdf" style="display:none" onchange="bcdFileSelected(this)">
     <button id="bcd-attach" onclick="document.getElementById('bcd-file-input').click()"
       title="Anexar arquivo (PDF ou imagem)"
-      style="background:#1a2540;border:1px solid #2a2d3e;color:#90caf9;border-radius:10px;width:38px;height:38px;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:border-color .15s"
-      onmouseover="this.style.borderColor='#1565c0'" onmouseout="this.style.borderColor='#2a2d3e'">📎</button>
-    <textarea id="bcd-input" rows="1" placeholder="Mensagem para o corretor… (Enter envia)"
+      style="background:var(--blue-bg);border:1px solid var(--border2);color:#90caf9;border-radius:10px;width:40px;height:40px;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:border-color .15s"
+      onmouseover="this.style.borderColor='#1565c0'" onmouseout="this.style.borderColor='var(--border2)'">📎</button>
+    <textarea id="bcd-input" rows="1" placeholder="Mensagem para o corretor…"
       oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'"
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();bcdSendMsg()}"></textarea>
     <button id="bcd-send" onclick="bcdSendMsg()">Enviar</button>
@@ -7672,7 +8038,7 @@
     <div style="margin-bottom:14px">
       <label>Mensagem</label>
       <textarea id="aviso-body" rows="4" placeholder="Escreva o aviso aqui…" maxlength="200"
-        style="width:100%;background:#1e2030;border:1px solid #3a3d52;color:#e0e0e0;border-radius:8px;padding:10px;font-size:13px;resize:vertical;outline:none"></textarea>
+        style="width:100%;background:#1e2030;border:1px solid var(--border2);color:var(--text1);border-radius:8px;padding:10px;font-size:13px;resize:vertical;outline:none"></textarea>
     </div>
     <div class="modal-actions">
       <button class="btn-outline" onclick="document.getElementById('modal-aviso').style.display='none'">Cancelar</button>
@@ -7686,38 +8052,38 @@
 
 <!-- Modal editar corretor -->
 <div id="modal-edit-broker" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center">
-  <div style="background:#1a1d2e;border:1px solid #2a2d3e;border-radius:16px;padding:28px;width:100%;max-width:420px;margin:16px">
+  <div style="background:var(--s4);border:1px solid var(--border2);border-radius:16px;padding:28px;width:100%;max-width:420px;margin:16px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-      <h3 style="color:#e0e0e0;font-size:16px;margin:0">✏️ Editar Corretor</h3>
+      <h3 style="color:var(--text1);font-size:16px;margin:0">✏️ Editar Corretor</h3>
       <button onclick="closeEditBroker()" style="background:none;border:none;color:#666;font-size:20px;cursor:pointer;line-height:1">×</button>
     </div>
     <input type="hidden" id="edit-broker-id">
     <div style="margin-bottom:14px">
       <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">NOME COMPLETO</label>
-      <input id="edit-broker-name" type="text" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+      <input id="edit-broker-name" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 13px;border-radius:9px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
     </div>
     <div style="margin-bottom:14px">
       <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">TELEFONE / WHATSAPP</label>
-      <input id="edit-broker-phone" type="tel" oninput="maskPhone(this)" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+      <input id="edit-broker-phone" type="tel" oninput="maskPhone(this)" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 13px;border-radius:9px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
     </div>
     <div style="margin-bottom:14px">
       <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">CRECI</label>
-      <input id="edit-broker-creci" type="text" placeholder="Ex: 123456-F" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+      <input id="edit-broker-creci" type="text" placeholder="Ex: 123456-F" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 13px;border-radius:9px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
     </div>
     <div style="margin-bottom:14px">
       <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">COMISSÃO (%)</label>
-      <input id="edit-broker-commission" type="number" min="0" max="100" step="0.5" placeholder="Ex: 5" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='#2a2d3e'">
+      <input id="edit-broker-commission" type="number" min="0" max="100" step="0.5" placeholder="Ex: 5" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 13px;border-radius:9px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
       <div style="font-size:11px;color:#666;margin-top:4px">% sobre o valor do aluguel mensal</div>
     </div>
     <div style="margin-bottom:20px">
       <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">STATUS</label>
-      <select id="edit-broker-active" style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none">
+      <select id="edit-broker-active" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 13px;border-radius:9px;font-size:14px;outline:none">
         <option value="true">✅ Ativo</option>
         <option value="false">❌ Inativo</option>
       </select>
     </div>
     <div style="display:flex;gap:10px">
-      <button onclick="closeEditBroker()" style="flex:1;background:#0f1117;border:1px solid #2a2d3e;color:#aaa;padding:11px;border-radius:9px;font-size:14px;cursor:pointer">Cancelar</button>
+      <button onclick="closeEditBroker()" style="flex:1;background:var(--bg);border:1px solid var(--border2);color:#aaa;padding:11px;border-radius:9px;font-size:14px;cursor:pointer">Cancelar</button>
       <button id="edit-broker-save-btn" onclick="saveEditBroker()" style="flex:2;background:#1565C0;border:none;color:#fff;padding:11px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer">Salvar</button>
     </div>
   </div>
@@ -7725,7 +8091,7 @@
 
 <!-- Modal editar lead -->
 <div id="modal-edit-lead" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;overflow-y:auto">
-  <div style="background:#1a1d2e;border-radius:16px;padding:28px;width:90%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,.5);margin:auto">
+  <div style="background:var(--s4);border-radius:16px;padding:28px;width:90%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,.5);margin:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <h3 style="margin:0">✏️ Editar Lead</h3>
       <button onclick="closeEditLeadModal()" style="background:none;border:none;color:#888;font-size:22px;cursor:pointer">&times;</button>
@@ -7747,6 +8113,10 @@
       <input id="el-prop-address" type="text" class="input-field" style="width:100%;box-sizing:border-box">
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <label style="font-size:11px;color:#ef5350;font-weight:600">CEP do imóvel *</label>
+        <input id="el-prop-cep" type="text" maxlength="9" placeholder="00000-000" class="input-field" style="width:100%" oninput="this.value=this.value.replace(/\D/g,'').replace(/(\d{5})(\d)/,'$1-$2').slice(0,9)">
+      </div>
       <div><label style="font-size:11px;color:#888">Valor do aluguel (R$)</label><input id="el-rent-value" type="number" class="input-field" style="width:100%"></div>
       <div><label style="font-size:11px;color:#888">Dia de vencimento</label><input id="el-due-day" type="number" min="1" max="31" class="input-field" style="width:100%"></div>
     </div>
@@ -7768,7 +8138,7 @@
 
 <!-- Modal rejeição de lead -->
 <div id="modal-reject-lead" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center">
-  <div style="background:#1a1d2e;border-radius:16px;padding:28px;width:90%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+  <div style="background:var(--s4);border-radius:16px;padding:28px;width:90%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <h3 style="margin:0;font-size:16px;color:#ef5350">❌ Rejeitar lead</h3>
       <button onclick="closeRejectModal()" style="background:none;border:none;color:#666;font-size:20px;cursor:pointer">×</button>
@@ -7776,11 +8146,11 @@
     <input type="hidden" id="reject-lead-id">
     <div style="margin-bottom:20px">
       <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:8px">MOTIVO DA REJEIÇÃO</label>
-      <textarea id="reject-reason-text" rows="4" placeholder="Ex: Renda insuficiente, documentação incompleta, histórico de inadimplência..." style="width:100%;background:#0f1117;border:1px solid #2a2d3e;color:#e0e0e0;padding:11px 13px;border-radius:9px;font-size:14px;outline:none;resize:vertical;box-sizing:border-box;font-family:inherit" onfocus="this.style.borderColor='#ef5350'" onblur="this.style.borderColor='#2a2d3e'"></textarea>
+      <textarea id="reject-reason-text" rows="4" placeholder="Ex: Renda insuficiente, documentação incompleta, histórico de inadimplência..." style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 13px;border-radius:9px;font-size:14px;outline:none;resize:vertical;box-sizing:border-box;font-family:inherit" onfocus="this.style.borderColor='#ef5350'" onblur="this.style.borderColor='var(--border2)'"></textarea>
       <div style="font-size:11px;color:#666;margin-top:4px">O motivo será enviado por WhatsApp ao corretor e ao inquilino.</div>
     </div>
     <div style="display:flex;gap:10px">
-      <button onclick="closeRejectModal()" style="flex:1;background:#0f1117;border:1px solid #2a2d3e;color:#aaa;padding:11px;border-radius:9px;font-size:14px;cursor:pointer">Cancelar</button>
+      <button onclick="closeRejectModal()" style="flex:1;background:var(--bg);border:1px solid var(--border2);color:#aaa;padding:11px;border-radius:9px;font-size:14px;cursor:pointer">Cancelar</button>
       <button id="reject-confirm-btn" onclick="confirmRejectLead()" style="flex:2;background:#c62828;border:none;color:#fff;padding:11px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer">Confirmar rejeição</button>
     </div>
   </div>
