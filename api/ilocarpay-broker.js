@@ -587,6 +587,9 @@ async function handleApproveLead(db, body) {
   if (!leadSnap.exists) throw Object.assign(new Error('Lead não encontrado'), { status: 404 });
   const lead = leadSnap.data();
   if (!lead.ownerId) throw Object.assign(new Error('ownerId ausente no lead'), { status: 400 });
+  const _tenantEmailCheck = (lead.tenant?.email || '').trim().toLowerCase();
+  if (!_tenantEmailCheck || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(_tenantEmailCheck))
+    throw Object.assign(new Error('E-mail do inquilino ausente ou inválido. Edite o lead e informe o e-mail antes de aprovar.'), { status: 400 });
   if (!isValidCep(lead.property?.cep)) throw Object.assign(new Error('CEP do imóvel ausente ou inválido. Edite o lead e informe o CEP antes de aprovar.'), { status: 400 });
 
   const ownerSnap = await db.collection('owners').doc(lead.ownerId).get();
@@ -1194,11 +1197,11 @@ async function handleDeliverKeys(db, body) {
       keysDeliveredAt:  FieldValue.serverTimestamp(),
       updatedAt:        FieldValue.serverTimestamp()
     }),
-    db.collection('users').doc(tenantId).update({
+    db.collection('users').doc(tenantId).set({
       active:    true,
       activatedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
-    })
+    }, { merge: true })
   ]);
 
   // Atualiza lead com status final (lido em tempo real pelo app do corretor)
