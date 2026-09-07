@@ -4772,7 +4772,8 @@
           }
           // Nova mensagem do inquilino (lastMessageSender == 'tenant')
           if ((change.type === 'added' || change.type === 'modified') && c.lastMessageSender === 'tenant') {
-            const msgAt = c.lastMessageAt?.seconds || 0;
+            // Usa milissegundos (seconds*1000 + ns/1e6) para diferenciar msgs no mesmo segundo
+            const msgAt = (c.lastMessageAt?.seconds || 0) * 1000 + Math.floor((c.lastMessageAt?.nanoseconds || 0) / 1e6);
             if (msgAt > (_lastMsgAt[id] || 0)) {
               _lastMsgAt[id] = msgAt;
               // Só notifica se não estiver na aba chamados
@@ -4797,7 +4798,7 @@
         // Inicializa timestamps para não notificar mensagens antigas
         snap.docs.forEach(d => {
           const c = d.data();
-          _lastMsgAt[d.id] = c.lastMessageAt?.seconds || 0;
+          _lastMsgAt[d.id] = (c.lastMessageAt?.seconds || 0) * 1000 + Math.floor((c.lastMessageAt?.nanoseconds || 0) / 1e6);
         });
       }
       firstLoad = false;
@@ -4948,7 +4949,30 @@
     _setText('ch-category', c.category || 'Manutenção');
     const sb = $('ch-status-badge');
     if (sb) { sb.textContent = statusLabel; sb.style.background = statusColor + '22'; sb.style.color = statusColor; }
-    _setText('ch-tenant', c.tenantName || c.tenantEmail || '—');
+    const tenantDisplayName = c.tenantName || c.tenantEmail || '—';
+    _setText('ch-tenant', tenantDisplayName);
+    // Avatar do inquilino — busca no cache do listener em tempo real
+    const chAv = $('ch-avatar');
+    if (chAv) {
+      const inits = tenantDisplayName.split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?';
+      // Procura photoUrl: pelo tenantId do chamado ou pelo email
+      let photoUrl = _tcdTenantCache[c.tenantId]?.photoUrl || null;
+      if (!photoUrl && c.tenantEmail) {
+        const byEmail = Object.values(_tcdTenantCache).find(t => t.email === c.tenantEmail && t.photoUrl);
+        photoUrl = byEmail?.photoUrl || null;
+      }
+      if (!photoUrl && c.tenantId) {
+        const byEmail2 = Object.values(_tcdTenantCache).find(t => t.email === _tcdTenantCache[c.tenantId]?.email && t.photoUrl);
+        photoUrl = byEmail2?.photoUrl || null;
+      }
+      if (photoUrl) {
+        chAv.style.background = 'transparent';
+        chAv.innerHTML = `<img src="${esc(photoUrl)}" alt="${inits}" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\\'font-size:14px;font-weight:700;color:var(--text2)\\'>${inits}</span>')">`;
+      } else {
+        chAv.style.background = '';
+        chAv.innerHTML = `<span style="font-size:14px;font-weight:700;color:var(--text2)">${inits}</span>`;
+      }
+    }
     _setText('ch-property', c.propertyAddress || '');
     _setText('ch-desc', c.description || '');
 
@@ -7183,6 +7207,7 @@
           <!-- Header do chamado -->
           <div style="padding:14px 20px;border-bottom:1px solid var(--border);background:var(--s4);flex-shrink:0">
             <div style="display:flex;align-items:flex-start;gap:12px">
+              <div id="ch-avatar" style="width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--text2);background:var(--s3);border:1px solid var(--border2);overflow:hidden"></div>
               <div style="flex:1;min-width:0">
                 <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;flex-wrap:wrap">
                   <span id="ch-id" style="font-family:monospace;font-size:10px;color:#555;background:var(--bg);padding:2px 7px;border-radius:4px;letter-spacing:.5px"></span>
