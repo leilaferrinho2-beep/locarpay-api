@@ -5249,7 +5249,23 @@
         if (change.type === 'removed') return;
         const data = { id: change.doc.id, ...change.doc.data() };
         _tcdTenantCache[data.id] = data;
+        // Atualiza o próprio doc
         _updateTenantAvatarInDom(data.id, data.photoUrl, data.name);
+        // Cruza pelo email: atualiza todos os docs relacionados no DOM
+        // (ex: auth UID diferente do tenantId do contrato)
+        if (data.email && data.photoUrl) {
+          Object.values(_tcdTenantCache).forEach(cached => {
+            if (cached.id !== data.id && cached.email === data.email) {
+              _updateTenantAvatarInDom(cached.id, data.photoUrl, data.name);
+            }
+          });
+          tenants.forEach(t => {
+            if (t.id !== data.id && t.email === data.email) {
+              t.photoUrl = data.photoUrl;
+              _updateTenantAvatarInDom(t.id, data.photoUrl, data.name);
+            }
+          });
+        }
       });
     }, err => {
       console.warn('TENANT_REALTIME_LISTENER_ERROR', err.code || err.message);
