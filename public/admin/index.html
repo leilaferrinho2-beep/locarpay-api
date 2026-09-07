@@ -5883,12 +5883,16 @@
         rcEl.innerHTML = recent.map(c => {
           const tenant = tenants.find(t => t.id === c.tenantId);
           const name   = tenant?.name || c.tenantName || '—';
-          const init   = name.charAt(0).toUpperCase();
+          const init   = name.split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?';
+          const photo  = tenant?.photoUrl || '';
+          const avatarInner = photo
+            ? `<img src="${esc(photo)}" alt="${esc(init)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span>${esc(init)}</span>')">`
+            : init;
           let addr = c.propertyAddress || c.propertyDescription || '—';
           if (c.propertyCep && !addr.includes('CEP')) addr += ` — CEP ${fmtCep(c.propertyCep)}`;
           const since  = c.startDate ? new Date(c.startDate + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }) : '';
           return `<div class="recent-item">
-            <div class="recent-avatar">${init}</div>
+            <div class="recent-avatar" data-tenant-avatar="${esc(c.tenantId || '')}" style="${photo ? 'overflow:hidden;background:transparent' : ''}">${avatarInner}</div>
             <div class="recent-info">
               <div class="recent-name">${esc(name)}</div>
               <div class="recent-sub">${esc(addr)}${since ? ` · desde ${since}` : ''}</div>
@@ -6317,7 +6321,7 @@
   .dash-panel-title { font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
   .recent-item { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--border); }
   .recent-item:first-child { border-top: none; padding-top: 0; }
-  .recent-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--accent-bg); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--accent3); flex-shrink: 0; }
+  .recent-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--accent-bg); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--accent3); flex-shrink: 0; overflow: hidden; }
   .recent-info { flex: 1; min-width: 0; }
   .recent-name  { font-size: 13px; font-weight: 600; color: var(--text1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .recent-sub   { font-size: 11px; color: var(--text3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
