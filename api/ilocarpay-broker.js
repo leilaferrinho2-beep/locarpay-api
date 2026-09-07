@@ -27,6 +27,14 @@ const APP_BASE_URL  = process.env.APP_BASE_URL || 'https://ilocarpay.com.br';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// CEP helpers — formato canônico: 8 dígitos sem máscara
+function normalizeCep(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+function isValidCep(value) {
+  return normalizeCep(value).length === 8;
+}
+
 // Monta endereço completo na ordem correta: Logradouro, Nº, Complemento, Bairro, Cidade/UF
 function buildAddr(p = {}) {
   const parts = [
@@ -507,6 +515,9 @@ async function handleCheckBrokerDeps(db, body) {
 async function handleSubmitLead(db, body) {
   const { ownerId, brokerEmail, brokerName, tenant, spouse, landlord, property, guarantee, docs, propertyCode, propertyDescription } = body;
   if (!ownerId || !tenant?.email) throw Object.assign(new Error('Dados obrigatórios ausentes'), { status: 400 });
+  if (!isValidCep(property?.cep)) throw Object.assign(new Error('CEP do imóvel obrigatório e deve ter 8 dígitos.'), { status: 400 });
+  if (tenant?.currentAddress && !isValidCep(tenant?.currentCep))
+    throw Object.assign(new Error('CEP do endereço atual do inquilino obrigatório e deve ter 8 dígitos.'), { status: 400 });
 
   const leadRef = db.collection('leads').doc();
   await leadRef.set({
@@ -524,6 +535,7 @@ async function handleSubmitLead(db, body) {
       rg:             tenant.rg             || '',
       rgIssuer:       tenant.rgIssuer       || '',
       currentAddress: tenant.currentAddress || '',
+      currentCep:     normalizeCep(tenant.currentCep),
       profession:     tenant.profession     || '',
       company:        tenant.company        || '',
       income:         tenant.income         || '',
@@ -575,6 +587,7 @@ async function handleApproveLead(db, body) {
   if (!leadSnap.exists) throw Object.assign(new Error('Lead não encontrado'), { status: 404 });
   const lead = leadSnap.data();
   if (!lead.ownerId) throw Object.assign(new Error('ownerId ausente no lead'), { status: 400 });
+  if (!isValidCep(lead.property?.cep)) throw Object.assign(new Error('CEP do imóvel ausente ou inválido. Edite o lead e informe o CEP antes de aprovar.'), { status: 400 });
 
   const ownerSnap = await db.collection('owners').doc(lead.ownerId).get();
   const owner = { id: lead.ownerId, ...ownerSnap.data() };
@@ -586,26 +599,30 @@ async function handleApproveLead(db, body) {
   if (!existing.empty) {
     tenantId = existing.docs[0].id;
     await db.collection('users').doc(tenantId).update({
-      ownerId:  lead.ownerId,
-      name:     lead.tenant.name,
-      phone:    lead.tenant.phone,
-      cpf:      lead.tenant.cpf,
-      active:   false,
-      updatedAt: FieldValue.serverTimestamp()
+      ownerId:        lead.ownerId,
+      name:           lead.tenant.name,
+      phone:          lead.tenant.phone,
+      cpf:            lead.tenant.cpf,
+      active:         false,
+      currentCep:     normalizeCep(lead.tenant.currentCep),
+      currentAddress: lead.tenant.currentAddress || '',
+      updatedAt:      FieldValue.serverTimestamp()
     });
   } else {
     const newUserRef = db.collection('users').doc();
     tenantId = newUserRef.id;
     await newUserRef.set({
-      ownerId:   lead.ownerId,
-      name:      lead.tenant.name,
-      email:     tenantEmail,
-      cpf:       lead.tenant.cpf,
-      phone:     lead.tenant.phone,
-      role:      'tenant',
-      active:    false,
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp()
+      ownerId:        lead.ownerId,
+      name:           lead.tenant.name,
+      email:          tenantEmail,
+      cpf:            lead.tenant.cpf,
+      phone:          lead.tenant.phone,
+      role:           'tenant',
+      active:         false,
+      currentCep:     normalizeCep(lead.tenant.currentCep),
+      currentAddress: lead.tenant.currentAddress || '',
+      createdAt:      FieldValue.serverTimestamp(),
+      updatedAt:      FieldValue.serverTimestamp()
     });
   }
 

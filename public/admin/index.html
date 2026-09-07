@@ -2813,6 +2813,7 @@
     if (cpf && !validarCpf(cpf)) { showToast('CPF do inquilino inválido', 'error'); $('t-cpf').focus(); return; }
     if (!birthDate || birthDate.replace(/\D/g,'').length < 8) { showToast('Data de nascimento obrigatória', 'error'); return; }
     if (!currNum) { showToast('Número do endereço atual obrigatório', 'error'); return; }
+    if (currCep.length !== 8) { showToast('CEP do endereço atual do inquilino obrigatório (8 dígitos)', 'error'); $('t-curr-cep')?.focus(); return; }
     if (!propCode) { showToast('Código do imóvel obrigatório', 'error'); $('t-prop-code').focus(); return; }
     const codeInUse = contracts.some(c => c.ownerId === currentOwnerId && (c.propertyCode || '').toUpperCase() === propCode);
     if (codeInUse) { showToast(`Código "${propCode}" já está em uso`, 'error'); $('t-prop-code').focus(); return; }
@@ -2877,7 +2878,8 @@
         bairro:     bairro || '',
         city:       city   || '',
         uf:         uf     || '',
-        currentAddress: [currStreet, currNum, currCompl, currBairro, currCity, currUf].filter(Boolean).join(', ')
+        currentAddress: [currStreet, currNum, currCompl, currBairro, currCity, currUf].filter(Boolean).join(', '),
+        currentCep: currCep
       });
 
       // 2. Cria contrato com ownerId

@@ -311,9 +311,9 @@ async function handleInit(db, body, apiKey) {
   const ownerSnap = await db.collection('owners').doc(ownerId).get();
   const configData = ownerSnap.exists ? ownerSnap.data() : {};
 
-  let postalCode = (user.postalCode || user.cep || '').replace(/\D/g, '');
+  let postalCode = (user.currentCep || user.postalCode || user.cep || '').replace(/\D/g, '');
   if (postalCode.length !== 8) postalCode = (configData.postalCode || '').replace(/\D/g, '');
-  if (postalCode.length !== 8) postalCode = '01310100';
+  if (postalCode.length !== 8) throw Object.assign(new Error('CEP do inquilino não cadastrado. Peça ao administrador para atualizar o endereço atual do inquilino.'), { status: 400 });
 
   // Calcula valor real do aluguel (com taxa de cartão e eventuais juros/multa)
   const cardFeeRate  = (configData.cardFeePercentage ?? 2.99) / 100;
@@ -558,7 +558,7 @@ async function handleConfirm(db, body) {
     name:          ver.holderName,
     email:         ver.email || '',
     cpfCnpj:       ver.holderDocument || '',
-    postalCode:    ver.postalCode || '01310100',
+    postalCode:    ver.postalCode,
     addressNumber: 'SN',
     phone:         ver.phone || '11999999999'
   };
