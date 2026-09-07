@@ -4734,6 +4734,8 @@
     let firstLoad = true;
     const _lastMsgAt = {};
     _chamadosUnsubscribe = onSnapshot(q, async snap => {
+      // Captura docChanges ANTES do await para não perder referência correta
+      const changes = snap.docChanges();
       const rows = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
@@ -4741,15 +4743,13 @@
       await Promise.all(rows.map(async c => {
         if (c.tenantId && (!c.tenantName || c.tenantName.includes('@'))) {
           try {
-            const snap = await getDoc(doc(db, 'users', c.tenantId));
-            const n = snap.data()?.name;
+            const usnap = await getDoc(doc(db, 'users', c.tenantId));
+            const n = usnap.data()?.name;
             if (n && !n.includes('@')) {
               c.tenantName = n;
-              // Corrige no Firestore para não repetir a resolução
               updateDoc(doc(db, 'maintenance', c.id), { tenantName: n }).catch(() => {});
               return;
             }
-            // Fallback: contrato
             const cSnap = await getDocs(query(collection(db, 'contracts'),
               where('tenantId', '==', c.tenantId), limit(1)));
             const cn = cSnap.docs[0]?.data()?.tenantName;
@@ -4763,42 +4763,39 @@
       renderChamados(rows);
 
       if (!firstLoad) {
-        snap.docChanges().forEach(change => {
-          const c = change.doc.data();
-          const id = change.doc.id;
-          // Novo chamado aberto
-          if (change.type === 'added') {
-            showChamadoToast(id, c);
-          }
-          // Nova mensagem do inquilino (lastMessageSender == 'tenant')
-          if ((change.type === 'added' || change.type === 'modified') && c.lastMessageSender === 'tenant') {
-            // Usa milissegundos (seconds*1000 + ns/1e6) para diferenciar msgs no mesmo segundo
-            const msgAt = (c.lastMessageAt?.seconds || 0) * 1000 + Math.floor((c.lastMessageAt?.nanoseconds || 0) / 1e6);
-            if (msgAt > (_lastMsgAt[id] || 0)) {
-              _lastMsgAt[id] = msgAt;
-              // Só notifica se não estiver na aba chamados
-              const onChamadosTab = $('panel-chamados')?.style.display !== 'none';
-              if (!onChamadosTab) {
-                showChatMsgToast(id, c);
-                // Notificação nativa do browser (funciona em background no celular)
-                if ('Notification' in window && Notification.permission === 'granted') {
-                  const n = new Notification('💬 ' + (c.tenantName || 'Inquilino'), {
-                    body: c.lastMessage || 'Nova mensagem',
-                    icon: '/logo.png',
-                    tag: 'chamado-' + id,
-                    renotify: true
-                  });
-                  n.onclick = () => { window.focus(); n.close(); };
-                }
+        // Detecta nova msg do inquilino comparando diretamente com _lastMsgAt
+        // (não usa docChanges() após await pois o SDK pode não garantir o contexto correto)
+        rows.forEach(c => {
+          const id = c.id;
+          const msgAt = (c.lastMessageAt?.seconds || 0) * 1000 + Math.floor((c.lastMessageAt?.nanoseconds || 0) / 1e6);
+          if (c.lastMessageSender === 'tenant' && msgAt > (_lastMsgAt[id] || 0)) {
+            _lastMsgAt[id] = msgAt;
+            const onChamadosTab = $('panel-chamados')?.style.display !== 'none';
+            if (!onChamadosTab) {
+              showChatMsgToast(id, c);
+              if ('Notification' in window && Notification.permission === 'granted') {
+                const n = new Notification('💬 ' + (c.tenantName || 'Inquilino'), {
+                  body: c.lastMessage || 'Nova mensagem',
+                  icon: '/logo.png',
+                  tag: 'chamado-' + id,
+                  renotify: true
+                });
+                n.onclick = () => { window.focus(); n.close(); };
               }
             }
+          } else if (c.lastMessageSender !== 'tenant') {
+            // Atualiza o baseline para msgs do owner/admin, evita renotificar msg antiga do inquilino
+            if (msgAt > (_lastMsgAt[id] || 0)) _lastMsgAt[id] = msgAt;
           }
+        });
+        // Novo chamado criado
+        changes.forEach(change => {
+          if (change.type === 'added') showChamadoToast(change.doc.id, change.doc.data());
         });
       } else {
         // Inicializa timestamps para não notificar mensagens antigas
-        snap.docs.forEach(d => {
-          const c = d.data();
-          _lastMsgAt[d.id] = (c.lastMessageAt?.seconds || 0) * 1000 + Math.floor((c.lastMessageAt?.nanoseconds || 0) / 1e6);
+        rows.forEach(c => {
+          _lastMsgAt[c.id] = (c.lastMessageAt?.seconds || 0) * 1000 + Math.floor((c.lastMessageAt?.nanoseconds || 0) / 1e6);
         });
       }
       firstLoad = false;
