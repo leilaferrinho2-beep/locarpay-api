@@ -4862,15 +4862,8 @@
 
   function renderChamados(rows) {
     _chamadosAll = rows;
-
-    // Badge no tab
-    const abertos = rows.filter(r => r.status === 'open').length;
-    const badge = $('chamados-badge');
-    if (badge) {
-      if (abertos > 0) { badge.textContent = abertos; badge.style.display = 'inline'; }
-      else { badge.style.display = 'none'; }
-    }
-
+    // Badge é controlado apenas por showChatMsgToast (nova msg do inquilino)
+    // e limpo ao clicar no tab — não depende de quantos chamados estão abertos
     _renderChamadoList();
   }
 
