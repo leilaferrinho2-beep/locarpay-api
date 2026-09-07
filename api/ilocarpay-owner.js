@@ -38,7 +38,7 @@ function initFirebase() {
   if (getApps().length) return;
   initializeApp({
     credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
-    storageBucket: 'locarpayapp.firebasestorage.app',
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'locarpayapp.appspot.com',
   });
 }
 
@@ -916,18 +916,22 @@ async function handleSendNotification(db, body) {
   const { recipientType, tenantId, ownerId, brokerId, chamadoId, chatId, contractId, title, body: msgBody, type } = body;
   if (!title || !msgBody) throw Object.assign(new Error('title e body obrigatórios'), { status: 400 });
 
+  // Token FCM deve ter pelo menos 100 caracteres (tokens reais do FCM têm ~150+ chars)
+  const isValidToken = t => typeof t === 'string' && t.length > 50;
   let token = null;
 
   if (recipientType === 'tenant' && tenantId) {
     const snap = await db.collection('users').doc(tenantId).get();
-    token = snap.data()?.fcmToken || null;
-    // Fallback: busca por email quando o doc não tem token (usuário duplicado)
+    const raw = snap.data()?.fcmToken || null;
+    token = isValidToken(raw) ? raw : null;
+    // Fallback: busca por email (cobre múltiplos docs e token salvo no doc do auth UID)
     if (!token) {
       const email = snap.data()?.email || body.tenantEmail || null;
       if (email) {
         const byEmail = await db.collection('users')
-          .where('email', '==', email).where('fcmToken', '!=', '').limit(1).get();
-        token = byEmail.docs[0]?.data()?.fcmToken || null;
+          .where('email', '==', email).limit(10).get();
+        const validDoc = byEmail.docs.find(d => isValidToken(d.data()?.fcmToken));
+        token = validDoc?.data()?.fcmToken || null;
       }
     }
   } else if (recipientType === 'owner' && ownerId) {
@@ -949,8 +953,8 @@ async function handleSendNotification(db, body) {
     : type === 'broker_chat' ? 'locarpay_chamado'
     : 'locarpay_aviso';
 
-  // Envia notification + data: notification garante exibição em v5.33 (app fechado),
-  // data.title/body garante leitura correta em v5.34+ (onMessageReceived prefere data).
+  // Data-only: sem campo notification, o onMessageReceived é SEMPRE chamado mesmo com app fechado.
+  // Isso permite wakeScreen() funcionar e o app construir a notificação via NotificationHelper.
   const data = { type: type || 'aviso', title: String(title), body: String(msgBody) };
   if (chamadoId)  data.chamadoId  = chamadoId;
   if (chatId)     data.chatId     = chatId;
@@ -959,9 +963,8 @@ async function handleSendNotification(db, body) {
 
   await getMessaging().send({
     token,
-    notification: { title, body: msgBody },
     data,
-    android: { priority: 'high', notification: { channelId, sound: 'default', notificationPriority: 'PRIORITY_HIGH' } }
+    android: { priority: 'high' }
   });
 
   return { ok: true };
@@ -1019,25 +1022,234 @@ export default async function handler(req, res) {
     if (step === 'setup-payment-webhook')  return res.status(200).json(await handleSetupPaymentWebhook(db, body));
     if (step === 'delete-tenant')        return res.status(200).json(await handleDeleteTenant(db, body, req));
     if (step === 'send-notification')    return res.status(200).json(await handleSendNotification(db, body));
-    if (step === 'upload-photo')         return res.status(200).json(await handleUploadPhoto(body));
+    if (step === 'upload-photo')         return res.status(200).json(await handleUploadPhoto(req, body));
+    if (step === 'upload-tenant-photo')  return res.status(200).json(await handleUploadTenantPhoto(req, db, body));
+    if (step === 'upload-owner-logo')    return res.status(200).json(await handleUploadOwnerLogo(req, db, body));
+    if (step === 'generate-avatar')      return res.status(200).json(await handleGenerateAvatar(req, body));
 
     return res.status(400).json({ error: 'step invalido' });
 
   } catch (e) {
-    console.error('ilocarpay-owner error:', e.message);
-    return res.status(e.status || 500).json({ error: e.message, ...(e.ownerId ? { ownerId: e.ownerId } : {}) });
+    const errCode = e.code || e.status || 500;
+    console.error('ilocarpay-owner error:', errCode, e.message, e.errors ? JSON.stringify(e.errors) : '');
+    return res.status(typeof e.status === 'number' ? e.status : 500).json({ error: e.message, ...(e.ownerId ? { ownerId: e.ownerId } : {}) });
   }
 }
 
-async function handleUploadPhoto(body) {
-  const { uid, imageBase64, contentType = 'image/jpeg' } = body;
-  if (!uid || !imageBase64) throw Object.assign(new Error('uid e imageBase64 obrigatorios'), { status: 400 });
+// ── Upload helpers ────────────────────────────────────────────────────────────
+
+const ALLOWED_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5MB
+
+async function verifyFirebaseToken(req) {
+  const header = req.headers['authorization'] || '';
+  console.log('[auth] authorization header:', header ? `present len=${header.length}` : 'MISSING');
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!token) throw Object.assign(new Error('Token de autenticação obrigatório'), { status: 401 });
+  return getAuth().verifyIdToken(token); // { uid, ...claims }
+}
+
+function validateImageBuffer(imageBase64, contentType) {
+  if (!imageBase64) throw Object.assign(new Error('imageBase64 obrigatorio'), { status: 400 });
+  const mime = (contentType || 'image/jpeg').toLowerCase().trim();
+  if (!ALLOWED_MIME.has(mime)) throw Object.assign(new Error('Tipo de arquivo não permitido'), { status: 400 });
   const buffer = Buffer.from(imageBase64, 'base64');
-  const bucket = getStorage().bucket();
-  const file = bucket.file(`profile_photos/${uid}.jpg`);
-  await file.save(buffer, { metadata: { contentType }, public: true });
+  if (buffer.length > MAX_PHOTO_BYTES) throw Object.assign(new Error('Arquivo maior que 5MB'), { status: 400 });
+  // Magic bytes check
+  if ((mime === 'image/jpeg' || mime === 'image/jpg') && (buffer[0] !== 0xFF || buffer[1] !== 0xD8)) {
+    throw Object.assign(new Error('Arquivo inválido para tipo declarado'), { status: 400 });
+  }
+  if (mime === 'image/png' && (buffer[0] !== 0x89 || buffer[1] !== 0x50)) {
+    throw Object.assign(new Error('Arquivo inválido para tipo declarado'), { status: 400 });
+  }
+  return buffer;
+}
+
+async function savePublicFile(filename, buffer, contentType) {
+  const BUCKET = 'transgu-web-6d50f.firebasestorage.app';
+  const bucket = getStorage().bucket(BUCKET);
+  const file   = bucket.file(filename);
+  // Gera signed URL de escrita (mesmo padrão do broker, que já funciona)
+  const [signedUrl] = await file.getSignedUrl({
+    action: 'write',
+    expires: Date.now() + 5 * 60 * 1000,
+    contentType,
+    version: 'v4',
+  });
+  const resp = await fetch(signedUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: buffer,
+  });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    console.error('[savePublicFile] PUT failed:', resp.status, txt.slice(0, 300));
+    const err = new Error(`Upload storage falhou: ${resp.status}`);
+    err.status = 500;
+    throw err;
+  }
+  // Torna o arquivo publicamente legível via GCS (allUsers objectViewer)
   await file.makePublic();
-  const url = `https://storage.googleapis.com/${bucket.name}/profile_photos/${uid}.jpg`;
+  return `https://storage.googleapis.com/${BUCKET}/${filename}`;
+}
+
+// ── Foto de perfil (corretor / inquilino / owner) — uid derivado do token ─────
+async function handleUploadPhoto(req, body) {
+  const decoded = await verifyFirebaseToken(req);
+  const uid = decoded.uid; // uid vem do token, não do body
+  const { imageBase64, contentType = 'image/jpeg' } = body;
+  const buffer = validateImageBuffer(imageBase64, contentType);
+  const filename = `profile_photos/${uid}_${Date.now()}.jpg`;
+  const url = await savePublicFile(filename, buffer, 'image/jpeg');
+  return { ok: true, url };
+}
+
+// ── Foto de inquilino por admin — valida vínculo admin→tenant ────────────────
+async function handleUploadTenantPhoto(req, db, body) {
+  const decoded = await verifyFirebaseToken(req);
+  const adminUid = decoded.uid;
+  const { tenantId, imageBase64, contentType = 'image/jpeg' } = body;
+  if (!tenantId) throw Object.assign(new Error('tenantId obrigatorio'), { status: 400 });
+
+  // Provar que o admin tem ownerId e que o inquilino pertence a esse owner
+  const [ownerSnap, tenantSnap] = await Promise.all([
+    db.collection('owners').where('authUid', '==', adminUid).limit(1).get()
+      .then(s => s.empty ? db.collection('owners').where('uid', '==', adminUid).limit(1).get() : s),
+    db.collection('users').doc(tenantId).get()
+  ]);
+
+  // Fallback: procurar ownerId via licenses ou claims
+  let ownerId = decoded.ownerId || null;
+  if (!ownerId && !ownerSnap.empty) ownerId = ownerSnap.docs[0].id;
+  if (!ownerId) throw Object.assign(new Error('Não autorizado — owner não encontrado'), { status: 403 });
+
+  if (!tenantSnap.exists) throw Object.assign(new Error('Inquilino não encontrado'), { status: 404 });
+  const tenantOwnerId = tenantSnap.data().ownerId;
+  if (tenantOwnerId && tenantOwnerId !== ownerId) {
+    throw Object.assign(new Error('Não autorizado — inquilino não pertence a este owner'), { status: 403 });
+  }
+
+  const buffer = validateImageBuffer(imageBase64, contentType);
+  const filename = `profile_photos/${tenantId}_${Date.now()}.jpg`;
+  const url = await savePublicFile(filename, buffer, 'image/jpeg');
+  await db.collection('users').doc(tenantId).update({ photoUrl: url });
+  return { ok: true, url };
+}
+
+// ── Logo da imobiliária — valida ownerId pelo token/db ───────────────────────
+async function handleUploadOwnerLogo(req, db, body) {
+  const decoded = await verifyFirebaseToken(req);
+  const adminUid = decoded.uid;
+  const { imageBase64, contentType = 'image/jpeg' } = body;
+
+  // Derivar ownerId do token ou do Firestore
+  let ownerId = decoded.ownerId || null;
+  if (!ownerId) {
+    const ownerSnap = await db.collection('owners').where('authUid', '==', adminUid).limit(1).get()
+      .then(s => s.empty ? db.collection('owners').where('uid', '==', adminUid).limit(1).get() : s);
+    if (!ownerSnap.empty) ownerId = ownerSnap.docs[0].id;
+  }
+  if (!ownerId) throw Object.assign(new Error('Não autorizado — owner não encontrado'), { status: 403 });
+
+  const buffer = validateImageBuffer(imageBase64, contentType);
+  const filename = `owner_logos/${ownerId}_${Date.now()}.jpg`;
+  const url = await savePublicFile(filename, buffer, 'image/jpeg');
+  return { ok: true, url };
+}
+
+// ── Rate limit em memória (best effort; reseta em cold start) ─────────────────
+const _aiRateLimit = new Map();
+const AI_RATE_LIMIT_MS = 20_000;
+
+// ── Geração de avatar com IA (Pollinations) ────────────────────────────────────
+async function handleGenerateAvatar(req, body) {
+  const { uid } = await verifyFirebaseToken(req);
+
+  // Rate limit por uid
+  const now = Date.now();
+  const lastGen = _aiRateLimit.get(uid) || 0;
+  if (now - lastGen < AI_RATE_LIMIT_MS) {
+    const err = new Error('Aguarde antes de gerar outra foto');
+    err.status = 429;
+    throw err;
+  }
+
+  // Validate genderPreference — allowlist, prompt nunca vem do cliente
+  const ALLOWED_GENDERS = ['male', 'female', 'neutral'];
+  const gender = ALLOWED_GENDERS.includes(body.genderPreference) ? body.genderPreference : 'neutral';
+
+  const genderClause = gender === 'male'   ? 'man, male professional'
+                     : gender === 'female' ? 'woman, female professional'
+                     : 'person';
+
+  const fullPrompt = [
+    'Professional real estate agent profile portrait',
+    genderClause,
+    'adult, business attire, friendly and trustworthy expression',
+    'neutral professional studio background, head and shoulders',
+    'realistic photography, natural skin texture',
+    'professional corporate headshot, centered composition',
+    'clean background, no text, no logo, no watermark',
+  ].join(', ');
+
+  const seed = Math.floor(Math.random() * 2_000_000_000);
+  const params = new URLSearchParams({
+    model:   'flux-realism',
+    width:   '512',
+    height:  '512',
+    seed:    String(seed),
+    nologo:  'true',
+    enhance: 'false',
+    private: 'true',
+  });
+  const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?${params}`;
+
+  console.log('[AI_AVATAR_REQUEST] gender:', gender, 'seed:', seed);
+  const t0 = Date.now();
+
+  let imgResp;
+  try {
+    imgResp = await fetch(pollinationsUrl, { signal: AbortSignal.timeout(55_000) });
+  } catch (e) {
+    console.error('[AI_AVATAR_FAILED] fetch error:', e.message);
+    throw Object.assign(new Error('Serviço de IA indisponível'), { status: 502 });
+  }
+
+  if (!imgResp.ok) {
+    console.error('[AI_AVATAR_FAILED] HTTP:', imgResp.status);
+    throw Object.assign(new Error('Falha ao gerar imagem'), { status: 502 });
+  }
+
+  const contentType = imgResp.headers.get('content-type') || '';
+  if (!contentType.startsWith('image/')) {
+    console.error('[AI_AVATAR_FAILED] content-type:', contentType);
+    throw Object.assign(new Error('Resposta inválida da IA'), { status: 502 });
+  }
+
+  const buffer = Buffer.from(await imgResp.arrayBuffer());
+
+  // Tamanho máximo 10 MB
+  if (buffer.length > 10 * 1024 * 1024) {
+    throw Object.assign(new Error('Imagem muito grande'), { status: 502 });
+  }
+
+  // Validação magic bytes: JPEG (FF D8) ou PNG (89 50 4E 47)
+  const isJpeg = buffer[0] === 0xFF && buffer[1] === 0xD8;
+  const isPng  = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
+  if (!isJpeg && !isPng) {
+    console.error('[AI_AVATAR_FAILED] invalid magic bytes:', buffer.slice(0, 4).toString('hex'));
+    throw Object.assign(new Error('Formato de imagem inválido'), { status: 502 });
+  }
+
+  const ext      = isJpeg ? 'jpg' : 'png';
+  const mime     = isJpeg ? 'image/jpeg' : 'image/png';
+  const filename = `profile_photos/${uid}_ai_${Date.now()}.${ext}`;
+
+  const url = await savePublicFile(filename, buffer, mime);
+
+  _aiRateLimit.set(uid, now);
+  console.log('[AI_AVATAR_SUCCESS] size:', buffer.length, 'ms:', Date.now() - t0);
+
   return { ok: true, url };
 }
 
