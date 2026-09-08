@@ -3555,7 +3555,6 @@
           <div style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap">
           <button class="btn-sm" onclick="openEditTenant('${t.id}')">Editar</button>
           <button class="btn-sm btn-sm-alt" onclick="openAvulsa('${t.id}','${(t.name||'').replace(/'/g,"\\'")}','${(t.email||'').replace(/'/g,"\\'")}')" style="color:#FFD54F;border-color:#FFD54F">+Avulsa</button>
-          <button class="btn-sm btn-sm-alt" onclick="openTenantChat('${t.id}','${(t.name||'').replace(/'/g,"\\'")}','${(contracts.find(x=>x.tenantId===t.id)?.id||'').replace(/'/g,"\\'")}');" style="color:#80DEEA;border-color:#80DEEA">💬</button>
           ${(()=>{
             const c = contracts.find(x => x.tenantId === t.id);
             if (!c) return '';
@@ -8022,27 +8021,6 @@
   </div>
 </div>
 
-<!-- Tenant Chat Drawer (Mural de Avisos) -->
-<div id="tenant-chat-overlay" onclick="closeTenantChat()"></div>
-<div id="tenant-chat-drawer">
-  <div class="bcd-header">
-    <div class="bcd-avatar" id="tcd-avatar-wrap"><span class="bcd-avatar-initials">?</span></div>
-    <div class="bcd-info">
-      <div class="bcd-name" id="tcd-tenant-name">Inquilino</div>
-      <div class="bcd-sub">Mural de Avisos</div>
-    </div>
-    <button class="bcd-close" onclick="closeTenantChat()">×</button>
-  </div>
-  <div class="bcd-msgs" id="tcd-msgs">
-    <div style="text-align:center;color:#444;font-size:13px;padding:32px 0">Carregando…</div>
-  </div>
-  <div class="bcd-input-row">
-    <textarea id="tcd-input" rows="1" placeholder="Escreva um aviso… (Enter envia)"
-      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'"
-      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();tcdSendMsg()}"></textarea>
-    <button id="tcd-send" onclick="tcdSendMsg()">Enviar</button>
-  </div>
-</div>
 
 <!-- Modal: Enviar Aviso -->
 <!-- Broker Chat Drawer -->
