@@ -4769,8 +4769,9 @@
           const msgAt = (c.lastMessageAt?.seconds || 0) * 1000 + Math.floor((c.lastMessageAt?.nanoseconds || 0) / 1e6);
           if (c.lastMessageSender === 'tenant' && msgAt > (_lastMsgAt[id] || 0)) {
             _lastMsgAt[id] = msgAt;
-            // Notifica sempre, exceto se o admin está exibindo exatamente esse chamado
-            if (_selectedChamadoId !== id) {
+            // Notifica sempre, exceto se o admin está na aba Chamados com esse chamado aberto (vê em tempo real)
+            const onChamadosTab = $('panel-chamados')?.style.display !== 'none';
+            if (!(onChamadosTab && _selectedChamadoId === id)) {
               showChatMsgToast(id, c);
               if ('Notification' in window && Notification.permission === 'granted') {
                 const n = new Notification('💬 ' + (c.tenantName || 'Inquilino'), {
