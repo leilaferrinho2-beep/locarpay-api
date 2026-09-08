@@ -1,49 +1,72 @@
+// Script pontual: corrige users doc da inquilina (ownerId/active faltando)
+// Uso: node fix-tenant-email.cjs <email-correto>
 const admin = require('firebase-admin');
-const sa = JSON.parse(require('fs').readFileSync('C:/Users/denis/Downloads/locarpayapp-firebase-adminsdk-fbsvc-e92d24aa50.json', 'utf8'));
+const { readFileSync } = require('fs');
+
+const emailCorreto = process.argv[2]?.trim().toLowerCase();
+if (!emailCorreto) { console.error('Uso: node fix-tenant-email.cjs <email>'); process.exit(1); }
+
+const sa = JSON.parse(readFileSync('C:/Users/denis/Downloads/locarpayapp-firebase-adminsdk-fbsvc-e92d24aa50.json', 'utf8'));
 admin.initializeApp({ credential: admin.credential.cert(sa) });
 const db = admin.firestore();
-const { FieldValue } = admin.firestore;
-
-const OLD_EMAIL = 'leilaferrinho2@gmail.com';
-const NEW_EMAIL = 'leilamferrinho@outlook.com';
-const LEAD_ID     = 'nP9EzyheJ2UGpXrGqrs0';
-const CONTRACT_ID = 'DvNjukoPCk30OrQT2dqy';
 
 (async () => {
-  // Atualiza lead
-  const leadRef = db.collection('leads').doc(LEAD_ID);
-  const lead = (await leadRef.get()).data();
-  console.log('Lead tenantEmail atual:', lead?.tenant?.email || lead?.tenantEmail);
-  const leadUpdate = {};
-  if (lead?.tenant?.email === OLD_EMAIL) leadUpdate['tenant.email'] = NEW_EMAIL;
-  if (lead?.tenantEmail === OLD_EMAIL)   leadUpdate['tenantEmail']  = NEW_EMAIL;
-  if (Object.keys(leadUpdate).length) {
-    await leadRef.update({ ...leadUpdate, updatedAt: FieldValue.serverTimestamp() });
-    console.log('Lead atualizado ✓');
+  // 1. Busca users doc pelo email
+  const existing = await db.collection('users').where('email', '==', emailCorreto).limit(1).get();
+  let tenantId = null;
+  let currentData = null;
+  if (!existing.empty) {
+    tenantId = existing.docs[0].id;
+    currentData = existing.docs[0].data();
+    console.log('users doc:', tenantId, '| ownerId:', currentData.ownerId || '(vazio)', '| active:', currentData.active);
   }
 
-  // Atualiza contrato
-  const contractRef = db.collection('contracts').doc(CONTRACT_ID);
-  const c = (await contractRef.get()).data();
-  console.log('Contract tenantEmail atual:', c?.tenantEmail);
-  if (c?.tenantEmail === OLD_EMAIL) {
-    await contractRef.update({ tenantEmail: NEW_EMAIL, updatedAt: FieldValue.serverTimestamp() });
-    console.log('Contrato atualizado ✓');
+  // 2. Busca contrato para pegar ownerId e dados completos
+  const contractSnap = await db.collection('contracts')
+    .where('tenantEmail', '==', emailCorreto)
+    .limit(1).get();
+
+  let ownerId = currentData?.ownerId || null;
+  let tenantName = currentData?.name || '';
+  let tenantPhone = currentData?.phone || '';
+  let tenantCpf = currentData?.cpf || '';
+
+  if (!contractSnap.empty) {
+    const c = contractSnap.docs[0].data();
+    ownerId = ownerId || c.ownerId;
+    tenantId = tenantId || c.tenantId;
+    tenantName = tenantName || c.tenantName || '';
+    tenantPhone = tenantPhone || c.tenantPhone || '';
+    tenantCpf = tenantCpf || c.tenantCpf || '';
+    console.log('Contrato encontrado. ownerId:', c.ownerId, '| tenantId:', c.tenantId);
+  } else {
+    // fallback: busca lead
+    const leadSnap = await db.collection('leads')
+      .where('tenantEmail', '==', emailCorreto).limit(1).get();
+    if (!leadSnap.empty) {
+      const l = leadSnap.docs[0].data();
+      ownerId = ownerId || l.ownerId;
+      tenantId = tenantId || l.tenantId;
+      console.log('Lead encontrado. ownerId:', l.ownerId);
+    }
   }
 
-  // Atualiza usuário (se existir com esse email)
-  const usersSnap = await db.collection('users').where('email', '==', OLD_EMAIL).get();
-  for (const doc of usersSnap.docs) {
-    await doc.ref.update({ email: NEW_EMAIL });
-    console.log('User doc atualizado:', doc.id, '✓');
-  }
+  if (!ownerId) { console.log('ownerId não encontrado. Informe manualmente.'); process.exit(1); }
+  if (!tenantId) { console.log('tenantId não encontrado.'); process.exit(1); }
 
-  const tenantsSnap = await db.collection('tenants').where('email', '==', OLD_EMAIL).get();
-  for (const doc of tenantsSnap.docs) {
-    await doc.ref.update({ email: NEW_EMAIL });
-    console.log('Tenant doc atualizado:', doc.id, '✓');
-  }
+  // 3. Atualiza/cria users doc com dados completos
+  await db.collection('users').doc(tenantId).set({
+    email:    emailCorreto,
+    ownerId,
+    name:     tenantName,
+    phone:    tenantPhone,
+    cpf:      tenantCpf,
+    role:     'tenant',
+    active:   true,
+    suspended: false,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
 
-  console.log('\nE-mail do inquilino atualizado de', OLD_EMAIL, 'para', NEW_EMAIL);
+  console.log('CORRIGIDO. users doc:', tenantId, '| ownerId:', ownerId, '| active: true');
   process.exit(0);
-})().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
+})();

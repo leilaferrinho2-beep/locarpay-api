@@ -83,6 +83,14 @@
         { "fieldPath": "email",     "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "brokerChats",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brokerId",      "order": "ASCENDING" },
+        { "fieldPath": "lastMessageAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -60,7 +60,8 @@
     }
   ],
   "functions": {
-    "api/ilocarpay-broker.js": { "maxDuration": 300 }
+    "api/ilocarpay-broker.js": { "maxDuration": 300 },
+    "api/ilocarpay-owner.js":  { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/ilocarpay-owner",                         "schedule": "0 11 * * *" },

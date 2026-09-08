@@ -69,18 +69,26 @@ async function handleSend(req, res) {
       db.collection('brokers').where('email', '==', emailNorm).limit(1).get()
     ]);
 
-    const temLicenca = licenseDoc.exists && licenseDoc.data().active === true;
-    const temOwner   = !ownerSnap.empty;
-    const brokerData = brokerSnap.empty ? null : brokerSnap.docs[0].data();
-    const temBroker  = brokerData !== null && brokerData.active !== false;
-    const tenantDoc  = tenantSnap.empty ? null : tenantSnap.docs[0].data();
-    const temCadastro = tenantDoc !== null && tenantDoc.suspended !== true;
+    const temLicenca    = licenseDoc.exists && licenseDoc.data().active === true;
+    const temOwner      = !ownerSnap.empty;
+    const brokerData    = brokerSnap.empty ? null : brokerSnap.docs[0].data();
+    const temBrokerDoc  = brokerData !== null;
+    const temBroker     = temBrokerDoc && brokerData.active !== false && !!brokerData.ownerId;
+    const tenantDoc     = tenantSnap.empty ? null : tenantSnap.docs[0].data();
+    const temCadastro   = tenantDoc !== null && tenantDoc.suspended !== true;
+    const temVinculo    = tenantDoc !== null && !!tenantDoc.ownerId;
 
     console.log('[send-otp] email:', emailNorm,
       '| licenca:', temLicenca, '| owner:', temOwner,
-      '| broker:', temBroker, '| cadastro:', temCadastro);
+      '| brokerDoc:', temBrokerDoc, '| broker:', temBroker,
+      '| cadastro:', temCadastro, '| vinculo:', temVinculo);
 
-    if (!temLicenca && !temOwner && !temBroker && !temCadastro) {
+    // Não existe em lugar nenhum
+    if (!temLicenca && !temOwner && !temBrokerDoc && !temCadastro) {
+      return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com a imobiliária.' });
+    }
+    // Existe mas sem vínculo com imobiliária (inquilino ou corretor sem ownerId)
+    if (!temLicenca && !temOwner && !temBroker && !temVinculo) {
       return res.status(403).json({ error: 'E-mail não cadastrado. Entre em contato com a imobiliária.' });
     }
 

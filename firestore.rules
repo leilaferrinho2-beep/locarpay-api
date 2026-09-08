@@ -144,15 +144,22 @@ service cloud.firestore {
     }
 
     // ── brokerChats ─────────────────────────────────────────────────────────
+    // Função auxiliar: corretor autenticado é o dono do brokerId gravado no documento
+    function isBrokerOf(brokerId) {
+      return isAuth() && brokerId != '' &&
+        exists(/databases/$(database)/documents/brokers/$(brokerId)) &&
+        get(/databases/$(database)/documents/brokers/$(brokerId)).data.get('email','') == myEmail();
+    }
+
     match /brokerChats/{chatId} {
-      // P0-3: participante do chat (brokerId ou ownerId no token) ou master
+      // P0-3 fix: participante do chat identificado pelo email do broker (não pelo UID)
       allow read, write: if isMaster()
         || isOwnerOf(resource.data.get('ownerId', ''))
-        || (isAuth() && resource.data.get('brokerId', '') == request.auth.uid);
+        || isBrokerOf(resource.data.get('brokerId', ''));
       match /messages/{msgId} {
         allow read, create: if isMaster()
           || (isAuth() && isOwnerOf(get(/databases/$(database)/documents/brokerChats/$(chatId)).data.get('ownerId','')))
-          || (isAuth() && get(/databases/$(database)/documents/brokerChats/$(chatId)).data.get('brokerId','') == request.auth.uid);
+          || (isAuth() && isBrokerOf(get(/databases/$(database)/documents/brokerChats/$(chatId)).data.get('brokerId','')));
         allow update, delete: if false;
       }
     }

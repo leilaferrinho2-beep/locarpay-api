@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>iLocarPay &mdash; Super Admin</title>
+<script>var _k='ilocarpay-theme',_p;try{_p=localStorage.getItem(_k);}catch(e){_p=null;}if(_p!=='light'&&_p!=='dark'){_p=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';try{localStorage.setItem(_k,_p);}catch(e){}}document.documentElement.setAttribute('data-theme',_p);</script>
 <script>
   document.addEventListener('DOMContentLoaded', async function() {
 
@@ -723,6 +724,28 @@
   --r:       10px;
   --font:    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
 }
+html[data-theme="light"] {
+  --bg:    #F4F6FB;
+  --surf:  #FFFFFF;
+  --surf2: #F0F2F9;
+  --surf3: #E8ECF4;
+  --bdr:   #DDE2F0;
+  --bdr2:  #C8D0E8;
+  --bdr3:  #B0BCDC;
+  --txt:   #0F1225;
+  --txt2:  #3D4574;
+  --txt3:  #5B6690;
+  --green:   #047857;
+  --green-d: #065f46;
+  --green-g: rgba(5,150,105,.12);
+  --green-b: rgba(5,150,105,.08);
+  --amber:   #92400e;
+  --amber-b: rgba(146,64,14,.10);
+  --red-b:   rgba(244,63,94,.10);
+  --blue-b:  rgba(99,102,241,.10);
+}
+.ip-theme-btn { background:var(--surf2); border:1px solid var(--bdr2); color:var(--txt2); height:32px; padding:0 12px; border-radius:8px; cursor:pointer; font-size:13px; white-space:nowrap; transition:background .15s,color .15s; display:flex; align-items:center; justify-content:center; }
+.ip-theme-btn:hover { background:var(--surf3); color:var(--txt); }
 
 body {
   font-family: var(--font);
@@ -746,7 +769,7 @@ body {
 }
 .login-card {
   width: 100%; max-width: 380px;
-  background: linear-gradient(160deg, #0d1018 0%, #090b10 100%);
+  background: linear-gradient(160deg, var(--surf2) 0%, var(--surf) 100%);
   border: 1px solid var(--bdr2); border-radius: 20px;
   padding: 48px 40px 40px; text-align: center;
   box-shadow: 0 0 0 1px rgba(255,255,255,.03), 0 32px 80px rgba(0,0,0,.6);
@@ -1196,7 +1219,7 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
   backdrop-filter: blur(6px);
 }
 .edit-panel {
-  background: linear-gradient(160deg, #0e1220 0%, #090c14 100%);
+  background: linear-gradient(160deg, var(--surf3) 0%, var(--surf) 100%);
   border: 1px solid var(--bdr2); border-radius: 18px;
   padding: 30px 34px; width: 480px; max-width: 95vw;
   box-shadow: 0 0 0 1px rgba(255,255,255,.03), 0 24px 80px rgba(0,0,0,.7);
@@ -1341,6 +1364,32 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
   border-radius: 50%; animation: spin .6s linear infinite;
   vertical-align: middle;
 }
+
+/* ── LIGHT MODE OVERRIDES ────────────────────────── */
+html[data-theme="light"] .topbar {
+  background: rgba(244,246,251,0.92);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border-bottom-color: rgba(0,0,0,.08);
+}
+html[data-theme="light"] .topbar .wordmark,
+html[data-theme="light"] .topbar [style*="color:#fff"] { color: var(--txt) !important; }
+html[data-theme="light"] .edit-input { background: var(--surf); }
+html[data-theme="light"] tbody tr:hover { background: rgba(0,0,0,.025); }
+html[data-theme="light"] .table-wrap { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+html[data-theme="light"] .stat:hover { box-shadow: 0 8px 24px rgba(0,0,0,.10); }
+html[data-theme="light"] .stat.c-active .stat-value { text-shadow: none; }
+html[data-theme="light"] .login-card [style*="color:#fff"] { color: var(--txt) !important; }
+html[data-theme="light"] #loading { background: rgba(244,246,251,.80); }
+html[data-theme="light"] .row-menu { box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+html[data-theme="light"] .sub-context-label,
+html[data-theme="light"] .modal-section-label,
+html[data-theme="light"] .field-hint,
+html[data-theme="light"] .optional-tag { color: var(--txt3); }
+html[data-theme="light"] .search::placeholder { color: var(--txt3); }
+html[data-theme="light"] #modal-add .edit-input::placeholder { color: var(--txt3); }
+html[data-theme="light"] .info-mono { color: var(--txt2); }
+html[data-theme="light"] .flt.active { color: #fff; }
+html[data-theme="light"] .btn-add { color: #fff; }
 </style>
 </head>
 <body>
@@ -1353,7 +1402,7 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
   <div class="login-card">
     <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:4px;">
       <img src="/logo.webp" alt="iLocarPay" style="width:38px;height:38px;border-radius:10px;object-fit:contain;">
-      <span style="color:#fff;font-weight:900;font-size:26px;letter-spacing:-1px;">iLocar<span style="color:#4CAF50">Pay</span></span>
+      <span style="color:var(--txt);font-weight:900;font-size:26px;letter-spacing:-1px;">iLocar<span style="color:#4CAF50">Pay</span></span>
     </div>
     <div class="login-chip">Super Admin</div>
     <p class="login-sub">Acesso restrito ao administrador do sistema</p>
@@ -1387,11 +1436,12 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
   <header class="topbar">
     <a style="display:flex;align-items:center;gap:8px;text-decoration:none;">
       <img src="/logo.webp" alt="iLocarPay" style="width:30px;height:30px;border-radius:8px;object-fit:contain;">
-      <span style="color:#fff;font-weight:800;font-size:17px;letter-spacing:-.3px;">iLocar<span style="color:#4CAF50">Pay</span></span>
+      <span style="color:var(--txt);font-weight:800;font-size:17px;letter-spacing:-.3px;">iLocar<span style="color:#4CAF50">Pay</span></span>
     </a>
     <span class="top-chip">Super Admin</span>
     <div class="topbar-gap"></div>
     <span id="user-email"></span>
+    <button class="ip-theme-btn" id="ip-theme-toggle" title="Ativar tema escuro" aria-label="Ativar tema escuro" onclick="(function(){var K='ilocarpay-theme';var cur=document.documentElement.getAttribute('data-theme')||'dark';var next=cur==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',next);try{localStorage.setItem(K,next);}catch(e){}var btn=document.getElementById('ip-theme-toggle');if(btn){btn.textContent=next==='dark'?'☾':'☀';btn.title=next==='dark'?'Ativar tema claro':'Ativar tema escuro';btn.setAttribute('aria-label',next==='dark'?'Ativar tema claro':'Ativar tema escuro');}})()"></button>
     <button class="btn-logout" onclick="doLogout()">Sair</button>
   </header>
 
@@ -1726,6 +1776,7 @@ tbody td { padding: 12px 16px; vertical-align: middle; }
   </div>
 </div>
 
+<script>(function(){var K='ilocarpay-theme';function g(){try{var v=localStorage.getItem(K);return(v==='light'||v==='dark')?v:window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';}catch(e){return'dark';}}function a(p){document.documentElement.setAttribute('data-theme',p);var btn=document.getElementById('ip-theme-toggle');if(btn){btn.textContent=p==='dark'?'☾':'☀';btn.title=p==='dark'?'Ativar tema claro':'Ativar tema escuro';btn.setAttribute('aria-label',p==='dark'?'Ativar tema claro':'Ativar tema escuro');}}a(g());document.addEventListener('DOMContentLoaded',function(){var btn=document.getElementById('ip-theme-toggle');if(btn){var cur=document.documentElement.getAttribute('data-theme')||'dark';btn.textContent=cur==='dark'?'☾':'☀';btn.title=cur==='dark'?'Ativar tema claro':'Ativar tema escuro';btn.setAttribute('aria-label',cur==='dark'?'Ativar tema claro':'Ativar tema escuro');}});})();</script>
 </body>
 </html>
 

@@ -12,8 +12,8 @@ const sa = JSON.parse(readFileSync('C:/Users/denis/Downloads/locarpayapp-firebas
 admin.initializeApp({ credential: admin.credential.cert(sa) });
 const db = admin.firestore();
 
-const versionCode = 350;
-const versionName = '6.21';
+const versionCode = 352;
+const versionName = '6.23';
 const apkBuffer = readFileSync('C:/LocarPay/app/build/outputs/apk/release/app-release.apk');
 
 (async () => {

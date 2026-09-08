@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>iLocarPay — Design System v1.0</title>
+<link rel="stylesheet" href="/css/ilocarpay-design-system.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--ip-font-body);
+  background: var(--ip-bg);
+  color: var(--ip-text-1);
+  min-height: 100dvh;
+}
+
+/* ── Demo layout ── */
+.ds-layout { display: flex; min-height: 100dvh; }
+.ds-sidebar {
+  width: 220px;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  background: var(--ip-surface);
+  border-right: 1px solid var(--ip-border);
+  padding: 24px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 100;
+}
+.ds-sidebar-logo {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px 20px;
+  border-bottom: 1px solid var(--ip-border);
+  margin-bottom: 8px;
+  text-decoration: none;
+}
+.ds-sidebar-logo-mark {
+  width: 32px; height: 32px; border-radius: var(--ip-r-md);
+  background: var(--ip-primary);
+  display: flex; align-items: center; justify-content: center;
+}
+.ds-sidebar-logo-text {
+  font-family: var(--ip-font-display);
+  font-size: 15px; font-weight: 700;
+  color: var(--ip-text-1);
+}
+.ds-sidebar-logo-text span { color: var(--ip-primary); }
+.ds-badge {
+  font-size: 10px; font-weight: 700;
+  background: var(--ip-primary-muted);
+  color: var(--ip-primary);
+  padding: 2px 8px;
+  border-radius: var(--ip-r-full);
+  letter-spacing: .05em;
+}
+.ds-nav-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ip-text-3);
+  padding: 12px 12px 4px;
+}
+.ds-nav-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px;
+  border-radius: var(--ip-r-md);
+  font-size: 13px; font-weight: 500;
+  color: var(--ip-text-2);
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 150ms ease;
+}
+.ds-nav-item:hover { background: var(--ip-surface-2); color: var(--ip-text-1); }
+.ds-nav-item.ds-active { background: var(--ip-primary-muted); color: var(--ip-primary); font-weight: 600; }
+
+.ds-main { margin-left: 220px; flex: 1; }
+.ds-section {
+  padding: 48px 40px;
+  border-bottom: 1px solid var(--ip-border);
+}
+.ds-section-title {
+  font-family: var(--ip-font-display);
+  font-size: 24px; font-weight: 700;
+  color: var(--ip-text-1);
+  margin-bottom: 6px;
+}
+.ds-section-desc {
+  font-size: 14px; color: var(--ip-text-2); margin-bottom: 32px;
+  line-height: 1.6;
+}
+.ds-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.ds-col { display: flex; flex-direction: column; gap: 12px; }
+.ds-label {
+  font-size: 11px; font-weight: 600; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--ip-text-3);
+  margin-bottom: 8px;
+}
+
+/* Swatch */
+.ds-swatch {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.ds-swatch-color {
+  width: 80px; height: 60px;
+  border-radius: var(--ip-r-lg);
+  border: 1px solid rgba(255,255,255,.08);
+}
+.ds-swatch-name  { font-size: 12px; font-weight: 600; color: var(--ip-text-1); }
+.ds-swatch-value { font-size: 11px; font-family: var(--ip-font-mono); color: var(--ip-text-2); }
+
+/* Type sample */
+.ds-type-row {
+  display: flex; align-items: baseline; gap: 24px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--ip-border);
+}
+.ds-type-meta { width: 120px; flex-shrink: 0; }
+.ds-type-name { font-size: 11px; font-weight: 600; color: var(--ip-text-2); letter-spacing: .05em; }
+.ds-type-spec { font-size: 10px; font-family: var(--ip-font-mono); color: var(--ip-text-3); margin-top: 2px; }
+
+/* Component preview boxes */
+.ds-preview {
+  background: var(--ip-surface);
+  border: 1px solid var(--ip-border);
+  border-radius: var(--ip-r-xl);
+  padding: 24px;
+}
+.ds-preview-dark {
+  background: var(--ip-surface-2);
+  border: 1px solid var(--ip-border);
+  border-radius: var(--ip-r-xl);
+  padding: 24px;
+}
+
+/* KPI grid demo */
+.ds-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+@media (min-width: 640px) { .ds-kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+
+/* Mock topbar */
+.ds-mock-topbar {
+  background: rgba(11,13,20,.95);
+  border: 1px solid var(--ip-border);
+  border-radius: var(--ip-r-xl);
+  overflow: hidden;
+}
+
+/* Mock phone */
+.ds-phone {
+  width: 320px;
+  background: var(--ip-bg);
+  border: 1px solid var(--ip-border-2);
+  border-radius: 36px;
+  overflow: hidden;
+  box-shadow: var(--ip-shadow-lg);
+  margin: 0 auto;
+}
+.ds-phone-bar {
+  height: 44px;
+  background: var(--ip-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ds-phone-notch {
+  width: 100px; height: 24px;
+  background: var(--ip-bg);
+  border-radius: 0 0 16px 16px;
+}
+.ds-phone-body { padding: 0; }
+
+/* Table demo */
+@media (max-width: 639px) { .ds-hide-sm { display: none !important; } }
+
+/* Responsive nav */
+@media (max-width: 900px) {
+  .ds-sidebar { display: none; }
+  .ds-main { margin-left: 0; }
+  .ds-section { padding: 32px 20px; }
+}
+</style>
+</head>
+<body>
+
+<div class="ds-layout">
+
+<!-- ── SIDEBAR ── -->
+<nav class="ds-sidebar">
+  <a class="ds-sidebar-logo" href="#top">
+    <div class="ds-sidebar-logo-mark">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        <polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+    </div>
+    <div>
+      <div class="ds-sidebar-logo-text">iLocar<span>Pay</span></div>
+      <div class="ds-badge">Design System</div>
+    </div>
+  </a>
+
+  <div class="ds-nav-label">Fundação</div>
+  <a class="ds-nav-item ds-active" href="#colors">Cores</a>
+  <a class="ds-nav-item" href="#typography">Tipografia</a>
+  <a class="ds-nav-item" href="#spacing">Espaçamento</a>
+
+  <div class="ds-nav-label">Componentes</div>
+  <a class="ds-nav-item" href="#buttons">Botões</a>
+  <a class="ds-nav-item" href="#inputs">Inputs</a>
+  <a class="ds-nav-item" href="#cards">Cards</a>
+  <a class="ds-nav-item" href="#status">Status e Badges</a>
+  <a class="ds-nav-item" href="#table">Tabela</a>
+  <a class="ds-nav-item" href="#list">Lista Mobile</a>
+
+  <div class="ds-nav-label">Padrões</div>
+  <a class="ds-nav-item" href="#navigation">Navegação</a>
+  <a class="ds-nav-item" href="#overlay">Modal e Sheet</a>
+  <a class="ds-nav-item" href="#feedback">Feedback</a>
+  <a class="ds-nav-item" href="#states">Estados</a>
+
+  <div class="ds-nav-label">Telas</div>
+  <a class="ds-nav-item" href="#dashboard-owner">Dashboard Owner</a>
+  <a class="ds-nav-item" href="#dashboard-tenant">Dashboard Tenant</a>
+</nav>
+
+<!-- ── MAIN ── -->
+<main class="ds-main" id="top">
+
+  <!-- HERO -->
+  <div style="background: linear-gradient(135deg, var(--ip-surface) 0%, var(--ip-bg) 100%); border-bottom: 1px solid var(--ip-border); padding: 48px 40px 40px;">
+    <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
+      <div style="width:52px;height:52px;border-radius:var(--ip-r-lg);background:var(--ip-primary);display:flex;align-items:center;justify-content:center;box-shadow:var(--ip-shadow-primary);">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </div>
+      <div>
+        <div style="font-family:var(--ip-font-display);font-size:28px;font-weight:700;letter-spacing:-.5px;">iLocar<span style="color:var(--ip-primary)">Pay</span></div>
+        <div style="font-size:13px;color:var(--ip-text-2);">Design System v1.0 — Fase 1</div>
+      </div>
+    </div>
+    <p style="font-size:15px;color:var(--ip-text-2);max-width:560px;line-height:1.7;">
+      Fundação visual do iLocarPay. Tokens, componentes e padrões para construir interfaces consistentes, acessíveis e premium em todas as telas do produto.
+    </p>
+    <div style="display:flex;gap:12px;margin-top:24px;flex-wrap:wrap;">
+      <span class="ip-pill ip-pill-active">Fase 1 Completa</span>
+      <span class="ip-pill ip-pill-processing">Fase 2 em andamento</span>
+    </div>
+  </div>
+
+  <!-- ── COLORS ── -->
+  <section class="ds-section" id="colors">
+    <div class="ds-section-title">Cores</div>
+    <div class="ds-section-desc">Paleta unificada. Todos os tokens definem cores para todo o produto — sem variáveis conflitantes entre páginas.</div>
+
+    <div class="ds-label">Primary — Verde Contrato</div>
+    <div class="ds-row" style="margin-bottom:32px;">
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#2DB56B;"></div><div class="ds-swatch-name">Primary</div><div class="ds-swatch-value">#2DB56B</div></div>
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#1D8050;"></div><div class="ds-swatch-name">Primary dim</div><div class="ds-swatch-value">#1D8050</div></div>
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:rgba(45,181,107,.12);border:1px solid rgba(45,181,107,.2);"></div><div class="ds-swatch-name">Muted</div><div class="ds-swatch-value">12% alpha</div></div>
+    </div>
+
+    <div class="ds-label">Accent — Âmbar Financeiro</div>
+    <div class="ds-row" style="margin-bottom:32px;">
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#F59E0B;"></div><div class="ds-swatch-name">Accent</div><div class="ds-swatch-value">#F59E0B</div></div>
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#D97706;"></div><div class="ds-swatch-name">Accent dim</div><div class="ds-swatch-value">#D97706</div></div>
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.2);"></div><div class="ds-swatch-name">Muted</div><div class="ds-swatch-value">12% alpha</div></div>
+    </div>
+
+    <div class="ds-label">Backgrounds e Superfícies</div>
+    <div class="ds-row" style="margin-bottom:32px;">
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#0B0D14;border:1px solid rgba(255,255,255,.1);"></div><div class="ds-swatch-name">Background</div><div class="ds-swatch-value">#0B0D14</div></div>
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#111420;"></div><div class="ds-swatch-name">Surface</div><div class="ds-swatch-value">#111420</div></div>
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#181C2E;"></div><div class="ds-swatch-name">Surface 2</div><div class="ds-swatch-value">#181C2E</div></div>
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#1E2340;"></div><div class="ds-swatch-name">Surface 3</div><div class="ds-swatch-value">#1E2340</div></div>
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#1F2440;"></div><div class="ds-swatch-name">Border</div><div class="ds-swatch-value">#1F2440</div></div>
+    </div>
+
+    <div class="ds-label">Semântico</div>
+    <div class="ds-row" style="margin-bottom:32px;">
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#2DB56B;"></div><div class="ds-swatch-name">Success</div><div class="ds-swatch-value">#2DB56B</div></div>
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#F59E0B;"></div><div class="ds-swatch-name">Warning</div><div class="ds-swatch-value">#F59E0B</div></div>
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#E05252;"></div><div class="ds-swatch-name">Danger</div><div class="ds-swatch-value">#E05252</div></div>
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#4A9EE8;"></div><div class="ds-swatch-name">Info</div><div class="ds-swatch-value">#4A9EE8</div></div>
+    </div>
+
+    <div class="ds-label">Texto</div>
+    <div class="ds-row">
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#F0F2FA;"></div><div class="ds-swatch-name">Text 1</div><div class="ds-swatch-value">#F0F2FA</div></div>
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#8B92B8;"></div><div class="ds-swatch-name">Text 2</div><div class="ds-swatch-value">#8B92B8</div></div>
+      <div class="ds-swatch"><div class="ds-swatch-color" style="background:#454D72;"></div><div class="ds-swatch-name">Text 3</div><div class="ds-swatch-value">#454D72</div></div>
+    </div>
+  </section>
+
+  <!-- ── TYPOGRAPHY ── -->
+  <section class="ds-section" id="typography">
+    <div class="ds-section-title">Tipografia</div>
+    <div class="ds-section-desc">DM Sans para display/headings (autoridade sem frieza). Inter para UI/body (clareza absoluta). JetBrains Mono para valores financeiros.</div>
+
+    <div class="ds-type-row">
+      <div class="ds-type-meta"><div class="ds-type-name">DISPLAY</div><div class="ds-type-spec">DM Sans 700 · 60px</div></div>
+      <div class="ip-display" style="font-size:clamp(32px,5vw,60px);">R$ 24.500</div>
+    </div>
+    <div class="ds-type-row">
+      <div class="ds-type-meta"><div class="ds-type-name">H1</div><div class="ds-type-spec">DM Sans 700 · 36px</div></div>
+      <div class="ip-h1">Gestão de Aluguéis</div>
+    </div>
+    <div class="ds-type-row">
+      <div class="ds-type-meta"><div class="ds-type-name">H2</div><div class="ds-type-spec">DM Sans 700 · 28px</div></div>
+      <div class="ip-h2">Cobranças do Mês</div>
+    </div>
+    <div class="ds-type-row">
+      <div class="ds-type-meta"><div class="ds-type-name">H3</div><div class="ds-type-spec">DM Sans 600 · 22px</div></div>
+      <div class="ip-h3">Inquilinos Ativos</div>
+    </div>
+    <div class="ds-type-row">
+      <div class="ds-type-meta"><div class="ds-type-name">BODY LG</div><div class="ds-type-spec">Inter 400 · 17px</div></div>
+      <div class="ip-body-lg">Contratos digitais, cobranças automáticas e app para inquilinos.</div>
+    </div>
+    <div class="ds-type-row">
+      <div class="ds-type-meta"><div class="ds-type-name">BODY</div><div class="ds-type-spec">Inter 400 · 15px</div></div>
+      <div class="ip-body">Gerencie sua carteira de imóveis com controle total sobre pagamentos e inadimplência.</div>
+    </div>
+    <div class="ds-type-row">
+      <div class="ds-type-meta"><div class="ds-type-name">BODY SM</div><div class="ds-type-spec">Inter 400 · 13px</div></div>
+      <div class="ip-body-sm ip-text-2">Vencimento em 5 dias · Contrato ativo até dez/2025</div>
+    </div>
+    <div class="ds-type-row">
+      <div class="ds-type-meta"><div class="ds-type-name">LABEL</div><div class="ds-type-spec">Inter 600 · 11px · UC</div></div>
+      <div class="ip-label">Próximo Vencimento</div>
+    </div>
+    <div class="ds-type-row" style="border-bottom:none;">
+      <div class="ds-type-meta"><div class="ds-type-name">MONO</div><div class="ds-type-spec">JetBrains Mono · 15px</div></div>
+      <div class="ip-mono" style="font-size:15px;">R$&nbsp;1.850,00 · PIX · 00020126580014BR.GOV.BCB.PIX...</div>
+    </div>
+  </section>
+
+  <!-- ── BUTTONS ── -->
+  <section class="ds-section" id="buttons">
+    <div class="ds-section-title">Botões</div>
+    <div class="ds-section-desc">Todos os botões têm min-height 44px (touch target). A variante accent é reservada para ações financeiras (Pagar, Confirmar). Loading é nativo via classe.</div>
+
+    <div class="ds-label">Variantes</div>
+    <div class="ds-row" style="margin-bottom:24px;">
+      <button class="ip-btn ip-btn-primary">Salvar</button>
+      <button class="ip-btn ip-btn-accent">Pagar Agora</button>
+      <button class="ip-btn ip-btn-secondary">Cancelar</button>
+      <button class="ip-btn ip-btn-outline">Ver Contrato</button>
+      <button class="ip-btn ip-btn-ghost">Mais opções</button>
+      <button class="ip-btn ip-btn-danger">Revogar Acesso</button>
+    </div>
+
+    <div class="ds-label">Tamanhos</div>
+    <div class="ds-row" style="margin-bottom:24px;align-items:flex-end;">
+      <button class="ip-btn ip-btn-primary ip-btn-sm">Pequeno</button>
+      <button class="ip-btn ip-btn-primary">Padrão</button>
+      <button class="ip-btn ip-btn-primary ip-btn-lg">Grande</button>
+    </div>
+
+    <div class="ds-label">Estados</div>
+    <div class="ds-row" style="margin-bottom:24px;">
+      <button class="ip-btn ip-btn-primary" disabled>Desativado</button>
+      <button class="ip-btn ip-btn-primary ip-btn-loading">Salvando...</button>
+      <button class="ip-btn ip-btn-accent ip-btn-loading">Processando...</button>
+    </div>
+
+    <div class="ds-label">Ícone + texto</div>
+    <div class="ds-row" style="margin-bottom:24px;">
+      <button class="ip-btn ip-btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nova Cobrança
+      </button>
+      <button class="ip-btn ip-btn-secondary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Exportar
+      </button>
+    </div>
+
+    <div class="ds-label">Largura total (mobile)</div>
+    <div style="max-width:360px;">
+      <button class="ip-btn ip-btn-accent ip-btn-full ip-btn-lg">Pagar R$ 1.850,00 via PIX</button>
+    </div>
+  </section>
+
+  <!-- ── INPUTS ── -->
+  <section class="ds-section" id="inputs">
+    <div class="ds-section-title">Inputs</div>
+    <div class="ds-section-desc">Todos com label uppercase, altura 48px, feedback visual de foco/erro/sucesso.</div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;max-width:840px;">
+      <div class="ip-field">
+        <label class="ip-label-text">E-mail</label>
+        <div class="ip-input-wrap">
+          <svg class="ip-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          <input class="ip-input" type="email" placeholder="imobiliaria@email.com.br">
+        </div>
+      </div>
+      <div class="ip-field">
+        <label class="ip-label-text">Valor do Aluguel</label>
+        <input class="ip-input ip-mono" type="text" placeholder="R$ 0,00">
+      </div>
+      <div class="ip-field">
+        <label class="ip-label-text">Status</label>
+        <select class="ip-select">
+          <option>Todos os status</option>
+          <option>Em dia</option>
+          <option>Inadimplente</option>
+          <option>Pendente</option>
+        </select>
+      </div>
+      <div class="ip-field">
+        <label class="ip-label-text">E-mail — Erro</label>
+        <input class="ip-input ip-input-error" type="email" value="email-invalido">
+        <span class="ip-field-error">Formato de e-mail inválido</span>
+      </div>
+      <div class="ip-field">
+        <label class="ip-label-text">CPF — Válido</label>
+        <input class="ip-input ip-input-success" type="text" value="123.456.789-09">
+        <span class="ip-field-hint">CPF verificado com sucesso</span>
+      </div>
+      <div class="ip-field">
+        <label class="ip-label-text">Desativado</label>
+        <input class="ip-input" type="text" value="Campo bloqueado" disabled>
+      </div>
+      <div class="ip-field" style="grid-column: 1 / -1;">
+        <label class="ip-label-text">Observações</label>
+        <textarea class="ip-textarea" placeholder="Informações adicionais sobre o contrato..."></textarea>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CARDS ── -->
+  <section class="ds-section" id="cards">
+    <div class="ds-section-title">Cards</div>
+    <div class="ds-section-desc">Variedades de card para contextos distintos. Uso comedido de gradientes — somente em cards financeiros de destaque.</div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;max-width:900px;">
+      <div class="ip-card">
+        <div class="ip-label" style="margin-bottom:12px;">Card padrão</div>
+        <div class="ip-body" style="margin-bottom:16px;">Informações do inquilino ou imóvel. Texto descritivo com detalhes secundários abaixo.</div>
+        <div style="display:flex;gap:8px;">
+          <span class="ip-pill ip-pill-active">Ativo</span>
+          <span class="ip-body-sm ip-text-2">desde jan/2024</span>
+        </div>
+      </div>
+
+      <div class="ip-card ip-card-interactive">
+        <div class="ip-row-3" style="margin-bottom:12px;">
+          <div class="ip-avatar ip-avatar-primary">MA</div>
+          <div>
+            <div style="font-weight:600;font-size:15px;">Maria Aparecida</div>
+            <div class="ip-body-sm ip-text-2">Rua das Flores, 142 — Apto 3</div>
+          </div>
+        </div>
+        <div class="ip-divider"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div class="ip-label" style="margin-bottom:4px;">Próximo vencimento</div>
+            <div class="ip-mono" style="font-size:18px;font-weight:600;">R$ 1.850,00</div>
+          </div>
+          <span class="ip-pill ip-pill-pending">Pendente</span>
+        </div>
+      </div>
+
+      <div class="ip-card-financial">
+        <div class="ip-label" style="margin-bottom:8px;">Receita do Mês</div>
+        <div class="ip-card-financial-amount" style="font-size:32px;margin-bottom:4px;">R$ 24.500,00</div>
+        <div class="ip-body-sm" style="color:var(--ip-primary);font-weight:600;">▲ +12% vs. mês anterior</div>
+      </div>
+
+      <div class="ip-card-warning">
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ip-warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--ip-warning);margin-bottom:4px;">Contrato vence em 15 dias</div>
+            <div class="ip-body-sm ip-text-2">Rua das Flores, 142 — Apto 3 · João Carlos</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ip-card-danger">
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ip-danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--ip-danger);margin-bottom:4px;">Inadimplência — 32 dias</div>
+            <div class="ip-body-sm ip-text-2">Pedro Alves · R$ 1.200,00 em aberto</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── KPI CARDS ── -->
+  <section class="ds-section" id="kpi">
+    <div class="ds-section-title">KPI Cards</div>
+    <div class="ds-section-desc">Para métricas do dashboard. Dois por linha em mobile, quatro em desktop.</div>
+    <div class="ds-kpi-grid" style="max-width:860px;">
+      <div class="ip-kpi">
+        <div class="ip-kpi-label">Recebido</div>
+        <div class="ip-kpi-value ip-mono">R$ 18.200</div>
+        <div class="ip-kpi-delta ip-kpi-delta-up">▲ 12 pagamentos</div>
+      </div>
+      <div class="ip-kpi">
+        <div class="ip-kpi-label">Inadimplência</div>
+        <div class="ip-kpi-value ip-mono" style="color:var(--ip-danger);">R$ 3.700</div>
+        <div class="ip-kpi-delta ip-kpi-delta-down">▼ 2 inquilinos</div>
+      </div>
+      <div class="ip-kpi">
+        <div class="ip-kpi-label">Próx. 7 dias</div>
+        <div class="ip-kpi-value ip-mono">R$ 6.400</div>
+        <div class="ip-kpi-delta" style="color:var(--ip-text-2);">5 cobranças</div>
+      </div>
+      <div class="ip-kpi">
+        <div class="ip-kpi-label">Contratos</div>
+        <div class="ip-kpi-value">22</div>
+        <div class="ip-kpi-delta" style="color:var(--ip-text-2);">2 vencem em breve</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── STATUS ── -->
+  <section class="ds-section" id="status">
+    <div class="ds-section-title">Status e Badges</div>
+    <div class="ds-section-desc">Status financeiros padronizados. Nunca usar emoji como único indicador de estado.</div>
+
+    <div class="ds-label">Status Pills — Financeiro</div>
+    <div class="ds-row" style="margin-bottom:24px;flex-wrap:wrap;">
+      <span class="ip-pill ip-pill-paid">Pago</span>
+      <span class="ip-pill ip-pill-pending">Pendente</span>
+      <span class="ip-pill ip-pill-overdue">Atrasado</span>
+      <span class="ip-pill ip-pill-processing">Processando</span>
+      <span class="ip-pill ip-pill-cancelled">Cancelado</span>
+    </div>
+
+    <div class="ds-label">Status Pills — Contrato</div>
+    <div class="ds-row" style="margin-bottom:24px;flex-wrap:wrap;">
+      <span class="ip-pill ip-pill-active">Ativo</span>
+      <span class="ip-pill ip-pill-inactive">Inativo</span>
+      <span class="ip-pill ip-pill-signed">Assinado</span>
+      <span class="ip-pill ip-pill-waiting">Aguardando Assinatura</span>
+    </div>
+
+    <div class="ds-label">Badges</div>
+    <div class="ds-row" style="margin-bottom:24px;">
+      <span class="ip-badge ip-badge-primary">3</span>
+      <span class="ip-badge ip-badge-accent">12</span>
+      <span class="ip-badge ip-badge-danger">!</span>
+      <span class="ip-badge ip-badge-neutral">9</span>
+    </div>
+
+    <div class="ds-label">Chips (filtros)</div>
+    <div class="ds-row">
+      <span class="ip-chip ip-chip-active">Todos</span>
+      <span class="ip-chip">Em dia</span>
+      <span class="ip-chip">Inadimplentes</span>
+      <span class="ip-chip">Vencendo</span>
+    </div>
+  </section>
+
+  <!-- ── TABLE ── -->
+  <section class="ds-section" id="table">
+    <div class="ds-section-title">Tabela</div>
+    <div class="ds-section-desc">Com overflow horizontal para mobile. Fonte mono em valores financeiros.</div>
+
+    <div class="ip-table-wrap">
+      <table class="ip-table">
+        <thead>
+          <tr>
+            <th>Inquilino</th>
+            <th>Imóvel</th>
+            <th>Valor</th>
+            <th>Vencimento</th>
+            <th>Status</th>
+            <th class="ds-hide-sm"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="ip-avatar ip-avatar-sm ip-avatar-primary">MA</div>
+                <div>
+                  <div style="font-weight:600;font-size:14px;">Maria Aparecida</div>
+                  <div class="ip-caption">maria@email.com</div>
+                </div>
+              </div>
+            </td>
+            <td class="ip-text-2 ip-body-sm">Rua das Flores, 142</td>
+            <td class="ip-mono" style="font-weight:600;">R$ 1.850,00</td>
+            <td class="ip-text-2 ip-body-sm">15 out 2025</td>
+            <td><span class="ip-pill ip-pill-paid">Pago</span></td>
+            <td class="ds-hide-sm"><button class="ip-btn ip-btn-ghost ip-btn-sm">Ver</button></td>
+          </tr>
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="ip-avatar ip-avatar-sm">PC</div>
+                <div>
+                  <div style="font-weight:600;font-size:14px;">Pedro Carlos</div>
+                  <div class="ip-caption">pedro@email.com</div>
+                </div>
+              </div>
+            </td>
+            <td class="ip-text-2 ip-body-sm">Av. Brasil, 500 — Apto 8</td>
+            <td class="ip-mono" style="font-weight:600;color:var(--ip-danger);">R$ 2.100,00</td>
+            <td class="ip-text-2 ip-body-sm" style="color:var(--ip-danger);">05 out 2025</td>
+            <td><span class="ip-pill ip-pill-overdue">Atrasado</span></td>
+            <td class="ds-hide-sm"><button class="ip-btn ip-btn-ghost ip-btn-sm">Ver</button></td>
+          </tr>
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="ip-avatar ip-avatar-sm" style="background:var(--ip-warning-muted);color:var(--ip-warning);">LS</div>
+                <div>
+                  <div style="font-weight:600;font-size:14px;">Luisa Santos</div>
+                  <div class="ip-caption">luisa@email.com</div>
+                </div>
+              </div>
+            </td>
+            <td class="ip-text-2 ip-body-sm">Rua Azalea, 77</td>
+            <td class="ip-mono" style="font-weight:600;">R$ 1.400,00</td>
+            <td class="ip-text-2 ip-body-sm">20 out 2025</td>
+            <td><span class="ip-pill ip-pill-pending">Pendente</span></td>
+            <td class="ds-hide-sm"><button class="ip-btn ip-btn-ghost ip-btn-sm">Ver</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── LIST MOBILE ── -->
+  <section class="ds-section" id="list">
+    <div class="ds-section-title">Lista Mobile</div>
+    <div class="ds-section-desc">Substitui tabelas em viewports menores. Touch target adequado, chevron de navegação.</div>
+
+    <div class="ds-preview" style="padding:0;max-width:440px;">
+      <div class="ip-list-item">
+        <div class="ip-avatar ip-avatar-primary">MA</div>
+        <div class="ip-list-item-content">
+          <div class="ip-list-item-title">Maria Aparecida</div>
+          <div class="ip-list-item-sub">Rua das Flores, 142 · vence 15/10</div>
+        </div>
+        <div class="ip-list-item-end">
+          <div class="ip-list-item-amount ip-text-primary">R$ 1.850</div>
+          <span class="ip-pill ip-pill-paid">Pago</span>
+        </div>
+      </div>
+      <div class="ip-list-item">
+        <div class="ip-avatar">PC</div>
+        <div class="ip-list-item-content">
+          <div class="ip-list-item-title">Pedro Carlos</div>
+          <div class="ip-list-item-sub">Av. Brasil, 500 · 32 dias em atraso</div>
+        </div>
+        <div class="ip-list-item-end">
+          <div class="ip-list-item-amount" style="color:var(--ip-danger);">R$ 2.100</div>
+          <span class="ip-pill ip-pill-overdue">Atrasado</span>
+        </div>
+      </div>
+      <div class="ip-list-item">
+        <div class="ip-avatar" style="background:var(--ip-warning-muted);color:var(--ip-warning);">LS</div>
+        <div class="ip-list-item-content">
+          <div class="ip-list-item-title">Luisa Santos</div>
+          <div class="ip-list-item-sub">Rua Azalea, 77 · vence 20/10</div>
+        </div>
+        <div class="ip-list-item-end">
+          <div class="ip-list-item-amount ip-text-2">R$ 1.400</div>
+          <span class="ip-pill ip-pill-pending">Pendente</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── NAVIGATION ── -->
+  <section class="ds-section" id="navigation">
+    <div class="ds-section-title">Navegação</div>
+    <div class="ds-section-desc">Topbar para desktop/web. Bottom nav para mobile (app-like). Tabs para subseções.</div>
+
+    <div class="ds-label">Topbar</div>
+    <div class="ds-mock-topbar" style="margin-bottom:24px;">
+      <div style="display:flex;align-items:center;gap:16px;height:60px;padding:0 20px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:32px;height:32px;border-radius:var(--ip-r-md);background:var(--ip-primary);display:flex;align-items:center;justify-content:center;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </div>
+          <span style="font-family:var(--ip-font-display);font-size:17px;font-weight:700;">iLocar<span style="color:var(--ip-primary)">Pay</span></span>
+        </div>
+        <div style="flex:1;"></div>
+        <span class="ip-body-sm ip-text-2">Imobiliária Central</span>
+        <div class="ip-avatar ip-avatar-sm ip-avatar-primary">IC</div>
+        <button class="ip-btn ip-btn-ghost ip-btn-sm ip-btn-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="ds-label">Tabs</div>
+    <div class="ip-tabs" style="background:var(--ip-surface-2);border:1px solid var(--ip-border);border-radius:var(--ip-r-lg) var(--ip-r-lg) 0 0;margin-bottom:24px;max-width:700px;">
+      <div class="ip-tab active">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Visão Geral
+      </div>
+      <div class="ip-tab">Inquilinos <span class="ip-badge ip-badge-primary" style="margin-left:4px;">22</span></div>
+      <div class="ip-tab">Contratos</div>
+      <div class="ip-tab">Cobranças <span class="ip-badge ip-badge-danger" style="margin-left:4px;">3</span></div>
+      <div class="ip-tab">Configurações</div>
+    </div>
+
+    <div class="ds-label">Bottom Navigation (mobile)</div>
+    <div style="max-width:400px;background:var(--ip-surface);border:1px solid var(--ip-border);border-radius:var(--ip-r-xl);overflow:hidden;">
+      <div style="display:flex;">
+        <div class="ip-bottom-nav-item active" style="position:relative;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Início
+        </div>
+        <div class="ip-bottom-nav-item" style="position:relative;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Inquilinos
+          <div class="ip-bottom-nav-badge">5</div>
+        </div>
+        <div class="ip-bottom-nav-item" style="position:relative;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Contratos
+        </div>
+        <div class="ip-bottom-nav-item" style="position:relative;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+          Config
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── OVERLAY ── -->
+  <section class="ds-section" id="overlay">
+    <div class="ds-section-title">Modal e Bottom Sheet</div>
+    <div class="ds-section-desc">Modal centrado para desktop. Bottom Sheet para mobile. Ambos com overlay backdrop.</div>
+
+    <div class="ds-row" style="margin-bottom:32px;">
+      <button class="ip-btn ip-btn-secondary" onclick="document.getElementById('demo-modal').classList.add('ip-open');document.getElementById('demo-overlay').classList.add('ip-open');">
+        Abrir Modal
+      </button>
+      <button class="ip-btn ip-btn-secondary" onclick="document.getElementById('demo-sheet').classList.add('ip-open');document.getElementById('demo-overlay2').classList.add('ip-open');">
+        Abrir Bottom Sheet
+      </button>
+    </div>
+
+    <!-- Modal preview estático -->
+    <div class="ds-label">Estrutura do Modal</div>
+    <div style="max-width:520px;background:var(--ip-surface-2);border:1px solid var(--ip-border-2);border-radius:var(--ip-r-xl);overflow:hidden;box-shadow:var(--ip-shadow-lg);">
+      <div class="ip-modal-header">
+        <div class="ip-modal-title">Confirmar Cobrança Extra</div>
+        <div class="ip-modal-close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </div>
+      </div>
+      <div class="ip-modal-body">
+        <div class="ip-field" style="margin-bottom:16px;">
+          <label class="ip-label-text">Descrição</label>
+          <input class="ip-input" type="text" placeholder="Ex: Reposição de chaves">
+        </div>
+        <div class="ip-field">
+          <label class="ip-label-text">Valor</label>
+          <input class="ip-input ip-mono" type="text" placeholder="R$ 0,00">
+        </div>
+      </div>
+      <div class="ip-modal-footer">
+        <button class="ip-btn ip-btn-secondary">Cancelar</button>
+        <button class="ip-btn ip-btn-accent">Gerar Cobrança</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FEEDBACK ── -->
+  <section class="ds-section" id="feedback">
+    <div class="ds-section-title">Feedback Visual</div>
+    <div class="ds-section-desc">Toasts, skeleton loading e empty states. Sem alert() nativo.</div>
+
+    <div class="ds-label">Toasts</div>
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:400px;margin-bottom:32px;">
+      <div class="ip-toast ip-toast-success">
+        <svg class="ip-toast-icon" viewBox="0 0 24 24" fill="none" stroke="var(--ip-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <span class="ip-toast-text">Cobrança gerada com sucesso.</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ip-text-3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </div>
+      <div class="ip-toast ip-toast-warning">
+        <svg class="ip-toast-icon" viewBox="0 0 24 24" fill="none" stroke="var(--ip-warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span class="ip-toast-text">Contrato vence em 15 dias. Renove agora.</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ip-text-3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </div>
+      <div class="ip-toast ip-toast-error">
+        <svg class="ip-toast-icon" viewBox="0 0 24 24" fill="none" stroke="var(--ip-danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        <span class="ip-toast-text">Não foi possível processar o pagamento.</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ip-text-3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </div>
+    </div>
+
+    <div class="ds-label">Skeleton Loading</div>
+    <div style="max-width:440px;display:flex;flex-direction:column;gap:12px;margin-bottom:32px;">
+      <div class="ip-card" style="gap:12px;display:flex;flex-direction:column;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="ip-skeleton" style="width:40px;height:40px;border-radius:50%;flex-shrink:0;"></div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+            <div class="ip-skeleton ip-skeleton-title"></div>
+            <div class="ip-skeleton ip-skeleton-text" style="width:60%;"></div>
+          </div>
+        </div>
+        <div class="ip-skeleton ip-skeleton-value"></div>
+        <div class="ip-skeleton ip-skeleton-pill"></div>
+      </div>
+    </div>
+
+    <div class="ds-label">Empty State</div>
+    <div style="max-width:440px;background:var(--ip-surface-2);border:1px solid var(--ip-border);border-radius:var(--ip-r-xl);">
+      <div class="ip-empty">
+        <div class="ip-empty-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div class="ip-empty-title">Nenhum inquilino cadastrado</div>
+        <div class="ip-empty-desc">Adicione seu primeiro inquilino para começar a gerenciar cobranças e contratos.</div>
+        <button class="ip-btn ip-btn-primary" style="margin-top:8px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Adicionar Inquilino
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── STATES ── -->
+  <section class="ds-section" id="states">
+    <div class="ds-section-title">Botões com estado — Demo interativo</div>
+    <div class="ds-section-desc">Clique para ver o estado de loading.</div>
+    <div class="ds-row">
+      <button class="ip-btn ip-btn-primary" id="demo-load-btn" onclick="demoLoading()">Salvar Alterações</button>
+      <button class="ip-btn ip-btn-accent" id="demo-pay-btn" onclick="demoPay()">Processar Pagamento</button>
+    </div>
+    <div id="demo-toast-region" style="position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:600;width:320px;"></div>
+  </section>
+
+  <!-- ── DASHBOARD OWNER ── -->
+  <section class="ds-section" id="dashboard-owner">
+    <div class="ds-section-title">Dashboard Owner — Preview</div>
+    <div class="ds-section-desc">Hierarquia: KPIs financeiros → Alertas → Vencimentos → Inadimplentes → Listas secundárias.</div>
+
+    <div style="background:var(--ip-bg);border:1px solid var(--ip-border);border-radius:var(--ip-r-xl);overflow:hidden;max-width:900px;">
+      <!-- Topbar simulada -->
+      <div style="height:60px;background:rgba(11,13,20,.95);border-bottom:1px solid var(--ip-border);display:flex;align-items:center;padding:0 20px;gap:12px;">
+        <div style="width:28px;height:28px;border-radius:var(--ip-r-md);background:var(--ip-primary);display:flex;align-items:center;justify-content:center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </div>
+        <span style="font-family:var(--ip-font-display);font-size:15px;font-weight:700;">iLocar<span style="color:var(--ip-primary)">Pay</span></span>
+        <div style="flex:1;"></div>
+        <span class="ip-body-sm ip-text-2">Imobiliária Central</span>
+        <div class="ip-avatar ip-avatar-sm ip-avatar-primary">IC</div>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display:flex;background:var(--ip-surface);border-bottom:1px solid var(--ip-border);overflow-x:auto;">
+        <div class="ip-tab active" style="padding:14px 20px;">Visão Geral</div>
+        <div class="ip-tab" style="padding:14px 20px;">Inquilinos</div>
+        <div class="ip-tab" style="padding:14px 20px;">Contratos</div>
+        <div class="ip-tab" style="padding:14px 20px;">Cobranças</div>
+      </div>
+
+      <!-- Body -->
+      <div style="padding:24px;display:flex;flex-direction:column;gap:20px;">
+
+        <!-- Alerta -->
+        <div class="ip-card-danger" style="display:flex;align-items:center;gap:12px;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ip-danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span style="font-size:13px;font-weight:600;color:var(--ip-danger);">2 inquilinos inadimplentes · R$ 3.700,00 em aberto</span>
+          </div>
+          <button class="ip-btn ip-btn-danger ip-btn-sm">Ver</button>
+        </div>
+
+        <!-- KPIs -->
+        <div class="ds-kpi-grid">
+          <div class="ip-kpi"><div class="ip-kpi-label">Recebido em out</div><div class="ip-kpi-value ip-mono">R$ 18.200</div><div class="ip-kpi-delta ip-kpi-delta-up">▲ 12 pagamentos</div></div>
+          <div class="ip-kpi"><div class="ip-kpi-label">Inadimplência</div><div class="ip-kpi-value ip-mono" style="color:var(--ip-danger);">R$ 3.700</div><div class="ip-kpi-delta ip-kpi-delta-down">▼ 2 inquilinos</div></div>
+          <div class="ip-kpi"><div class="ip-kpi-label">Próximos 7 dias</div><div class="ip-kpi-value ip-mono">R$ 6.400</div><div class="ip-kpi-delta" style="color:var(--ip-text-2);">5 cobranças</div></div>
+          <div class="ip-kpi"><div class="ip-kpi-label">Contratos</div><div class="ip-kpi-value">22</div><div class="ip-kpi-delta" style="color:var(--ip-text-2);">2 vencem em breve</div></div>
+        </div>
+
+        <!-- Vencimentos e inadimplência -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <div class="ip-section-header"><span class="ip-section-title">Vencendo esta semana</span><a href="#" style="font-size:12px;color:var(--ip-primary);text-decoration:none;font-weight:600;">Ver todos →</a></div>
+            <div style="background:var(--ip-surface-2);border:1px solid var(--ip-border);border-radius:var(--ip-r-lg);overflow:hidden;">
+              <div class="ip-list-item" style="padding:12px 16px;">
+                <div class="ip-avatar ip-avatar-sm ip-avatar-primary">MA</div>
+                <div class="ip-list-item-content"><div style="font-size:13px;font-weight:600;">Maria Aparecida</div><div style="font-size:11px;color:var(--ip-text-2);">vence 15/10</div></div>
+                <div style="text-align:right;"><div class="ip-mono" style="font-size:13px;font-weight:600;">R$ 1.850</div><span class="ip-pill ip-pill-pending" style="font-size:10px;padding:2px 8px;">Pendente</span></div>
+              </div>
+              <div class="ip-list-item" style="padding:12px 16px;">
+                <div class="ip-avatar ip-avatar-sm" style="background:var(--ip-warning-muted);color:var(--ip-warning);">LS</div>
+                <div class="ip-list-item-content"><div style="font-size:13px;font-weight:600;">Luisa Santos</div><div style="font-size:11px;color:var(--ip-text-2);">vence 17/10</div></div>
+                <div style="text-align:right;"><div class="ip-mono" style="font-size:13px;font-weight:600;">R$ 1.400</div><span class="ip-pill ip-pill-pending" style="font-size:10px;padding:2px 8px;">Pendente</span></div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="ip-section-header"><span class="ip-section-title">Inadimplentes</span><a href="#" style="font-size:12px;color:var(--ip-danger);text-decoration:none;font-weight:600;">Ver todos →</a></div>
+            <div style="background:var(--ip-surface-2);border:1px solid var(--ip-border);border-radius:var(--ip-r-lg);overflow:hidden;">
+              <div class="ip-list-item" style="padding:12px 16px;">
+                <div class="ip-avatar ip-avatar-sm" style="background:var(--ip-danger-muted);color:var(--ip-danger);">PC</div>
+                <div class="ip-list-item-content"><div style="font-size:13px;font-weight:600;">Pedro Carlos</div><div style="font-size:11px;color:var(--ip-danger);">32 dias em atraso</div></div>
+                <div style="text-align:right;"><div class="ip-mono" style="font-size:13px;font-weight:600;color:var(--ip-danger);">R$ 2.100</div></div>
+              </div>
+              <div class="ip-list-item" style="padding:12px 16px;">
+                <div class="ip-avatar ip-avatar-sm" style="background:var(--ip-danger-muted);color:var(--ip-danger);">RF</div>
+                <div class="ip-list-item-content"><div style="font-size:13px;font-weight:600;">Roberto Faria</div><div style="font-size:11px;color:var(--ip-danger);">18 dias em atraso</div></div>
+                <div style="text-align:right;"><div class="ip-mono" style="font-size:13px;font-weight:600;color:var(--ip-danger);">R$ 1.600</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── DASHBOARD TENANT ── -->
+  <section class="ds-section" id="dashboard-tenant">
+    <div class="ds-section-title">Dashboard Tenant — Preview Mobile</div>
+    <div class="ds-section-desc">Extremamente simples. Próximo aluguel em destaque absoluto. Ação de pagamento como primary call-to-action.</div>
+
+    <div class="ds-phone">
+      <div class="ds-phone-bar"><div class="ds-phone-notch"></div></div>
+      <div style="background:var(--ip-bg);">
+        <!-- Header -->
+        <div style="padding:16px 20px 0;display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div class="ip-label">Bem-vinda,</div>
+            <div style="font-family:var(--ip-font-display);font-size:18px;font-weight:700;margin-top:2px;">Maria Aparecida</div>
+          </div>
+          <div class="ip-avatar ip-avatar-primary">MA</div>
+        </div>
+
+        <!-- Hero card -->
+        <div style="margin:16px;background:linear-gradient(135deg,rgba(45,181,107,.18),rgba(29,128,80,.10));border:1px solid rgba(45,181,107,.28);border-radius:20px;padding:20px;">
+          <div class="ip-label" style="margin-bottom:6px;">Próximo Aluguel</div>
+          <div style="font-family:var(--ip-font-mono);font-size:32px;font-weight:700;letter-spacing:-1px;color:var(--ip-text-1);font-variant-numeric:tabular-nums;">R$ 1.850,00</div>
+          <div class="ip-body-sm ip-text-2" style="margin-top:4px;">Vence em <strong style="color:var(--ip-text-1);">15 de outubro</strong></div>
+          <div style="margin-top:12px;"><span class="ip-pill ip-pill-pending">Pendente</span></div>
+          <button class="ip-btn ip-btn-accent ip-btn-full ip-btn-lg" style="margin-top:16px;font-size:15px;">Pagar via PIX</button>
+        </div>
+
+        <!-- Seções -->
+        <div style="padding:0 16px 16px;">
+          <div class="ip-section-header"><span class="ip-section-title">Histórico</span></div>
+          <div style="background:var(--ip-surface-2);border:1px solid var(--ip-border);border-radius:var(--ip-r-lg);overflow:hidden;">
+            <div class="ip-list-item" style="padding:12px 16px;">
+              <div class="ip-list-item-content"><div style="font-size:13px;font-weight:600;">Setembro 2025</div></div>
+              <div style="display:flex;align-items:center;gap:8px;"><div class="ip-mono" style="font-size:13px;font-weight:600;">R$ 1.850</div><span class="ip-pill ip-pill-paid" style="font-size:10px;">Pago</span></div>
+            </div>
+            <div class="ip-list-item" style="padding:12px 16px;">
+              <div class="ip-list-item-content"><div style="font-size:13px;font-weight:600;">Agosto 2025</div></div>
+              <div style="display:flex;align-items:center;gap:8px;"><div class="ip-mono" style="font-size:13px;font-weight:600;">R$ 1.850</div><span class="ip-pill ip-pill-paid" style="font-size:10px;">Pago</span></div>
+            </div>
+          </div>
+
+          <div class="ip-section-header" style="margin-top:16px;"><span class="ip-section-title">Ações Rápidas</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <button class="ip-btn ip-btn-secondary" style="font-size:13px;height:44px;gap:6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Ver Contrato
+            </button>
+            <button class="ip-btn ip-btn-secondary" style="font-size:13px;height:44px;gap:6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              Manutenção
+            </button>
+          </div>
+        </div>
+
+        <!-- Bottom Nav -->
+        <div style="display:flex;background:rgba(17,20,32,.95);border-top:1px solid var(--ip-border);padding-bottom:8px;">
+          <div class="ip-bottom-nav-item active" style="position:static;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            Início
+          </div>
+          <div class="ip-bottom-nav-item" style="position:static;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            Cobranças
+          </div>
+          <div class="ip-bottom-nav-item" style="position:static;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Mensagens
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <div style="padding:32px 40px;border-top:1px solid var(--ip-border);">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div class="ip-body-sm ip-text-2">iLocarPay Design System v1.0 — Fase 1 completa</div>
+      <div style="display:flex;gap:8px;">
+        <span class="ip-pill ip-pill-active">CSS OK</span>
+        <span class="ip-pill ip-pill-active">Sem JS de negócio</span>
+        <span class="ip-pill ip-pill-active">Zero conflito</span>
+      </div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<!-- ── MODAL DEMO ── -->
+<div class="ip-overlay" id="demo-overlay" onclick="document.getElementById('demo-modal').classList.remove('ip-open');this.classList.remove('ip-open');"></div>
+<div class="ip-modal" id="demo-modal">
+  <div class="ip-modal-header">
+    <div class="ip-modal-title">Confirmar Ação</div>
+    <div class="ip-modal-close" onclick="document.getElementById('demo-modal').classList.remove('ip-open');document.getElementById('demo-overlay').classList.remove('ip-open');">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </div>
+  </div>
+  <div class="ip-modal-body">
+    <p class="ip-body ip-text-2" style="margin-bottom:16px;">Este é um modal de demonstração. Nos modais reais, toda a lógica de negócio permanece inalterada.</p>
+    <div class="ip-field">
+      <label class="ip-label-text">Campo de exemplo</label>
+      <input class="ip-input" type="text" placeholder="Digite algo...">
+    </div>
+  </div>
+  <div class="ip-modal-footer">
+    <button class="ip-btn ip-btn-secondary" onclick="document.getElementById('demo-modal').classList.remove('ip-open');document.getElementById('demo-overlay').classList.remove('ip-open');">Cancelar</button>
+    <button class="ip-btn ip-btn-primary">Confirmar</button>
+  </div>
+</div>
+
+<!-- ── SHEET DEMO ── -->
+<div class="ip-overlay" id="demo-overlay2" onclick="document.getElementById('demo-sheet').classList.remove('ip-open');this.classList.remove('ip-open');"></div>
+<div class="ip-sheet" id="demo-sheet">
+  <div class="ip-sheet-handle"></div>
+  <div class="ip-sheet-header">
+    <div class="ip-sheet-title">Opções de Pagamento</div>
+  </div>
+  <div class="ip-sheet-body">
+    <div class="ip-stack-4">
+      <div class="ip-list-item" style="background:var(--ip-surface);border-radius:var(--ip-r-lg);padding:16px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ip-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        <div class="ip-list-item-content"><div style="font-weight:600;">PIX</div><div class="ip-body-sm ip-text-2">Instantâneo, 24h/7d</div></div>
+      </div>
+      <div class="ip-list-item" style="background:var(--ip-surface);border-radius:var(--ip-r-lg);padding:16px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ip-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        <div class="ip-list-item-content"><div style="font-weight:600;">Cartão de Crédito</div><div class="ip-body-sm ip-text-2">Parcelamento disponível</div></div>
+      </div>
+      <button class="ip-btn ip-btn-secondary ip-btn-full" onclick="document.getElementById('demo-sheet').classList.remove('ip-open');document.getElementById('demo-overlay2').classList.remove('ip-open');">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Navegação ativa no sidebar
+document.querySelectorAll('.ds-nav-item').forEach(item => {
+  item.addEventListener('click', function() {
+    document.querySelectorAll('.ds-nav-item').forEach(i => i.classList.remove('ds-active'));
+    this.classList.add('ds-active');
+  });
+});
+
+// Observer para highlight automático
+const sections = document.querySelectorAll('.ds-section[id]');
+const navItems = document.querySelectorAll('.ds-nav-item[href]');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.id;
+      navItems.forEach(item => {
+        item.classList.toggle('ds-active', item.getAttribute('href') === '#' + id);
+      });
+    }
+  });
+}, { threshold: 0.3 });
+sections.forEach(s => observer.observe(s));
+
+// Demo loading state
+function demoLoading() {
+  const btn = document.getElementById('demo-load-btn');
+  btn.classList.add('ip-btn-loading');
+  btn.disabled = true;
+  setTimeout(() => {
+    btn.classList.remove('ip-btn-loading');
+    btn.disabled = false;
+    showToast('Alterações salvas com sucesso.', 'success');
+  }, 2000);
+}
+
+function demoPay() {
+  const btn = document.getElementById('demo-pay-btn');
+  btn.classList.add('ip-btn-loading');
+  btn.disabled = true;
+  setTimeout(() => {
+    btn.classList.remove('ip-btn-loading');
+    btn.disabled = false;
+    showToast('Cobrança processada com sucesso.', 'success');
+  }, 2500);
+}
+
+function showToast(msg, type) {
+  const region = document.getElementById('demo-toast-region');
+  const icons = {
+    success: `<svg class="ip-toast-icon" viewBox="0 0 24 24" fill="none" stroke="var(--ip-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+    error: `<svg class="ip-toast-icon" viewBox="0 0 24 24" fill="none" stroke="var(--ip-danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+    warning: `<svg class="ip-toast-icon" viewBox="0 0 24 24" fill="none" stroke="var(--ip-warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
+  };
+  const toast = document.createElement('div');
+  toast.className = `ip-toast ip-toast-${type}`;
+  toast.innerHTML = `${icons[type]}<span class="ip-toast-text">${msg}</span>`;
+  region.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// Chips interativos
+document.querySelectorAll('.ip-chip').forEach(chip => {
+  chip.addEventListener('click', function() {
+    document.querySelectorAll('.ip-chip').forEach(c => c.classList.remove('ip-chip-active'));
+    this.classList.add('ip-chip-active');
+  });
+});
+
+// Tabs demo
+document.querySelectorAll('.ip-tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    const parent = this.closest('.ip-tabs');
+    if (!parent) return;
+    parent.querySelectorAll('.ip-tab').forEach(t => t.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

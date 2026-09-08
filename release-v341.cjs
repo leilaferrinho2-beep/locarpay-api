@@ -1,16 +1,17 @@
 const admin = require('firebase-admin');
-const { readFileSync, writeFileSync } = require('fs');
+const { readFileSync } = require('fs');
+
 const sa = JSON.parse(readFileSync('C:/Users/denis/Downloads/locarpayapp-firebase-adminsdk-fbsvc-e92d24aa50.json', 'utf8'));
 admin.initializeApp({ credential: admin.credential.cert(sa) });
 const db = admin.firestore();
-const versionCode = 358;
-const versionName = '6.29';
+
+const versionCode = 341;
+const versionName = '6.12';
 const url = 'https://gkrav8ckclxpbeho.public.blob.vercel-storage.com/app-release.apk';
+
 (async () => {
   await db.collection('config').doc('app').set({ versionCode, versionName, url });
-  const payload = JSON.stringify({ versionCode, versionName, url }, null, 2);
-  writeFileSync('version.json', payload);
-  writeFileSync('public/version.json', payload);
   console.log(`config/app atualizado: ${versionCode} / ${versionName}`);
+  console.log(`url: ${url}`);
   process.exit(0);
 })();
