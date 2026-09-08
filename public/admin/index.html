@@ -4776,17 +4776,13 @@
         } else if (change.type === 'modified') {
           if (data.lastMessageSender === 'tenant' && msgAt > (_lastMsgAt[id] || 0)) {
             _lastMsgAt[id] = msgAt;
-            // Notifica sempre, exceto se admin está na aba Chamados com esse chamado aberto (vê em tempo real)
-            const onChamadosTab = $('panel-chamados')?.style.display !== 'none';
-            if (!(onChamadosTab && _selectedChamadoId === id)) {
-              showChatMsgToast(id, data);
-              if ('Notification' in window && Notification.permission === 'granted') {
-                const n = new Notification('💬 ' + (data.tenantName || 'Inquilino'), {
-                  body: data.lastMessage || 'Nova mensagem',
-                  icon: '/logo.png', tag: 'chamado-' + id, renotify: true
-                });
-                n.onclick = () => { window.focus(); n.close(); };
-              }
+            showChatMsgToast(id, data);
+            if ('Notification' in window && Notification.permission === 'granted') {
+              const n = new Notification('💬 ' + (data.tenantName || 'Inquilino'), {
+                body: data.lastMessage || 'Nova mensagem',
+                icon: '/logo.png', tag: 'chamado-' + id, renotify: true
+              });
+              n.onclick = () => { window.focus(); n.close(); };
             }
           } else {
             if (msgAt > (_lastMsgAt[id] || 0)) _lastMsgAt[id] = msgAt;
