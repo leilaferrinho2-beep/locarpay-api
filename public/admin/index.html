@@ -4733,72 +4733,80 @@
     let firstLoad = true;
     const _lastMsgAt = {};
     _chamadosUnsubscribe = onSnapshot(q, async snap => {
-      // Captura docChanges ANTES do await para não perder referência correta
       const changes = snap.docChanges();
       const rows = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      // Resolve nome real para chamados cujo tenantName é um e-mail
+
+      if (firstLoad) {
+        // Inicializa baseline de timestamps de forma SÍNCRONA (antes de qualquer await)
+        // para evitar race condition com snapshots subsequentes
+        rows.forEach(c => {
+          _lastMsgAt[c.id] = (c.lastMessageAt?.seconds || 0) * 1000 + Math.floor((c.lastMessageAt?.nanoseconds || 0) / 1e6);
+        });
+        firstLoad = false;
+        // Async: resolve nomes e renderiza
+        await Promise.all(rows.map(async c => {
+          if (c.tenantId && (!c.tenantName || c.tenantName.includes('@'))) {
+            try {
+              const usnap = await getDoc(doc(db, 'users', c.tenantId));
+              const n = usnap.data()?.name;
+              if (n && !n.includes('@')) { c.tenantName = n; updateDoc(doc(db, 'maintenance', c.id), { tenantName: n }).catch(() => {}); return; }
+              const cSnap = await getDocs(query(collection(db, 'contracts'), where('tenantId', '==', c.tenantId), limit(1)));
+              const cn = cSnap.docs[0]?.data()?.tenantName;
+              if (cn && !cn.includes('@')) { c.tenantName = cn; updateDoc(doc(db, 'maintenance', c.id), { tenantName: cn }).catch(() => {}); }
+            } catch (_) {}
+          }
+        }));
+        renderChamados(rows);
+        return;
+      }
+
+      // Não é firstLoad: detecta mudanças usando changes capturado ANTES do await
+      // Evita race condition onde await cede thread e outro snapshot sobrescreve _lastMsgAt
+      changes.forEach(change => {
+        const data = change.doc.data();
+        const id = change.doc.id;
+        const msgAt = (data.lastMessageAt?.seconds || 0) * 1000 + Math.floor((data.lastMessageAt?.nanoseconds || 0) / 1e6);
+        if (change.type === 'added') {
+          // Novo chamado criado pelo inquilino
+          showChamadoToast(id, data);
+          _lastMsgAt[id] = msgAt;
+        } else if (change.type === 'modified') {
+          if (data.lastMessageSender === 'tenant' && msgAt > (_lastMsgAt[id] || 0)) {
+            _lastMsgAt[id] = msgAt;
+            // Notifica sempre, exceto se admin está na aba Chamados com esse chamado aberto (vê em tempo real)
+            const onChamadosTab = $('panel-chamados')?.style.display !== 'none';
+            if (!(onChamadosTab && _selectedChamadoId === id)) {
+              showChatMsgToast(id, data);
+              if ('Notification' in window && Notification.permission === 'granted') {
+                const n = new Notification('💬 ' + (data.tenantName || 'Inquilino'), {
+                  body: data.lastMessage || 'Nova mensagem',
+                  icon: '/logo.png', tag: 'chamado-' + id, renotify: true
+                });
+                n.onclick = () => { window.focus(); n.close(); };
+              }
+            }
+          } else {
+            if (msgAt > (_lastMsgAt[id] || 0)) _lastMsgAt[id] = msgAt;
+          }
+        }
+      });
+
+      // Async: resolve nomes e renderiza (após notificações, que são síncronas)
       await Promise.all(rows.map(async c => {
         if (c.tenantId && (!c.tenantName || c.tenantName.includes('@'))) {
           try {
             const usnap = await getDoc(doc(db, 'users', c.tenantId));
             const n = usnap.data()?.name;
-            if (n && !n.includes('@')) {
-              c.tenantName = n;
-              updateDoc(doc(db, 'maintenance', c.id), { tenantName: n }).catch(() => {});
-              return;
-            }
-            const cSnap = await getDocs(query(collection(db, 'contracts'),
-              where('tenantId', '==', c.tenantId), limit(1)));
+            if (n && !n.includes('@')) { c.tenantName = n; updateDoc(doc(db, 'maintenance', c.id), { tenantName: n }).catch(() => {}); return; }
+            const cSnap = await getDocs(query(collection(db, 'contracts'), where('tenantId', '==', c.tenantId), limit(1)));
             const cn = cSnap.docs[0]?.data()?.tenantName;
-            if (cn && !cn.includes('@')) {
-              c.tenantName = cn;
-              updateDoc(doc(db, 'maintenance', c.id), { tenantName: cn }).catch(() => {});
-            }
+            if (cn && !cn.includes('@')) { c.tenantName = cn; updateDoc(doc(db, 'maintenance', c.id), { tenantName: cn }).catch(() => {}); }
           } catch (_) {}
         }
       }));
       renderChamados(rows);
-
-      if (!firstLoad) {
-        // Detecta nova msg do inquilino comparando diretamente com _lastMsgAt
-        // (não usa docChanges() após await pois o SDK pode não garantir o contexto correto)
-        rows.forEach(c => {
-          const id = c.id;
-          const msgAt = (c.lastMessageAt?.seconds || 0) * 1000 + Math.floor((c.lastMessageAt?.nanoseconds || 0) / 1e6);
-          if (c.lastMessageSender === 'tenant' && msgAt > (_lastMsgAt[id] || 0)) {
-            _lastMsgAt[id] = msgAt;
-            // Notifica sempre, exceto se o admin está na aba Chamados com esse chamado aberto (vê em tempo real)
-            const onChamadosTab = $('panel-chamados')?.style.display !== 'none';
-            if (!(onChamadosTab && _selectedChamadoId === id)) {
-              showChatMsgToast(id, c);
-              if ('Notification' in window && Notification.permission === 'granted') {
-                const n = new Notification('💬 ' + (c.tenantName || 'Inquilino'), {
-                  body: c.lastMessage || 'Nova mensagem',
-                  icon: '/logo.png',
-                  tag: 'chamado-' + id,
-                  renotify: true
-                });
-                n.onclick = () => { window.focus(); n.close(); };
-              }
-            }
-          } else if (c.lastMessageSender !== 'tenant') {
-            // Atualiza o baseline para msgs do owner/admin, evita renotificar msg antiga do inquilino
-            if (msgAt > (_lastMsgAt[id] || 0)) _lastMsgAt[id] = msgAt;
-          }
-        });
-        // Novo chamado criado
-        changes.forEach(change => {
-          if (change.type === 'added') showChamadoToast(change.doc.id, change.doc.data());
-        });
-      } else {
-        // Inicializa timestamps para não notificar mensagens antigas
-        rows.forEach(c => {
-          _lastMsgAt[c.id] = (c.lastMessageAt?.seconds || 0) * 1000 + Math.floor((c.lastMessageAt?.nanoseconds || 0) / 1e6);
-        });
-      }
-      firstLoad = false;
     });
   }
 
