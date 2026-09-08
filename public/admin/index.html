@@ -5529,6 +5529,7 @@
     try {
       const msgRef = await addDoc(collection(db, 'messages'), {
         authorId:   currentOwnerId,
+        ownerId:    currentOwnerId,
         authorName: ownerName,
         authorRole: 'owner',
         contractId: _tcdContractId || null,
@@ -5668,15 +5669,17 @@
         fileType = pendingFile.type;
         fileName = pendingFile.name;
       }
-      const msgData = { text: text || '', sender: 'owner', senderName: ownerName, createdAt: now };
-      if (fileUrl) { msgData.fileUrl = fileUrl; msgData.fileType = fileType; msgData.fileName = fileName; }
-      await addDoc(collection(db, `brokerChats/${_bcdChatId}/messages`), msgData);
       const lastMsg = fileUrl ? (fileName || 'Arquivo') : text;
+      // Garante que o doc pai existe com ownerId ANTES de escrever a mensagem
+      // (a regra Firestore de brokerChats/messages faz get() no pai para validar ownerId)
       await setDoc(doc(db, 'brokerChats', _bcdChatId), {
         ownerId: currentOwnerId, brokerId: _bcdBrokerId,
         ownerName, lastMessage: lastMsg, lastMessageAt: now, lastSender: 'owner',
         unreadBroker: increment(1), unreadOwner: 0
       }, { merge: true });
+      const msgData = { text: text || '', sender: 'owner', senderName: ownerName, createdAt: now };
+      if (fileUrl) { msgData.fileUrl = fileUrl; msgData.fileType = fileType; msgData.fileName = fileName; }
+      await addDoc(collection(db, `brokerChats/${_bcdChatId}/messages`), msgData);
       // Push FCM para o corretor
       fetch('/api/ilocarpay-owner', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
