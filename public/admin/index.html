@@ -4734,6 +4734,7 @@
     const _lastMsgAt = {};
     _chamadosUnsubscribe = onSnapshot(q, async snap => {
       const changes = snap.docChanges();
+      console.log('[chamados] snapshot firstLoad='+firstLoad+' docs='+snap.docs.length+' changes='+changes.map(c=>c.type+':'+c.doc.id.slice(-6)+'(sender='+c.doc.data().lastMessageSender+')').join(','));
       const rows = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
