@@ -4784,9 +4784,8 @@
               });
               n.onclick = () => { window.focus(); n.close(); };
             }
-          } else {
-            if (msgAt > (_lastMsgAt[id] || 0)) _lastMsgAt[id] = msgAt;
           }
+          // Não atualiza _lastMsgAt para msgs do owner — baseline só avança por msgs do inquilino
         }
       });
 
