@@ -376,13 +376,28 @@ async function findOrCreateBillingCustomer(masterKey, ownerData) {
   return customer.id;
 }
 
-async function handleActivatePlan(db, body) {
+async function handleActivatePlan(db, body, req) {
+  // Auth: requer Firebase ID token válido no header Authorization
+  const authHeader = req.headers['authorization'] || '';
+  const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  if (!idToken) throw Object.assign(new Error('Token ausente'), { status: 401 });
+
+  const decoded = await getAuth().verifyIdToken(idToken).catch(() => {
+    throw Object.assign(new Error('Token inválido'), { status: 401 });
+  });
+
   const { ownerId, plan = 'basic', billingType = 'PIX' } = body;
   if (!ownerId) throw Object.assign(new Error('ownerId obrigatorio'), { status: 400 });
 
   const ownerSnap = await db.collection('owners').doc(ownerId).get();
   if (!ownerSnap.exists) throw Object.assign(new Error('Owner nao encontrado'), { status: 404 });
   const ownerData = ownerSnap.data();
+
+  // Autorização: super admin OU o próprio owner
+  const SUPER_ADMINS = new Set(['denisfelicio20@gmail.com', 'contatotransgu@gmail.com']);
+  if (!SUPER_ADMINS.has(decoded.email) && decoded.email !== ownerData.email) {
+    throw Object.assign(new Error('Acesso negado'), { status: 403 });
+  }
 
   const masterKey = await getMasterAsaasKey(db);
   if (!masterKey) throw Object.assign(new Error('Chave master Asaas nao configurada'), { status: 500 });
@@ -1014,7 +1029,7 @@ export default async function handler(req, res) {
     if (step === 'migrate')        return res.status(200).json(await handleMigrate(db, body));
     if (step === 'get')            return res.status(200).json(await handleGet(db, body));
     if (step === 'get-many')       return res.status(200).json(await handleGetMany(db, body));
-    if (step === 'activate-plan')  return res.status(200).json(await handleActivatePlan(db, body));
+    if (step === 'activate-plan')  return res.status(200).json(await handleActivatePlan(db, body, req));
     if (step === 'billing-status') return res.status(200).json(await handleBillingStatus(db, body));
     if (step === 'notify-trial')   return res.status(200).json(await handleNotifyTrial(db, body));
     if (step === 'notify-renewal') return res.status(200).json(await handleNotifyRenewal(db, body));
