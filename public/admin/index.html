@@ -934,13 +934,22 @@
   };
 
   window.markChargePaid = async (chargeId) => {
-    showConfirm('Marcar esta cobrança como paga manualmente?', async () => {
-      try {
-        await updateDoc(doc(db, 'charges', chargeId), { status: 'paid', paidAt: serverTimestamp(), paidManually: true });
-        showToast('Cobrança marcada como paga', 'success');
-        await loadOverdue();
-      } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-    });
+    showConfirm(
+      'Marcar cobrança como paga?\n\nConfirme somente se o pagamento desta cobrança já foi recebido.',
+      async () => {
+        const btn = document.querySelector(`[onclick="markChargePaid('${chargeId}')"]`);
+        if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+        try {
+          await updateDoc(doc(db, 'charges', chargeId), { status: 'paid', paidAt: serverTimestamp(), paidManually: true });
+          showToast('Cobrança marcada como paga', 'success');
+          await loadOverdue();
+        } catch (e) {
+          showToast('Erro: ' + e.message, 'error');
+          if (btn) { btn.disabled = false; btn.textContent = '✓ Pago'; }
+        }
+      },
+      { okText: 'Marcar como paga' }
+    );
   };
 
   window.sendOverduePush = async (tenantId) => {
@@ -1140,6 +1149,11 @@
 
   window.toggleBureauSecret = (bureau) => {
     const el = $(bureau + '-client-secret');
+    if (el) el.type = el.type === 'password' ? 'text' : 'password';
+  };
+
+  window.toggleBureauId = (bureau) => {
+    const el = $(bureau + '-client-id');
     if (el) el.type = el.type === 'password' ? 'text' : 'password';
   };
 
@@ -6877,13 +6891,17 @@
           Use suas credenciais da API Serasa. Sem credenciais, o sistema opera em <span style="color:#4CAF50">modo sandbox</span> com dados simulados.
         </p>
         <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">CLIENT ID</label>
-        <input id="serasa-client-id" type="text" placeholder="a1b2c3d4-e5f6-..." autocomplete="off"
-          style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;margin-bottom:14px;transition:border-color .2s" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
+        <div style="position:relative;margin-bottom:14px">
+          <input id="serasa-client-id" type="password" placeholder="a1b2c3d4-e5f6-..." autocomplete="off"
+            aria-label="Serasa Client ID"
+            style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 42px 11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
+          <button type="button" onclick="toggleBureauId('serasa')" aria-label="Mostrar/ocultar Client ID Serasa" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;cursor:pointer;font-size:15px">👁</button>
+        </div>
         <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">CLIENT SECRET</label>
         <div style="position:relative;margin-bottom:6px">
           <input id="serasa-client-secret" type="password" placeholder="••••••••••••••••" autocomplete="off"
             style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 42px 11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
-          <button onclick="toggleBureauSecret('serasa')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;cursor:pointer;font-size:15px">👁</button>
+          <button type="button" onclick="toggleBureauSecret('serasa')" aria-label="Mostrar/ocultar Client Secret Serasa" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;cursor:pointer;font-size:15px">👁</button>
         </div>
         <div id="serasa-status" style="margin-bottom:14px;font-size:12px;color:#555"></div>
         <div style="display:flex;gap:10px">
@@ -6937,13 +6955,17 @@
           Use suas credenciais da API Boa Vista. Sem credenciais, opera em <span style="color:#4CAF50">modo sandbox</span>.
         </p>
         <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">CLIENT ID</label>
-        <input id="boavista-client-id" type="text" placeholder="bv_prod_xxxxxxxxxxxx" autocomplete="off"
-          style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;margin-bottom:14px;transition:border-color .2s" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
+        <div style="position:relative;margin-bottom:14px">
+          <input id="boavista-client-id" type="password" placeholder="bv_prod_xxxxxxxxxxxx" autocomplete="off"
+            aria-label="Boa Vista Client ID"
+            style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 42px 11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
+          <button type="button" onclick="toggleBureauId('boavista')" aria-label="Mostrar/ocultar Client ID Boa Vista" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;cursor:pointer;font-size:15px">👁</button>
+        </div>
         <label style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.3px;display:block;margin-bottom:6px">CLIENT SECRET</label>
         <div style="position:relative;margin-bottom:6px">
           <input id="boavista-client-secret" type="password" placeholder="••••••••••••••••" autocomplete="off"
             style="background:var(--bg);border:1px solid var(--border2);color:var(--text1);padding:11px 42px 11px 13px;border-radius:9px;font-size:14px;width:100%;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='#4CAF50'" onblur="this.style.borderColor='var(--border2)'">
-          <button onclick="toggleBureauSecret('boavista')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;cursor:pointer;font-size:15px">👁</button>
+          <button type="button" onclick="toggleBureauSecret('boavista')" aria-label="Mostrar/ocultar Client Secret Boa Vista" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;cursor:pointer;font-size:15px">👁</button>
         </div>
         <div id="boavista-status" style="margin-bottom:14px;font-size:12px;color:#555"></div>
         <div style="display:flex;gap:10px">
