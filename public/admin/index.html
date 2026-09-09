@@ -3588,10 +3588,10 @@
           ${(()=>{
             const c = contracts.find(x => x.tenantId === t.id && x.active);
             if (!c) return '';
-            return `<button class="btn-sm" style="color:#CE93D8;border-color:#6a1b9a" onclick="gerarCobrancaManual('${c.id}','${c.ownerId||currentOwnerId||''}','${(t.name||'').replace(/'/g,"\\'")}')">💳</button>`;
+            return `<button class="btn-sm" style="color:#CE93D8;border-color:#6a1b9a" title="Gerar cobrança" aria-label="Gerar cobrança" onclick="gerarCobrancaManual('${c.id}','${c.ownerId||currentOwnerId||''}','${(t.name||'').replace(/'/g,"\\'")}')">💳</button>`;
           })()}
           <div style="position:relative;display:inline-block" class="tenant-more-wrap">
-            <button class="btn-sm" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block';event.stopPropagation()" style="font-size:15px;padding:0 7px">⋯</button>
+            <button class="btn-sm" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block';event.stopPropagation()" style="font-size:15px;padding:0 7px" title="Mais ações" aria-label="Mais ações">⋯</button>
             <div style="display:none;position:absolute;right:0;top:100%;background:var(--s2);border:1px solid var(--border2);border-radius:8px;z-index:99;min-width:130px;padding:4px;box-shadow:0 4px 16px #0006" onclick="event.stopPropagation()">
               <button class="btn-sm" style="width:100%;text-align:left;border:none;display:block;margin:2px 0" onclick="openHistory('${t.id}');this.closest('.tenant-more-wrap').querySelector('div').style.display='none'">📋 Histórico</button>
               ${(()=>{ if (!currentOwnerData?.creditAnalysisEnabled) return '';
@@ -3873,9 +3873,9 @@
               <td style="padding:10px 6px;text-align:center;color:${statusColor[c.status]||'#aaa'}">${statusLabel[c.status] || c.status}</td>
               <td style="padding:10px 6px;text-align:center;white-space:nowrap">
                 ${c.monthRef && c.status === 'paid' ? `<button class="btn-sm" style="margin-right:4px" onclick="sendReceipt('${c.id}','${tenantId}',this)">${c.receiptSentAt ? 'Reenviar' : '📄'} recibo</button>` : ''}
-                ${c.status === 'paid' ? `<button class="btn-sm" style="color:#ef9a9a;border-color:#4a1a1a;background:#1a0a0a;margin-right:4px" onclick="estornarCobranca('${c.id}','${tenantId}')">↩</button>` : ''}
-                <button class="btn-sm" style="color:#64b5f6;border-color:#1a2a4a;background:#0a1020;margin-right:4px" onclick="editAvulsa('${c.id}','${(c.description||c.monthRef||'Aluguel').replace(/'/g,"\\'")}',${c.totalAmount||c.baseRent||0},'${c.dueDate?.seconds||0}')">✏</button>
-                <button class="btn-sm" style="color:#ef5350;border-color:#4a1a1a;background:#1a0a0a" onclick="deleteCharge('${c.id}')">🗑</button>
+                ${c.status === 'paid' ? `<button class="btn-sm" style="color:#ef9a9a;border-color:#4a1a1a;background:#1a0a0a;margin-right:4px" title="Estornar pagamento" aria-label="Estornar pagamento" onclick="estornarCobranca('${c.id}','${tenantId}')">↩</button>` : ''}
+                <button class="btn-sm" style="color:#64b5f6;border-color:#1a2a4a;background:#0a1020;margin-right:4px" title="Editar cobrança" aria-label="Editar cobrança" onclick="editAvulsa('${c.id}','${(c.description||c.monthRef||'Aluguel').replace(/'/g,"\\'")}',${c.totalAmount||c.baseRent||0},'${c.dueDate?.seconds||0}')">✏</button>
+                <button class="btn-sm" style="color:#ef5350;border-color:#4a1a1a;background:#1a0a0a" title="Excluir cobrança" aria-label="Excluir cobrança" onclick="deleteCharge('${c.id}')">🗑</button>
               </td>
             </tr>`).join('')}
         </tbody>
