@@ -506,19 +506,18 @@
       return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${d} L${W},${H} L0,${H} Z" fill="${fill}" stroke="none"/><path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     }
     const cards = [
-      { label: 'Inquilinos',       value: totalTenants,          icon: IC_USERS,    color: 'var(--accent3)', tab: 'tenants', loadFn: 'loadTenants', spark: mkSparkline('#10b981','rgba(16,185,129,.12)','up') },
-      { label: 'Contratos ativos', value: totalContracts,        icon: IC_CONTRACT, color: 'var(--accent2)', tab: 'tenants', loadFn: 'loadTenants', spark: mkSparkline('#10b981','rgba(16,185,129,.10)','flat') },
-      { label: 'Leads em análise', value: leadsCount,            icon: IC_LEADS,    color: leadsCount>0?'var(--warn)':'var(--text3)', tab: 'leads', loadFn: 'loadLeads', spark: mkSparkline('#f59e0b','rgba(245,158,11,.10)',leadsCount>0?'up':'flat') },
-      { label: 'Cobranças pend.',  value: pendingCount,          icon: IC_CLOCK,    color: 'var(--warn)',    tab: 'overdue', loadFn: 'loadOverdue', spark: mkSparkline('#f59e0b','rgba(245,158,11,.10)','flat') },
-      { label: 'Pagas no mês',     value: paidCount,             icon: IC_CHECK,    color: 'var(--accent3)', tab: 'overdue', loadFn: 'loadOverdue', spark: mkSparkline('#10b981','rgba(16,185,129,.12)','up') },
-      { label: 'Aluguel/mês',      value: fmt.format(totalRent), icon: IC_MONEY,    color: 'var(--purple)', tab: 'tenants', loadFn: 'loadTenants', spark: mkSparkline('#8b5cf6','rgba(139,92,246,.12)','up') },
+      { label: 'Inquilinos',       value: totalTenants,          icon: IC_USERS,    color: 'var(--accent3)', tab: 'tenants', loadFn: 'loadTenants' },
+      { label: 'Contratos ativos', value: totalContracts,        icon: IC_CONTRACT, color: 'var(--accent2)', tab: 'tenants', loadFn: 'loadTenants' },
+      { label: 'Leads em análise', value: leadsCount,            icon: IC_LEADS,    color: leadsCount>0?'var(--warn)':'var(--text3)', tab: 'leads', loadFn: 'loadLeads' },
+      { label: 'Cobranças pend.',  value: pendingCount,          icon: IC_CLOCK,    color: 'var(--warn)',    tab: 'overdue', loadFn: 'loadOverdue' },
+      { label: 'Cobranças pagas',  value: paidCount,             icon: IC_CHECK,    color: 'var(--accent3)', tab: 'overdue', loadFn: 'loadOverdue' },
+      { label: 'Aluguel/mês',      value: fmt.format(totalRent), icon: IC_MONEY,    color: 'var(--purple)', tab: 'tenants', loadFn: 'loadTenants' },
     ];
     $('metrics-row').innerHTML = cards.map((c,i) => `
       <div class="metric-card metric-card--link" data-tab="${c.tab}" data-loadfn="${c.loadFn}" title="Ver ${esc(c.label)}" style="cursor:pointer;animation-delay:${i*60}ms">
         <div class="metric-icon" style="color:${c.color}">${c.icon}</div>
         <div class="metric-value" style="color:${c.color}">${c.value}</div>
         <div class="metric-label">${esc(c.label)}</div>
-        <div class="metric-sparkline">${c.spark}</div>
         <div class="metric-arrow">${IC_ARROW}</div>
       </div>
     `).join('');
