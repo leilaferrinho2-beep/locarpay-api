@@ -188,7 +188,7 @@
   }
 
   window.setTab = function setTab(tab) {
-    ['tab-tenants','tab-owners','tab-overdue','tab-licenses','tab-config','tab-leads','tab-plano','tab-brokers','tab-chamados','tab-overview'].forEach(t => {
+    ['tab-tenants','tab-owners','tab-overdue','tab-licenses','tab-config','tab-leads','tab-plano','tab-brokers','tab-chamados','tab-overview','tab-relatorios'].forEach(t => {
       $(t)?.classList.remove('active');
       const panel = $(t.replace('tab-', 'panel-'));
       if (panel) panel.style.display = 'none';
@@ -1379,9 +1379,10 @@
     leadsUnsubscribe = onSnapshot(q, snap => {
       const n = snap.size;
       const tab = $('tab-leads');
-      if (tab) tab.innerHTML = n > 0
-        ? `📋 Leads <span style="background:#ef5350;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">${n}</span>`
-        : '📋 Leads';
+      if (tab) {
+        const badge = tab.querySelector('#leads-badge');
+        if (badge) { badge.textContent = n; badge.style.display = n > 0 ? '' : 'none'; }
+      }
 
       // Alerta proeminente quando chega um lead novo
       if (n > prevLeadCount && prevLeadCount >= 0) {
@@ -4737,6 +4738,7 @@
   $('tab-brokers').addEventListener('click',  () => goTab('brokers',  loadBrokersTab));
   $('tab-plano').addEventListener('click',   () => { setTab('plano'); renderPlanoTab?.(); });
   $('tab-chamados').addEventListener('click', () => { setTab('chamados'); $('chamados-badge').style.display='none'; });
+  $('tab-relatorios').addEventListener('click', () => setTab('relatorios'));
 
   // ── Chamados de Manutenção ────────────────────────────────────────────────
   let _chamadosUnsubscribe = null;
@@ -6289,7 +6291,7 @@
     width: var(--sidebar-w); height: calc(100vh - var(--header-h));
     background: var(--s1); border-right: 1px solid var(--border);
     display: flex; flex-direction: column;
-    padding: 24px 0 40px; overflow-y: auto; z-index: 100;
+    padding: 16px 0 0; overflow-y: auto; z-index: 100;
   }
   .tab {
     display: flex; align-items: center; gap: 10px;
@@ -6338,6 +6340,39 @@
     letter-spacing: 1.8px; text-transform: uppercase;
     padding: 10px 28px 6px; opacity: 0.7;
   }
+
+  /* ── MASTER-02: Sidebar footer plan card ── */
+  .sidebar-footer {
+    margin-top: auto; padding: 16px 12px 8px;
+    border-top: 1px solid var(--border); flex-shrink: 0;
+  }
+  .sidebar-plan-card {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; background: var(--s2); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 10px 12px;
+  }
+  .sidebar-plan-label {
+    font-size: 10px; font-weight: 700; color: var(--text3);
+    text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 2px;
+  }
+  .sidebar-plan-name {
+    font-size: 12px; font-weight: 600; color: var(--text2);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .sidebar-plan-btn {
+    background: var(--accent-bg); border: 1px solid rgba(16,185,129,0.22);
+    color: var(--accent3); border-radius: var(--radius-sm);
+    padding: 4px 10px; font-size: 11px; font-weight: 600;
+    cursor: pointer; flex-shrink: 0; font-family: inherit;
+    transition: background .15s; white-space: nowrap;
+  }
+  .sidebar-plan-btn:hover { background: rgba(16,185,129,0.18); }
+  .sidebar-plan-btn:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+  html[data-theme="light"] .sidebar-plan-card { background: #0e1220; border-color: rgba(148,163,184,0.12); }
+  html[data-theme="light"] .sidebar-footer { border-top-color: rgba(148,163,184,0.12); }
+  html[data-theme="light"] .sidebar-plan-label { color: #3e5268; }
+  html[data-theme="light"] .sidebar-plan-name { color: #7a8fa6; }
+  html[data-theme="light"] .sidebar-plan-btn { border-color: rgba(5,150,105,0.25); }
 
   /* ── Content ── */
   #dashboard-section { display: none; flex-direction: column; margin-left: var(--sidebar-w); margin-top: var(--header-h); min-height: calc(100vh - var(--header-h)); }
@@ -6556,12 +6591,15 @@
   @media (max-width: 768px) { :root { --sidebar-w: 0px; } .tabs { display: none; } #dashboard-section { margin-left: 0; } }
 
   /* ── Light mode component overrides ── */
-  html[data-theme="light"] .tab:hover { background: rgba(0,0,0,0.04); }
-  html[data-theme="light"] .tab.active { color: #047857; }
-  html[data-theme="light"] .tab.active::after { background: linear-gradient(180deg, #047857, #065f46); box-shadow: 0 0 8px rgba(5,150,105,0.4); }
-  html[data-theme="light"] .tab-icon { opacity: 0.6; }
-  html[data-theme="light"] .tab:hover .tab-icon { opacity: 0.85; }
-  html[data-theme="light"] .sidebar-label { opacity: 1; }
+  /* Sidebar permanece dark navy no light mode */
+  html[data-theme="light"] nav.tabs { background: #0a0d16; border-right: 1px solid rgba(148,163,184,0.12); }
+  html[data-theme="light"] .tabs .tab { color: #e8edf5; }
+  html[data-theme="light"] .tab:hover { background: rgba(255,255,255,0.06); }
+  html[data-theme="light"] .tab.active { color: #10b981; }
+  html[data-theme="light"] .tab.active::after { background: linear-gradient(180deg, #10b981, #059669); box-shadow: 0 0 8px rgba(16,185,129,0.4); }
+  html[data-theme="light"] .tab-icon { opacity: 0.7; }
+  html[data-theme="light"] .tab:hover .tab-icon { opacity: 1; }
+  html[data-theme="light"] .sidebar-label { opacity: 0.5; color: #7a8fa6; }
   html[data-theme="light"] tr:hover td { background: rgba(0,0,0,0.025); }
   html[data-theme="light"] .badge.active { color: #047857; }
   html[data-theme="light"] .badge.inactive { color: #b91c1c; }
@@ -6785,58 +6823,75 @@
     <div class="sidebar-label">Principal</div>
 
     <div class="tab active" id="tab-overview">
-      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
-      <span class="tab-label">Visão Geral</span>
+      <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
+      <span class="tab-label">Dashboard</span>
+    </div>
+
+    <div class="tab" id="tab-owners" style="display:none">
+      <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+      <span class="tab-label">Imobiliárias</span>
     </div>
 
     <div class="tab" id="tab-tenants">
-      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+      <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
       <span class="tab-label">Inquilinos</span>
     </div>
 
     <div class="tab" id="tab-leads" style="display:none">
-      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+      <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
       <span class="tab-label">Leads</span>
+      <span class="tab-badge" id="leads-badge" style="display:none">0</span>
     </div>
 
     <div class="tab" id="tab-brokers" style="display:none">
-      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><circle cx="19" cy="7" r="2"/><path d="M19 5v4M17 7h4"/></svg></span>
+      <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><circle cx="19" cy="7" r="2"/><path d="M19 5v4M17 7h4"/></svg></span>
       <span class="tab-label">Corretores</span>
       <span class="tab-badge" id="brokers-chat-badge" style="display:none">0</span>
     </div>
 
     <div class="tab" id="tab-overdue">
-      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
-      <span class="tab-label">Inadimplentes</span>
+      <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+      <span class="tab-label">Inadimplência</span>
     </div>
 
     <div class="tab" id="tab-chamados">
-      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span>
+      <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span>
       <span class="tab-label">Chamados</span>
       <span class="tab-badge" id="chamados-badge" style="display:none">0</span>
     </div>
 
-    <div class="sidebar-sep"></div>
-    <div class="sidebar-label">Admin</div>
-
-    <div class="tab" id="tab-owners" style="display:none">
-      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
-      <span class="tab-label">Imobiliárias</span>
+    <div class="tab" id="tab-relatorios">
+      <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+      <span class="tab-label">Relatórios</span>
     </div>
 
+    <div class="sidebar-sep"></div>
+    <div class="sidebar-label">Configuração</div>
+
     <div class="tab" id="tab-licenses" style="display:none">
-      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+      <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
       <span class="tab-label">Licenças</span>
     </div>
 
     <div class="tab" id="tab-config" style="display:none">
-      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+      <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
       <span class="tab-label">Configurações</span>
     </div>
 
     <div class="tab" id="tab-plano" style="display:none">
-      <span class="tab-icon"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
+      <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
       <span class="tab-label">Meu Plano</span>
+    </div>
+
+    <!-- Rodapé sidebar -->
+    <div class="sidebar-footer">
+      <div class="sidebar-plan-card">
+        <div>
+          <div class="sidebar-plan-label">Plano</div>
+          <div class="sidebar-plan-name" id="sidebar-plan-name">iLocarPay</div>
+        </div>
+        <button class="sidebar-plan-btn" onclick="setTab('plano')">Ver plano</button>
+      </div>
     </div>
   </nav>
 
@@ -7311,6 +7366,49 @@
   </div>
 
   <!-- Painel: Meu Plano (só owner não-master) -->
+  <!-- ── MASTER-02: Relatórios panel ── -->
+  <div class="panel" id="panel-relatorios" style="display:none">
+    <div class="section-header">
+      <div class="dash-hd">
+        <h2>Relatórios</h2>
+        <div class="dash-subtitle">Geração e exportação de relatórios operacionais</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:8px">
+      <div class="dash-panel" style="display:flex;flex-direction:column;gap:12px">
+        <div class="dash-panel-title">Financeiro</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:var(--s3);border-radius:var(--radius-md)">
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600;color:var(--text1);margin-bottom:2px">Relatório Mensal</div>
+              <div style="font-size:12px;color:var(--text2)">Envia resumo de cobranças por e-mail ao proprietário</div>
+            </div>
+            <button class="btn-secondary" onclick="sendMonthlyReport()" style="flex-shrink:0;font-size:12px">Enviar</button>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:var(--s3);border-radius:var(--radius-md)">
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600;color:var(--text1);margin-bottom:2px">Exportar CSV</div>
+              <div style="font-size:12px;color:var(--text2)">Exporta todas as cobranças em planilha CSV</div>
+            </div>
+            <button class="btn-secondary" onclick="exportCSV()" style="flex-shrink:0;font-size:12px">Exportar</button>
+          </div>
+        </div>
+      </div>
+      <div class="dash-panel" style="display:flex;flex-direction:column;gap:12px">
+        <div class="dash-panel-title">Contratos</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:var(--s3);border-radius:var(--radius-md)">
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600;color:var(--text1);margin-bottom:2px">Contratos Vencendo</div>
+              <div style="font-size:12px;color:var(--text2)">Notifica proprietário sobre contratos vencendo em 30 dias</div>
+            </div>
+            <button class="btn-secondary" onclick="notifyExpiry()" style="flex-shrink:0;font-size:12px">Notificar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="panel" id="panel-plano" style="display:none;max-width:520px;margin:32px auto;padding:0 16px">
     <h2 style="font-size:20px;font-weight:700;color:#fff;margin-bottom:20px">💳 Meu Plano</h2>
     <div id="plano-status-box" style="border:2px solid #444;border-radius:14px;padding:20px;margin-bottom:8px">
