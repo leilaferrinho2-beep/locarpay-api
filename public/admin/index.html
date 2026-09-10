@@ -5979,7 +5979,7 @@
         .sort((a, b) => (b.startDate || '').localeCompare(a.startDate || '') || (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
         .slice(0, 6);
       if (!recent.length) {
-        rcEl.innerHTML = '<p style="color:var(--text-3);font-size:13px;padding:8px 0">Nenhum imóvel locado ainda.</p>';
+        rcEl.innerHTML = '<p class="dc-empty">Nenhum contrato ativo encontrado.</p>';
       } else {
         rcEl.innerHTML = recent.map(c => {
           const tenant = tenants.find(t => t.id === c.tenantId);
@@ -6020,7 +6020,7 @@
           .sort((a, b) => (a.dueDate?.seconds || 0) - (b.dueDate?.seconds || 0))
           .slice(0, 6);
         if (!upcoming.length) {
-          upEl.innerHTML = '<p style="color:var(--text-3);font-size:13px;padding:8px 0">Nenhum vencimento nos próximos 7 dias.</p>';
+          upEl.innerHTML = '<p class="dc-empty">Nenhum vencimento ou pendência nos próximos 7 dias.</p>';
         } else {
           upEl.innerHTML = upcoming.map(ch => {
             const dueSecs = ch.dueDate?.seconds || 0;
@@ -6037,9 +6037,9 @@
             const tenant = tenants.find(t => t.id === ch.tenantId);
             const name = tenant?.name || ch.tenantEmail || '—';
             return `<div class="upcoming-item">
-              <div style="min-width:0;flex:1">
-                <div style="font-size:13px;font-weight:600;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(name)}</div>
-                <div style="font-size:11px;color:var(--text-3);margin-top:1px">${fmt.format(ch.totalAmount || ch.baseRent || 0)}</div>
+              <div class="dv-info">
+                <div class="dv-name">${esc(name)}</div>
+                <div class="dv-val">${fmt.format(ch.totalAmount || ch.baseRent || 0)}</div>
               </div>
               ${badge}
             </div>`;
@@ -6697,7 +6697,33 @@
   html[data-theme="light"] .rc-empty-icon { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.10); }
   html[data-theme="light"] .atc-empty-icon { background: rgba(5,150,105,0.08); }
 
-  .quick-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  /* ── MASTER-05C: Contratos, Vencimentos, Ações Rápidas ── */
+  .dc-hd { margin-bottom: 14px; }
+  .dc-title { font-size: 10px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 1.2px; }
+  .dc-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
+  .dc-empty { font-size: 12px; color: var(--text3); padding: 8px 0; margin: 0; }
+  .dv-hd { margin-bottom: 14px; }
+  .dv-title { font-size: 10px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 1.2px; }
+  .dv-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
+  .dv-info { min-width: 0; flex: 1; }
+  .dv-name { font-size: 13px; font-weight: 600; color: var(--text1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dv-val  { font-size: 11px; color: var(--text3); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .qa-hd { margin-bottom: 16px; }
+  .qa-title { font-size: 10px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 1.2px; }
+  .qa-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
+  .quick-actions { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  @media (max-width: 1199px) { .quick-actions { grid-template-columns: repeat(4, 1fr); } }
+  @media (max-width: 900px)  { .quick-actions { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 600px)  { .quick-actions { grid-template-columns: repeat(2, 1fr); } }
+  .qa-btn { background: var(--s2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 14px 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; cursor: pointer; transition: border-color .15s, background .15s; font-family: inherit; width: 100%; text-align: left; }
+  .qa-btn:hover { border-color: rgba(16,185,129,0.2); background: var(--s3); }
+  .qa-btn:active { background: var(--s4); }
+  .qa-btn:focus-visible { outline: 2px solid var(--accent3); outline-offset: 2px; }
+  .qa-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--s3); display: flex; align-items: center; justify-content: center; color: var(--text2); flex-shrink: 0; }
+  .qa-icon svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  .qa-label { font-size: 12px; font-weight: 600; color: var(--text1); line-height: 1.3; }
+  html[data-theme="light"] .qa-btn:hover { border-color: rgba(5,150,105,0.2); background: rgba(0,0,0,0.02); }
+  html[data-theme="light"] .qa-icon { background: rgba(0,0,0,0.04); }
   .metrics-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 24px; }
   @media (max-width: 1199px) { .metrics-row { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 767px)  { .metrics-row { grid-template-columns: repeat(2, 1fr); } }
@@ -7089,27 +7115,66 @@
     </div>
     <div class="dash-grid">
       <div class="dash-panel">
-        <div class="dash-panel-title">Últimos Contratos</div>
+        <div class="dc-hd">
+          <div class="dc-title">Últimos Contratos</div>
+          <div class="dc-sub">Contratos ativos mais recentes</div>
+        </div>
         <div id="dash-recent-contracts"><div class="empty" style="padding:24px 0">Carregando...</div></div>
       </div>
       <div class="dash-panel">
-        <div class="dash-panel-title">Vencimentos Próximos</div>
+        <div class="dv-hd">
+          <div class="dv-title">Vencimentos e pendências</div>
+          <div class="dv-sub">Cobranças pendentes e vencidas</div>
+        </div>
         <div id="dash-upcoming"><div class="empty" style="padding:24px 0">Carregando...</div></div>
       </div>
     </div>
     <div class="dash-panel" style="margin-top:24px">
-      <div class="dash-panel-title">Ações Rápidas</div>
+      <div class="qa-hd">
+        <div class="qa-title">Ações Rápidas</div>
+        <div class="qa-sub">Operações disponíveis para esta imobiliária</div>
+      </div>
       <div class="quick-actions">
-        <button class="btn-secondary" id="btn-generate-charges" title="Gera cobranças do mês atual para todos os contratos ativos">⚡ Gerar cobranças</button>
-        <button class="btn-secondary" id="btn-notify-upcoming" title="Avisa inquilinos com cobrança vencendo em 3 dias">🔔 Avisar vencimentos</button>
-        <button class="btn-secondary" id="btn-notify-overdue" title="Marca cobranças vencidas e envia push para inquilinos em atraso">⚠ Notificar vencidos</button>
-        <button class="btn-secondary" id="btn-monthly-report" title="Envia relatório mensal por email">📊 Relatório mensal</button>
-        <button class="btn-secondary" id="btn-annual-receipt" title="Envia comprovante anual de pagamentos">📄 Comp. Anual</button>
-        <button class="btn-secondary" id="btn-notify-expiry" title="Avisa o owner sobre contratos vencendo em 30 dias">📅 Contratos vencendo</button>
-        <button class="btn-secondary" id="btn-adjust-rent" title="Reajuste de aluguel para todos os contratos">💰 Reajuste</button>
-        <button class="btn-secondary" id="btn-export-csv" title="Exporta todas as cobranças em CSV">⬇ Exportar CSV</button>
-        <button class="btn-secondary" id="btn-clean-orphans" title="Exclui cobranças de inquilinos que não existem mais">🗑 Limpar órfãs</button>
-        <button class="btn-secondary" id="btn-whatsapp-qr" title="Gera QR Code para conectar WhatsApp">📱 WhatsApp QR</button>
+        <button class="qa-btn" id="btn-generate-charges" title="Gera cobranças do mês atual para todos os contratos ativos">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+          <span class="qa-label">Gerar cobranças</span>
+        </button>
+        <button class="qa-btn" id="btn-notify-upcoming" title="Avisa inquilinos com cobrança vencendo em 3 dias">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+          <span class="qa-label">Avisar vencimentos</span>
+        </button>
+        <button class="qa-btn" id="btn-notify-overdue" title="Marca cobranças vencidas e envia push para inquilinos em atraso">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          <span class="qa-label">Notificar vencidos</span>
+        </button>
+        <button class="qa-btn" id="btn-monthly-report" title="Envia relatório mensal por email">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg></div>
+          <span class="qa-label">Relatório mensal</span>
+        </button>
+        <button class="qa-btn" id="btn-annual-receipt" title="Envia comprovante anual de pagamentos">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+          <span class="qa-label">Comp. Anual</span>
+        </button>
+        <button class="qa-btn" id="btn-notify-expiry" title="Avisa o owner sobre contratos vencendo em 30 dias">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+          <span class="qa-label">Contratos vencendo</span>
+        </button>
+        <button class="qa-btn" id="btn-adjust-rent" title="Reajuste de aluguel para todos os contratos">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+          <span class="qa-label">Reajuste</span>
+        </button>
+        <button class="qa-btn" id="btn-export-csv" title="Exporta todas as cobranças em CSV">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+          <span class="qa-label">Exportar CSV</span>
+        </button>
+        <button class="qa-btn" id="btn-clean-orphans" title="Exclui cobranças de inquilinos que não existem mais">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div>
+          <span class="qa-label">Limpar órfãs</span>
+        </button>
+        <button class="qa-btn" id="btn-whatsapp-qr" title="Gera QR Code para conectar WhatsApp">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></div>
+          <span class="qa-label">WhatsApp QR</span>
+        </button>
       </div>
     </div>
   </div>
