@@ -505,13 +505,6 @@
     const IC_CHECK    = '<svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
     const IC_MONEY    = '<svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>';
     const IC_ARROW    = '<svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>';
-    function mkSparkline(color, fill, trend) {
-      const W=120,H=36,pts=8;
-      const base = trend==='up'?[30,45,28,60,44,72,55,90]:trend==='flat'?[55,48,62,50,58,52,60,56]:[80,65,72,58,64,50,44,30];
-      const ys=base.map(v=>H-(v/100)*(H-4)-2), xs=base.map((_,i)=>(i/(pts-1))*W);
-      const d=xs.map((x,i)=>(`${i?'L':'M'}${x},${ys[i]}`)).join(' ');
-      return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${d} L${W},${H} L0,${H} Z" fill="${fill}" stroke="none"/><path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-    }
     const cards = [
       { label: 'Inquilinos',       value: totalTenants,          icon: IC_USERS,    color: 'var(--accent3)', tab: 'tenants', loadFn: 'loadTenants' },
       { label: 'Contratos ativos', value: totalContracts,        icon: IC_CONTRACT, color: 'var(--accent2)', tab: 'tenants', loadFn: 'loadTenants' },
@@ -521,11 +514,13 @@
       { label: 'Aluguel/mês',      value: fmt.format(totalRent), icon: IC_MONEY,    color: 'var(--purple)', tab: 'tenants', loadFn: 'loadTenants' },
     ];
     $('metrics-row').innerHTML = cards.map((c,i) => `
-      <div class="metric-card metric-card--link" data-tab="${c.tab}" data-loadfn="${c.loadFn}" title="Ver ${esc(c.label)}" style="cursor:pointer;animation-delay:${i*60}ms">
-        <div class="metric-icon" style="color:${c.color}">${c.icon}</div>
-        <div class="metric-value" style="color:${c.color}">${c.value}</div>
-        <div class="metric-label">${esc(c.label)}</div>
-        <div class="metric-arrow">${IC_ARROW}</div>
+      <div class="kpi-card" data-tab="${c.tab}" data-loadfn="${c.loadFn}" title="Ver ${esc(c.label)}" tabindex="0" style="animation-delay:${i*60}ms">
+        <div class="kpi-top">
+          <div class="kpi-icon" style="color:${c.color}" aria-hidden="true">${c.icon}</div>
+          <div class="kpi-lbl">${esc(c.label)}</div>
+          <div class="kpi-arrow" aria-hidden="true">${IC_ARROW}</div>
+        </div>
+        <div class="kpi-value" style="color:${c.color}">${c.value}</div>
       </div>
     `).join('');
 
@@ -6496,20 +6491,19 @@
   .section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; flex-wrap: wrap; }
   .section-header h2 { font-size: 21px; font-weight: 700; flex: 1; letter-spacing: -0.5px; color: var(--text1); }
 
-  /* ── Metric Cards ── */
-  .metric-card { background: var(--s2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 20px 22px; position: relative; overflow: hidden; transition: border-color .2s, transform .18s, box-shadow .2s; animation: fadeInUp .35s ease both; }
-  .metric-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 60%); pointer-events: none; }
-  .metric-card--link:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,.4), 0 0 0 1px var(--accent-glow); border-color: rgba(16,185,129,0.25); }
-  .metric-card--link:active { transform: translateY(-1px); }
-  .metric-arrow { position: absolute; top: 14px; right: 16px; width: 20px; height: 20px; opacity: 0; transition: opacity .2s, transform .2s; color: var(--accent3); display: flex; align-items: center; justify-content: center; }
-  .metric-arrow svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .metric-card--link:hover .metric-arrow { opacity: 1; transform: translate(2px,-2px); }
-  .metric-icon { margin-bottom: 14px; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 9px; background: rgba(255,255,255,0.04); flex-shrink: 0; }
-  .metric-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
-  .metric-value { font-size: 28px; font-weight: 800; letter-spacing: -1.5px; margin-bottom: 4px; font-variant-numeric: tabular-nums; line-height: 1; }
-  .metric-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-top: 2px; }
-  .metric-sparkline { margin-top: 14px; opacity: 0.7; }
-  .metric-sparkline svg { width: 100%; height: 36px; overflow: visible; }
+  /* ── KPI Cards (MASTER-05A) ── */
+  .kpi-card { background: var(--s2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; position: relative; transition: border-color .2s, box-shadow .2s, transform .15s; animation: fadeInUp .35s ease both; }
+  .kpi-card:hover { border-color: rgba(16,185,129,0.22); box-shadow: 0 4px 20px rgba(0,0,0,.28); transform: translateY(-2px); }
+  .kpi-card:active { transform: translateY(0); }
+  .kpi-card:focus-visible { outline: 2px solid var(--accent3); outline-offset: 2px; }
+  .kpi-top { display: flex; align-items: center; gap: 8px; }
+  .kpi-icon { width: 28px; height: 28px; border-radius: 7px; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .kpi-icon svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  .kpi-lbl { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.9px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi-arrow { width: 16px; height: 16px; color: var(--accent3); opacity: 0; transition: opacity .2s, transform .2s; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .kpi-arrow svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .kpi-card:hover .kpi-arrow { opacity: 1; transform: translate(2px,-2px); }
+  .kpi-value { font-size: 26px; font-weight: 800; letter-spacing: -1px; font-variant-numeric: tabular-nums; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
   /* ── Tables ── */
   .table-wrap { background: var(--s2); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
@@ -6644,9 +6638,12 @@
   @media (max-width: 900px) { .dash-grid { grid-template-columns: 1fr; } }
   .dash-panel { background: var(--s2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 24px 28px; }
   .dash-panel-title { font-size: 10px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 16px; }
+  .ov-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+  .ov-title { font-size: 22px; font-weight: 700; letter-spacing: -0.6px; color: var(--text1); line-height: 1.2; }
+  .ov-sub { font-size: 12px; color: var(--text3); margin-top: 4px; font-weight: 400; }
+  .ov-date { font-size: 11px; font-weight: 600; color: var(--text3); background: var(--s3); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; white-space: nowrap; align-self: flex-start; margin-top: 2px; font-variant-numeric: tabular-nums; }
   .dash-hd { flex: 1; }
   .dash-subtitle { font-size: 13px; color: var(--text3); margin-top: 3px; font-weight: 400; }
-  #panel-overview .section-header { align-items: flex-start; }
   .recent-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }
   .recent-item:first-child { border-top: none; padding-top: 0; }
   .recent-avatar { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-bg); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--accent3); flex-shrink: 0; overflow: hidden; }
@@ -6674,10 +6671,10 @@
   .atc-btn:hover { background: var(--accent3); border-color: var(--accent3); color: #000; }
   .atc-empty { font-size: 12px; color: var(--text3); padding: 4px 0; }
   .quick-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-  .metrics-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 28px; }
-  @media (max-width: 1350px) { .metrics-row { grid-template-columns: repeat(3, 1fr); } }
-  @media (max-width: 600px) { .metrics-row { grid-template-columns: 1fr 1fr; } }
-  @media (max-width: 380px) { .metrics-row { grid-template-columns: 1fr; } }
+  .metrics-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 24px; }
+  @media (max-width: 1199px) { .metrics-row { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 767px)  { .metrics-row { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 379px)  { .metrics-row { grid-template-columns: 1fr; } }
 
   /* ── Search ── */
   #tenant-search { width: 100%; background: var(--s2); border: 1px solid var(--border); border-radius: var(--r); color: var(--text1); padding: 10px 16px; font-size: 13px; outline: none; transition: border-color .15s, box-shadow .15s; margin-bottom: 16px; font-family: inherit; }
@@ -6746,8 +6743,10 @@
   html[data-theme="light"] .toast.info    { color: #065f46; }
   html[data-theme="light"] #ch-msgs .ch-ticks.read { color: #059669; }
   html[data-theme="light"] .recent-value { color: #047857; }
-  html[data-theme="light"] .metric-card--link:hover { box-shadow: 0 8px 24px rgba(0,0,0,.10), 0 0 0 1px rgba(5,150,105,.20); }
-  html[data-theme="light"] .metric-icon { background: rgba(0,0,0,0.04); }
+  html[data-theme="light"] .kpi-card { background: #fff; border-color: rgba(0,0,0,0.08); }
+  html[data-theme="light"] .kpi-card:hover { border-color: rgba(5,150,105,0.2); box-shadow: 0 4px 16px rgba(0,0,0,.09); }
+  html[data-theme="light"] .kpi-icon { background: rgba(0,0,0,0.04); }
+  html[data-theme="light"] .ov-date { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.10); }
   /* Warning color: global catch para #FFD54F e #f59e0b inline em light mode */
   html[data-theme="light"] [style*="color:#FFD54F"] { color: #92400e !important; }
   html[data-theme="light"] [style*="color:#f59e0b"] { color: #92400e !important; }
@@ -7034,12 +7033,12 @@
 
   <!-- Painel: Visão Geral -->
   <div class="panel" id="panel-overview">
-    <div class="section-header">
-      <div class="dash-hd">
-        <h2>Dashboard</h2>
-        <p class="dash-subtitle">Visão geral da sua operação em tempo real</p>
+    <div class="ov-header">
+      <div>
+        <div class="ov-title">Dashboard</div>
+        <div class="ov-sub">Visão geral da sua operação em tempo real</div>
       </div>
-      <span id="dash-date" style="font-size:13px;color:var(--text3)"></span>
+      <span id="dash-date" class="ov-date"></span>
     </div>
     <div id="metrics-row" class="metrics-row"></div>
     <div class="dash-row-2">
