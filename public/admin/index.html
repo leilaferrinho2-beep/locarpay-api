@@ -6102,6 +6102,112 @@
     --r:           12px;
     --r-sm:        8px;
     --r-lg:        16px;
+
+    /* ══ MASTER-01: Design System iLocarPay ══════════════════════
+       Semantic aliases + new utility tokens.
+       Tokens legados acima são preservados intactos.            */
+
+    /* ── Semantic surface aliases ── */
+    --surface:           var(--s1);
+    --surface-secondary: var(--s2);
+    --surface-elevated:  var(--s3);
+    --surface-hover:     var(--s4);
+
+    /* ── Semantic border aliases ── */
+    --border-soft:   var(--border);
+    --border-strong: var(--border2);
+
+    /* ── Semantic text aliases ── */
+    --text-primary:   var(--text1);
+    --text-secondary: var(--text2);
+    --text-muted:     var(--text3);
+    --text-disabled:  rgba(62,82,104,0.45);
+
+    /* ── Brand aliases ── */
+    --brand:      var(--accent);
+    --brand-hover: #047857;
+    --brand-soft:  var(--accent-bg);
+
+    /* ── Status semantic ── */
+    --success:      var(--accent2);
+    --success-soft: var(--accent-bg);
+    --warning:      var(--warn);
+    --warning-soft: var(--warn-bg);
+    --danger-color: var(--danger);
+    --danger-soft:  var(--danger-bg);
+    --info:         var(--blue);
+    --info-soft:    var(--blue-bg);
+
+    /* ── Typography scale ── */
+    --text-xs:  10px;
+    --text-sm:  12px;
+    --text-md:  14px;
+    --text-lg:  16px;
+    --text-xl:  18px;
+    --text-2xl: 21px;
+    --text-3xl: 28px;
+
+    /* ── Font weights ── */
+    --fw-regular:   400;
+    --fw-medium:    500;
+    --fw-semibold:  600;
+    --fw-bold:      700;
+    --fw-extrabold: 800;
+
+    /* ── Line heights ── */
+    --lh-tight:   1.2;
+    --lh-snug:    1.35;
+    --lh-base:    1.5;
+    --lh-relaxed: 1.65;
+
+    /* ── Letter spacing ── */
+    --ls-tight:  -0.5px;
+    --ls-normal:  0px;
+    --ls-wide:    0.8px;
+    --ls-wider:   1.2px;
+    --ls-widest:  1.8px;
+
+    /* ── Spacing scale (base 4px) ── */
+    --space-1:   4px;
+    --space-2:   8px;
+    --space-3:  12px;
+    --space-4:  16px;
+    --space-5:  20px;
+    --space-6:  24px;
+    --space-8:  32px;
+    --space-10: 40px;
+    --space-12: 48px;
+
+    /* ── Radius ── */
+    --radius-sm:  6px;
+    --radius-md:  10px;
+    --radius-lg:  14px;
+    --radius-xl:  20px;
+    --radius-pill: 999px;
+
+    /* ── Shadows (dark-mode calibrados) ── */
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.20), 0 1px 2px rgba(0,0,0,.15);
+    --shadow-md: 0 4px 12px rgba(0,0,0,.28), 0 2px 6px rgba(0,0,0,.18);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,.40), 0 4px 12px rgba(0,0,0,.22);
+
+    /* ── Control heights ── */
+    --control-sm: 28px;
+    --control-md: 36px;
+    --control-lg: 44px;
+
+    /* ── Icon sizes ── */
+    --icon-sm: 14px;
+    --icon-md: 18px;
+    --icon-lg: 22px;
+
+    /* ── Card tokens ── */
+    --card-bg:      var(--s2);
+    --card-border:  var(--border);
+    --card-radius:  var(--r-lg);
+    --card-shadow:  var(--shadow-sm);
+
+    /* ── Focus ring ── */
+    --focus-ring: 0 0 0 2px var(--accent2);
   }
   html[data-theme="light"] {
     --header-bg:   rgba(244,246,251,0.92);
@@ -6124,6 +6230,13 @@
     --warn-bg:     rgba(146,64,14,.10);
     --blue-bg:     rgba(59,130,246,.10);
     --purple:      #6d28d9;
+
+    /* ── MASTER-01 light-mode overrides ── */
+    --text-disabled: rgba(91,102,144,0.40);
+    --brand-hover:   #047857;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+    --shadow-md: 0 4px 12px rgba(0,0,0,.10), 0 2px 6px rgba(0,0,0,.06);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.07);
   }
   .ip-theme-toggle-wrap { display:flex; gap:4px; align-items:center; }
   .ip-theme-opt { background:var(--s2); border:1px solid var(--border2); color:var(--text2); height:32px; padding:0 10px; border-radius:8px; cursor:pointer; font-size:12px; transition:background .15s,color .15s; white-space:nowrap; }
