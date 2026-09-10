@@ -3441,10 +3441,26 @@
     });
 
     const keys = Object.keys(byMonth).sort().slice(-12); // últimos 12 meses
-    if (keys.length === 0) return;
 
     $('revenue-chart-wrap').style.display = 'block';
     const canvas = $('revenue-chart');
+    let _rcEmpty = $('revenue-chart-empty');
+
+    if (keys.length === 0) {
+      canvas.style.display = 'none';
+      if (!_rcEmpty) {
+        _rcEmpty = document.createElement('p');
+        _rcEmpty.id = 'revenue-chart-empty';
+        _rcEmpty.style.cssText = 'font-size:13px;color:var(--text3);text-align:center;padding:32px 0;margin:0';
+        _rcEmpty.textContent = 'Nenhum recebimento registrado no período.';
+        $('revenue-chart-wrap').appendChild(_rcEmpty);
+      }
+      _rcEmpty.hidden = false;
+      return;
+    }
+
+    if (_rcEmpty) _rcEmpty.hidden = true;
+    canvas.style.display = 'block';
     canvas.width  = canvas.offsetWidth || 600;
     const ctx     = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
