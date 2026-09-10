@@ -176,6 +176,8 @@
   let leads     = [];
   let leadsUnsubscribe = null;
   let leadsListUnsubscribe = null;
+  let _atencaoOverdue = 0;
+  let _atencaoLeads   = 0;
 
   function $(id) { return document.getElementById(id); }
 
@@ -471,7 +473,7 @@
     const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
     // Carrega cobranças (usa índice ownerId+status existente)
-    let pendingCount = 0, paidCount = 0;
+    let pendingCount = 0, paidCount = 0, overdueCount = 0;
     try {
       if (currentOwnerId) {
         const [pendSnap, paidSnap] = await Promise.all([
@@ -479,6 +481,7 @@
           getDocs(query(collection(db, 'charges'), where('ownerId', '==', currentOwnerId), where('status', '==', 'paid')))
         ]);
         pendingCount = pendSnap.size;
+        overdueCount = pendSnap.docs.filter(d => d.data().status === 'overdue').length;
         paidCount    = paidSnap.size;
       }
     } catch (_) {}
@@ -490,6 +493,10 @@
         leadsCount = leadsSnap.size;
       }
     } catch (_) {}
+
+    _atencaoOverdue = overdueCount;
+    _atencaoLeads   = leadsCount;
+    renderAttention();
 
     const IC_USERS    = '<svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
     const IC_CONTRACT = '<svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
@@ -4909,6 +4916,7 @@
     _chamadosAll = rows;
     // Badge é controlado apenas por showChatMsgToast (nova msg do inquilino)
     // e limpo ao clicar no tab — não depende de quantos chamados estão abertos
+    renderAttention();
     _renderChamadoList();
   }
 
@@ -6029,6 +6037,48 @@
         upEl.innerHTML = '<p style="color:var(--text-3);font-size:13px">Erro ao carregar.</p>';
       }
     }
+    renderAttention();
+  }
+
+  function renderAttention() {
+    const el = $('attention-items');
+    if (!el) return;
+    const today = new Date(); today.setHours(0,0,0,0);
+
+    const a1 = _atencaoOverdue;
+    const a2 = _atencaoLeads;
+    const a3 = contracts.filter(c => {
+      if (!c.active || !c.endDate) return false;
+      const d = new Date(c.endDate + 'T00:00:00');
+      const diff = (d - today) / 86400000;
+      return diff >= 0 && diff <= 30;
+    }).length;
+    const a4 = _chamadosAll.filter(c => c.status === 'open' || c.status === 'in_progress').length;
+
+    const IC_WARN     = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+    const IC_LEADS    = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+    const IC_CALENDAR = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+    const IC_TOOL     = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
+
+    const items = [
+      a1 > 0 && { icon: IC_WARN,     count: a1, label: `cobrança${a1>1?'s':''} em atraso`,         color: 'var(--danger)',  bg: 'var(--danger-bg)', tab: 'overdue', fn: 'loadOverdue' },
+      a2 > 0 && { icon: IC_LEADS,    count: a2, label: `lead${a2>1?'s':''} aguardando análise`,    color: 'var(--warn)',    bg: 'var(--warn-bg)',   tab: 'leads',   fn: 'loadLeads'   },
+      a3 > 0 && { icon: IC_CALENDAR, count: a3, label: `contrato${a3>1?'s':''} venc. em 30 dias`,  color: 'var(--purple)',  bg: 'rgba(147,51,234,0.12)', tab: 'tenants', fn: null },
+      a4 > 0 && { icon: IC_TOOL,     count: a4, label: `chamado${a4>1?'s':''} em aberto`,          color: 'var(--accent3)', bg: 'var(--accent-bg)', tab: 'chamados', fn: null },
+    ].filter(Boolean);
+
+    if (!items.length) {
+      el.innerHTML = '<p class="atc-empty">Nenhum alerta operacional nessas categorias.</p>';
+      return;
+    }
+    el.innerHTML = items.map(it => `
+      <div class="atc-item">
+        <span class="atc-icon" style="color:${it.color};background:${it.bg}">${it.icon}</span>
+        <span class="atc-count" style="color:${it.color}">${it.count}</span>
+        <span class="atc-label">${it.label}</span>
+        <button class="atc-btn" onclick="${it.fn ? `goTab('${it.tab}', window.${it.fn})` : `setTab('${it.tab}')`}">Ver</button>
+      </div>
+    `).join('');
   }
 
   async function initFcmWebPush() {
@@ -6594,6 +6644,19 @@
   .due-today  { background: var(--danger-bg); color: #fca5a5; }
   .due-soon   { background: var(--warn-bg);   color: var(--warn); }
   .due-normal { background: var(--accent-bg); color: #86efac; }
+  .dash-row-2 { display: flex; gap: 24px; margin-bottom: 0; }
+  .dash-row-2 .dash-panel { margin-top: 24px; }
+  .dash-row-2__chart  { flex: 1.6; min-width: 0; }
+  .dash-row-2__atencao { flex: 1; min-width: 0; }
+  @media (max-width: 768px) { .dash-row-2 { flex-direction: column; } }
+  .atc-item  { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+  .atc-item:first-child { border-top: none; padding-top: 0; }
+  .atc-icon  { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; }
+  .atc-count { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; flex-shrink: 0; min-width: 24px; }
+  .atc-label { font-size: 12px; color: var(--text2); flex: 1; line-height: 1.3; }
+  .atc-btn   { font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--s3); color: var(--text2); cursor: pointer; flex-shrink: 0; white-space: nowrap; transition: background .15s, color .15s; }
+  .atc-btn:hover { background: var(--accent3); border-color: var(--accent3); color: #000; }
+  .atc-empty { font-size: 12px; color: var(--text3); padding: 4px 0; }
   .quick-actions { display: flex; gap: 10px; flex-wrap: wrap; }
   .metrics-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 28px; }
   @media (max-width: 1350px) { .metrics-row { grid-template-columns: repeat(3, 1fr); } }
@@ -6963,6 +7026,16 @@
       <span id="dash-date" style="font-size:13px;color:var(--text3)"></span>
     </div>
     <div id="metrics-row" class="metrics-row"></div>
+    <div class="dash-row-2">
+      <div id="revenue-chart-wrap" class="dash-panel dash-row-2__chart" style="display:none">
+        <div class="dash-panel-title">Recebimentos por mês (R$)</div>
+        <canvas id="revenue-chart" height="120" style="width:100%;display:block"></canvas>
+      </div>
+      <div id="attention-wrap" class="dash-panel dash-row-2__atencao">
+        <div class="dash-panel-title">Atenção necessária</div>
+        <div id="attention-items"><p class="atc-empty">Carregando...</p></div>
+      </div>
+    </div>
     <div class="dash-grid">
       <div class="dash-panel">
         <div class="dash-panel-title">Últimos Contratos</div>
@@ -6996,10 +7069,6 @@
     <div class="section-header">
       <h2>Inquilinos</h2>
       <button class="btn" id="btn-add-tenant">+ Novo Inquilino</button>
-    </div>
-    <div id="revenue-chart-wrap" style="margin-bottom:28px;display:none">
-      <h3 style="font-size:13px;color:var(--text3);font-weight:600;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">Receita mensal (R$)</h3>
-      <canvas id="revenue-chart" height="120" style="width:100%;display:block"></canvas>
     </div>
     <input id="tenant-search" type="text" placeholder="Buscar por nome, e-mail ou imóvel…">
     <div class="table-wrap">
