@@ -3444,10 +3444,10 @@
     if (keys.length === 0) {
       canvas.style.display = 'none';
       if (!_rcEmpty) {
-        _rcEmpty = document.createElement('p');
+        _rcEmpty = document.createElement('div');
         _rcEmpty.id = 'revenue-chart-empty';
-        _rcEmpty.style.cssText = 'font-size:13px;color:var(--text3);text-align:center;padding:32px 0;margin:0';
-        _rcEmpty.textContent = 'Nenhum recebimento registrado no período.';
+        _rcEmpty.className = 'rc-empty';
+        _rcEmpty.innerHTML = '<div class="rc-empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg></div><div class="rc-empty-title">Nenhum recebimento registrado</div><div class="rc-empty-sub">Os valores das cobranças pagas aparecerão aqui.</div>';
         $('revenue-chart-wrap').appendChild(_rcEmpty);
       }
       _rcEmpty.hidden = false;
@@ -3475,7 +3475,8 @@
     const gridSteps = 4;
     ctx.strokeStyle = _cs.getPropertyValue('--border2').trim() || '#2a2d3e';
     ctx.lineWidth = 1;
-    ctx.fillStyle = '#555';
+    const _clr3 = _cs.getPropertyValue('--text3').trim() || '#888';
+    ctx.fillStyle = _clr3;
     ctx.font = '11px system-ui';
     ctx.textAlign = 'right';
     for (let i = 0; i <= gridSteps; i++) {
@@ -3500,14 +3501,14 @@
       ctx.fill();
 
       // Label mês
-      ctx.fillStyle = '#666';
+      ctx.fillStyle = _clr3;
       ctx.font = '10px system-ui';
       ctx.textAlign = 'center';
       ctx.fillText(k.slice(5) + '/' + k.slice(2, 4), x + barW / 2, H - pad.bottom + 14);
 
       // Valor topo
       if (barH > 18) {
-        ctx.fillStyle = '#ccc';
+        ctx.fillStyle = _cs.getPropertyValue('--text2').trim() || '#aaa';
         ctx.font = 'bold 10px system-ui';
         ctx.fillText('R$' + Math.round(val).toLocaleString('pt-BR'), x + barW / 2, y - 4);
       }
@@ -6079,7 +6080,7 @@
     ].filter(Boolean);
 
     if (!items.length) {
-      el.innerHTML = '<p class="atc-empty">Nenhum alerta operacional nessas categorias.</p>';
+      el.innerHTML = '<div class="atc-empty-wrap"><div class="atc-empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg></div><div class="atc-empty-title">Tudo em dia</div><p class="atc-empty">Nenhuma atenção operacional identificada com os dados disponíveis.</p></div>';
       return;
     }
     el.innerHTML = items.map(it => `
@@ -6670,6 +6671,32 @@
   .atc-btn   { font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--s3); color: var(--text2); cursor: pointer; flex-shrink: 0; white-space: nowrap; transition: background .15s, color .15s; }
   .atc-btn:hover { background: var(--accent3); border-color: var(--accent3); color: #000; }
   .atc-empty { font-size: 12px; color: var(--text3); padding: 4px 0; }
+
+  /* ── MASTER-05B: Revenue card header + empty state ── */
+  .rc-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .rc-title { font-size: 10px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 1.2px; }
+  .rc-sub { font-size: 11px; color: var(--text3); margin-top: 3px; font-weight: 400; }
+  .rc-ctx { font-size: 10px; font-weight: 600; color: var(--text3); background: var(--s3); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; white-space: nowrap; align-self: flex-start; font-variant-numeric: tabular-nums; }
+  .rc-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px 16px 20px; gap: 10px; }
+  .rc-empty-icon { width: 40px; height: 40px; border-radius: 12px; background: var(--s3); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--text3); }
+  .rc-empty-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .rc-empty-title { font-size: 13px; font-weight: 600; color: var(--text2); }
+  .rc-empty-sub { font-size: 11px; color: var(--text3); text-align: center; line-height: 1.5; max-width: 200px; }
+
+  /* ── MASTER-05B: Attention panel header + empty state ── */
+  .atc-hd { margin-bottom: 14px; }
+  .atc-title { font-size: 10px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 1.2px; }
+  .atc-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
+  .atc-empty-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; gap: 8px; }
+  .atc-empty-icon { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-bg); display: flex; align-items: center; justify-content: center; color: var(--accent3); }
+  .atc-empty-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  .atc-empty-title { font-size: 13px; font-weight: 600; color: var(--text2); }
+
+  /* ── MASTER-05B: Light mode ── */
+  html[data-theme="light"] .rc-ctx { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.10); }
+  html[data-theme="light"] .rc-empty-icon { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.10); }
+  html[data-theme="light"] .atc-empty-icon { background: rgba(5,150,105,0.08); }
+
   .quick-actions { display: flex; gap: 10px; flex-wrap: wrap; }
   .metrics-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 24px; }
   @media (max-width: 1199px) { .metrics-row { grid-template-columns: repeat(3, 1fr); } }
@@ -7043,11 +7070,20 @@
     <div id="metrics-row" class="metrics-row"></div>
     <div class="dash-row-2">
       <div id="revenue-chart-wrap" class="dash-panel dash-row-2__chart" style="display:none">
-        <div class="dash-panel-title">Recebimentos por mês (R$)</div>
-        <canvas id="revenue-chart" height="120" style="width:100%;display:block"></canvas>
+        <div class="rc-hd">
+          <div>
+            <div class="rc-title">Recebimentos por mês</div>
+            <div class="rc-sub">Valores de cobranças pagas</div>
+          </div>
+          <span class="rc-ctx">R$</span>
+        </div>
+        <canvas id="revenue-chart" height="120" style="width:100%;display:block;margin-top:16px"></canvas>
       </div>
       <div id="attention-wrap" class="dash-panel dash-row-2__atencao">
-        <div class="dash-panel-title">Atenção necessária</div>
+        <div class="atc-hd">
+          <div class="atc-title">Atenção necessária</div>
+          <div class="atc-sub">Itens que precisam da sua ação</div>
+        </div>
         <div id="attention-items"><p class="atc-empty">Carregando...</p></div>
       </div>
     </div>
