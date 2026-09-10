@@ -4676,7 +4676,7 @@
   $('btn-logout').addEventListener('click', () => signOut(auth));
 
   // ── Theme system ─────────────────────────────────────────────────────────────
-  (function(){var K='ilocarpay-theme';function g(){try{var v=localStorage.getItem(K);return(v==='light'||v==='dark')?v:window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';}catch(e){return'dark';}}function a(p){document.documentElement.setAttribute('data-theme',p);var btn=document.getElementById('btn-theme-toggle');if(btn)btn.textContent=p==='dark'?'☾':'☀';}a(g());document.addEventListener('DOMContentLoaded',function(){var btn=document.getElementById('btn-theme-toggle');if(btn){var cur=document.documentElement.getAttribute('data-theme')||'dark';btn.textContent=cur==='dark'?'☾':'☀';}});})();
+  (function(){var K='ilocarpay-theme';function g(){try{var v=localStorage.getItem(K);return(v==='light'||v==='dark')?v:window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';}catch(e){return'dark';}}function a(p){document.documentElement.setAttribute('data-theme',p);var btn=document.getElementById('btn-theme-toggle');if(btn)btn.setAttribute('data-mode',p);}a(g());document.addEventListener('DOMContentLoaded',function(){var btn=document.getElementById('btn-theme-toggle');if(btn){var cur=document.documentElement.getAttribute('data-theme')||'dark';btn.setAttribute('data-mode',cur);}});})();
 
   // OTP login
   let otpEmail = '';
@@ -4739,6 +4739,27 @@
   $('tab-plano').addEventListener('click',   () => { setTab('plano'); renderPlanoTab?.(); });
   $('tab-chamados').addEventListener('click', () => { setTab('chamados'); $('chamados-badge').style.display='none'; });
   $('tab-relatorios').addEventListener('click', () => setTab('relatorios'));
+
+  // ── D5 Bell Badge — agrega badges reais já existentes no DOM ─────────────
+  function _updateBellBadge() {
+    const sources = ['chamados-badge', 'leads-badge', 'brokers-chat-badge'];
+    let total = 0;
+    sources.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.style.display !== 'none') total += parseInt(el.textContent) || 0;
+    });
+    const bell = document.getElementById('bell-badge');
+    if (!bell) return;
+    if (total > 0) { bell.textContent = total > 99 ? '99+' : total; bell.style.display = ''; }
+    else { bell.style.display = 'none'; }
+  }
+  (function() {
+    const obs = new MutationObserver(_updateBellBadge);
+    ['chamados-badge', 'leads-badge', 'brokers-chat-badge'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) obs.observe(el, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+    });
+  })();
 
   // ── Chamados de Manutenção ────────────────────────────────────────────────
   let _chamadosUnsubscribe = null;
@@ -6262,28 +6283,57 @@
   @keyframes slideInNotif { from { transform: translateY(40px); opacity:0; } to { transform: none; opacity:1; } }
   @keyframes pulse-dot    { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(.85); } }
 
-  /* ── Header ── */
+  /* ── Header / MASTER-03 ── */
   header {
     position: fixed; top: 0; left: 0; right: 0; height: var(--header-h);
-    background: var(--header-bg); backdrop-filter: blur(16px) saturate(1.4);
-    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    background: var(--header-bg); backdrop-filter: blur(20px) saturate(1.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.5);
     border-bottom: 1px solid var(--border);
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0 28px; z-index: 200;
+    padding: 0 var(--space-xl); z-index: 200; gap: 16px;
   }
-  .hd-left { display: flex; align-items: center; gap: 12px; }
-  .hd-logo { width: 34px; height: 34px; border-radius: 10px; overflow: hidden; flex-shrink: 0; box-shadow: 0 0 0 1px var(--border); }
+  .hd-left { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .hd-logo { width: 32px; height: 32px; border-radius: var(--radius-sm); overflow: hidden; flex-shrink: 0; box-shadow: 0 0 0 1px var(--border); }
   .hd-logo img { width: 100%; height: 100%; object-fit: cover; }
-  .hd-brand { font-size: 16px; font-weight: 700; color: var(--text1); letter-spacing: -0.5px; }
+  .hd-brand { font-size: 15px; font-weight: 700; color: var(--text1); letter-spacing: -0.4px; white-space: nowrap; }
   .hd-brand span { color: var(--accent2); }
-  .hd-right { display: flex; align-items: center; gap: 10px; }
-  .owner-chip { background: var(--accent-bg); border: 1px solid rgba(16,185,129,0.18); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--accent3); font-weight: 600; white-space: nowrap; }
-  #user-email { font-size: 12px; color: var(--text3); }
-  .btn-logout { background: transparent; border: 1px solid var(--border); color: var(--text3); border-radius: var(--r-sm); padding: 6px 14px; font-size: 12px; cursor: pointer; transition: all .15s; font-weight: 500; font-family: inherit; }
-  .btn-logout:hover { border-color: var(--border2); color: var(--text2); }
+  .hd-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .hd-divider { width: 1px; height: 20px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+  /* Icon-only buttons */
+  .hd-icon-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: var(--radius-sm);
+    background: transparent; border: 1px solid transparent;
+    color: var(--text2); cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+    position: relative; flex-shrink: 0;
+  }
+  .hd-icon-btn:hover { background: var(--s2); border-color: var(--border); color: var(--text1); }
+  .hd-icon-btn:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+  .hd-icon-btn svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  /* Bell badge */
+  .hd-bell-badge {
+    position: absolute; top: 2px; right: 2px;
+    min-width: 16px; height: 16px; padding: 0 3px;
+    background: #e53e3e; color: #fff; font-size: 9px; font-weight: 700;
+    border-radius: 8px; line-height: 16px; text-align: center;
+    border: 1.5px solid var(--header-bg);
+  }
+  /* Theme button: CSS controls which icon shows via data-mode attribute */
+  .hd-theme-btn .hd-icon-sun,
+  .hd-theme-btn .hd-icon-moon { display: none; }
+  .hd-theme-btn[data-mode="dark"]  .hd-icon-moon { display: block; }
+  .hd-theme-btn[data-mode="light"] .hd-icon-sun  { display: block; }
+  /* Identity */
+  .owner-chip { background: var(--accent-bg); border: 1px solid rgba(16,185,129,0.18); border-radius: 20px; padding: 3px 10px; font-size: 11px; color: var(--accent3); font-weight: 600; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+  #user-email { font-size: 11px; color: var(--text3); white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+  .btn-logout { background: transparent; border: 1px solid var(--border); color: var(--text3); border-radius: var(--radius-sm); padding: 5px 12px; font-size: 12px; cursor: pointer; transition: all .15s; font-weight: 500; font-family: inherit; white-space: nowrap; }
+  .btn-logout:hover { border-color: var(--border2); color: var(--text2); background: var(--s2); }
   .tab:focus-visible { outline: 2px solid var(--accent2); outline-offset: -2px; }
   .btn-logout:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
-  #owner-selector-wrap select { background: var(--s3); border: 1px solid var(--border); color: var(--text1); border-radius: var(--r-sm); padding: 5px 10px; font-size: 12px; font-family: inherit; }
+  #owner-selector-wrap select { background: var(--s2); border: 1px solid var(--border); color: var(--text1); border-radius: var(--radius-sm); padding: 4px 8px; font-size: 12px; font-family: inherit; }
+  /* Responsive topbar */
+  @media (max-width: 1024px) { #user-email { display: none; } }
+  @media (max-width: 768px)  { .hd-brand { display: none; } .owner-chip { max-width: 100px; } }
 
   /* ── Sidebar ── */
   .tabs {
@@ -6751,9 +6801,17 @@
     <div id="header-owner-logo" style="width:28px;height:28px;border-radius:50%;overflow:hidden;background:var(--s3);border:1px solid var(--border2);display:none;align-items:center;justify-content:center;flex-shrink:0"></div>
     <span class="owner-chip" id="owner-name-badge"></span>
     <span id="user-email"></span>
-    <div style="position:relative">
-      <button id="btn-theme-toggle" title="Alternar tema" style="background:var(--s2);border:1px solid var(--border2);color:var(--text2);height:32px;padding:0 12px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;transition:background .15s,color .15s" onclick="(function(){var K='ilocarpay-theme';var cur=document.documentElement.getAttribute('data-theme')||'dark';var next=cur==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',next);try{localStorage.setItem(K,next);}catch(e){}document.getElementById('btn-theme-toggle').textContent=next==='dark'?'☾':'☀';})()"></button>
-    </div>
+    <div class="hd-divider"></div>
+    <!-- D5 — sino de alertas operacionais reais -->
+    <button class="hd-icon-btn" id="btn-bell" aria-label="Alertas operacionais" title="Alertas operacionais" onclick="setTab('chamados')">
+      <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="hd-bell-badge" id="bell-badge" style="display:none" aria-hidden="true"></span>
+    </button>
+    <!-- Theme toggle — SVG sun/moon via data-mode; lógica preservada -->
+    <button class="hd-icon-btn hd-theme-btn" id="btn-theme-toggle" aria-label="Alternar tema" title="Alternar tema" data-mode="dark" onclick="(function(){var K='ilocarpay-theme';var cur=document.documentElement.getAttribute('data-theme')||'dark';var next=cur==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',next);try{localStorage.setItem(K,next);}catch(e){}document.getElementById('btn-theme-toggle').setAttribute('data-mode',next);})()">
+      <svg class="hd-icon-sun" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg class="hd-icon-moon" aria-hidden="true" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
     <button class="btn-logout" id="btn-logout">Sair</button>
   </div>
 </header>
