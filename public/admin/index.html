@@ -3518,6 +3518,7 @@
   // ── Busca de inquilinos ───────────────────────────────────────
   let searchQuery = '';
   function filterAndRender() {
+    const _tnCountEl = $('tn-count'); if (_tnCountEl) { const _n = tenants.length; _tnCountEl.textContent = _n === 1 ? '1 inquilino' : _n + ' inquilinos'; }
     const q = searchQuery.toLowerCase();
     const filtered = q
       ? tenants.filter(t => {
@@ -6724,6 +6725,21 @@
   .qa-label { font-size: 12px; font-weight: 600; color: var(--text1); line-height: 1.3; }
   html[data-theme="light"] .qa-btn:hover { border-color: rgba(5,150,105,0.2); background: rgba(0,0,0,0.02); }
   html[data-theme="light"] .qa-icon { background: rgba(0,0,0,0.04); }
+
+  /* ── MASTER-06A1: Inquilinos header + toolbar ── */
+  .tn-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .tn-hd-left { flex: 1; min-width: 0; }
+  .tn-eyebrow { font-size: 10px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 4px; }
+  .tn-title { font-size: 22px; font-weight: 800; color: var(--text1); letter-spacing: -0.5px; line-height: 1.15; margin: 0 0 4px; }
+  .tn-desc { font-size: 11px; color: var(--text3); margin: 0; line-height: 1.5; }
+  .tn-count { font-size: 10px; font-weight: 600; color: var(--text3); background: var(--s3); border: 1px solid var(--border); border-radius: 5px; padding: 3px 9px; white-space: nowrap; align-self: flex-start; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .tn-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .tn-search-wrap { flex: 1; position: relative; min-width: 0; }
+  .tn-search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text3); pointer-events: none; display: flex; align-items: center; }
+  .tn-search-icon svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  .tn-toolbar #tenant-search { padding-left: 36px; margin-bottom: 0; }
+  html[data-theme="light"] .tn-count { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.10); }
+
   .metrics-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 24px; }
   @media (max-width: 1199px) { .metrics-row { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 767px)  { .metrics-row { grid-template-columns: repeat(2, 1fr); } }
@@ -7182,11 +7198,26 @@
   <!-- Painel: Inquilinos -->
   <div class="panel" id="panel-tenants">
     <div id="plan-bar" style="display:none;background:var(--s3);border:1px solid var(--border);border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:13px"></div>
-    <div class="section-header">
-      <h2>Inquilinos</h2>
-      <button class="btn" id="btn-add-tenant">+ Novo Inquilino</button>
+    <div class="tn-hd">
+      <div class="tn-hd-left">
+        <div class="tn-eyebrow">Gestão</div>
+        <h2 class="tn-title">Inquilinos</h2>
+        <p class="tn-desc">Gerencie os inquilinos vinculados à sua operação</p>
+      </div>
+      <span id="tn-count" class="tn-count" aria-live="polite"></span>
     </div>
-    <input id="tenant-search" type="text" placeholder="Buscar por nome, e-mail ou imóvel…">
+    <div class="tn-toolbar">
+      <div class="tn-search-wrap">
+        <span class="tn-search-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </span>
+        <input id="tenant-search" type="text" placeholder="Buscar por nome, e-mail ou imóvel…" aria-label="Buscar inquilinos">
+      </div>
+      <button class="btn" id="btn-add-tenant" type="button">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" style="stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Novo Inquilino
+      </button>
+    </div>
     <div class="table-wrap">
     <table>
       <thead>
