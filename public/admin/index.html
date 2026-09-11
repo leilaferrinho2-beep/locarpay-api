@@ -2491,7 +2491,29 @@
     if (!e.target.closest('.tenant-more-wrap')) {
       document.querySelectorAll('.tenant-more-wrap > div').forEach(el => el.style.display = 'none');
     }
+    if (!e.target.closest('.tn2-more-wrap')) {
+      document.querySelectorAll('.tn2-menu.open').forEach(m => { m.classList.remove('open'); if (m.previousElementSibling) m.previousElementSibling.setAttribute('aria-expanded','false'); });
+    }
   });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.tn2-menu.open').forEach(m => { m.classList.remove('open'); const b = m.previousElementSibling; if (b) { b.setAttribute('aria-expanded','false'); b.focus(); } });
+    }
+  });
+  // ── MASTER-06A2: tenant overflow menu helpers ──
+  window._tnMore = function(btn, e) {
+    if (e) e.stopPropagation();
+    const menu = btn.nextElementSibling;
+    const isOpen = menu.classList.contains('open');
+    document.querySelectorAll('.tn2-menu.open').forEach(m => { m.classList.remove('open'); if (m.previousElementSibling) m.previousElementSibling.setAttribute('aria-expanded','false'); });
+    if (!isOpen) { menu.classList.add('open'); btn.setAttribute('aria-expanded','true'); }
+  };
+  window._tnClose = function(btn) {
+    const wrap = btn.closest('.tn2-more-wrap');
+    if (!wrap) return;
+    const m = wrap.querySelector('.tn2-menu');
+    if (m) { m.classList.remove('open'); const b = m.previousElementSibling; if (b) b.setAttribute('aria-expanded','false'); }
+  };
 
   window.toggleBrokerMenu = (brokerId) => {
     const menu = document.getElementById('broker-menu-' + brokerId);
@@ -3533,14 +3555,16 @@
     const tbody = $('tenants-tbody');
     tbody.innerHTML = '';
     if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty">${q ? 'Nenhum resultado para "' + q + '"' : 'Nenhum inquilino cadastrado'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">${q ? 'Nenhum resultado para "' + q + '"' : 'Nenhum inquilino cadastrado'}</td></tr>`;
+      const _ce = $('tenants-cards'); if (_ce) _ce.innerHTML = '';
       return;
     }
     const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const cardsEl = $('tenants-cards'); if (cardsEl) cardsEl.innerHTML = '';
     filtered.forEach(t => {
       const contract  = contracts.find(c => c.tenantId === t.id);
       const rent      = contract ? fmt.format(contract.baseRent || 0) : '—';
-      const propCode  = contract?.propertyCode ? `<span style="font-size:10px;font-weight:700;background:#1a2e1a;color:#4CAF50;border:1px solid #2e4a2e;border-radius:4px;padding:1px 6px;margin-right:4px;letter-spacing:.05em">${esc(contract.propertyCode)}</span>` : '';
+      const propCode  = contract?.propertyCode ? `<span class="tn2-prop-code">${esc(contract.propertyCode)}</span>` : '';
       const _propShort = (() => {
         if (!contract) return '—';
         if (contract.propertyLogradouro) {
@@ -3565,70 +3589,77 @@
         }
         return contract.propertyAddress || contract.propertyDescription || '—';
       })();
-      const property  = propCode + `<span title="${esc(_propFull)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;display:inline-block;vertical-align:middle">${esc(_propShort)}</span>`;
       const digital   = contract?.requiresDigitalContract;
       const status    = !contract
-        ? '<span class="badge inactive">Sem contrato</span>'
+        ? '<span class="tn2-b tn2-b-none">Sem contrato</span>'
         : !contract.active
-          ? '<span class="badge" style="background:#795548;color:#fff">Aguard. chaves</span>'
+          ? '<span class="tn2-b tn2-b-wait">Aguard. chaves</span>'
           : digital
-            ? '<span class="badge digital">Digital</span>'
-            : '<span class="badge active">Ativo</span>';
+            ? '<span class="tn2-b tn2-b-digital">Digital</span>'
+            : '<span class="tn2-b tn2-b-active">Ativo</span>';
       const docs      = t.docs || {};
       const tenantLeadId  = contracts.find(c => c.tenantId === t.id)?.leadId;
       const leadDocs      = (tenantLeadId && leadDocsMap[tenantLeadId]) || [];
       const docsCount     = Object.keys(docs).length + leadDocs.length;
-      const row = document.createElement('tr');
       const _tInits = (t.name || '?').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?';
-      const _tAvDiv = `width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--s3);border:1px solid var(--border2);overflow:hidden`;
+      const _tAvSt  = `width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--text2);background:var(--s3);border:1px solid var(--border2);overflow:hidden`;
       const _tAvHtml = t.photoUrl
-        ? `<div data-tenant-avatar="${t.id}" style="${_tAvDiv}"><img src="${esc(t.photoUrl)}" alt="${_tInits}" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\\'font-size:12px;font-weight:700;color:var(--text2)\\'>${_tInits}</span>')"></div>`
-        : `<div data-tenant-avatar="${t.id}" style="${_tAvDiv}">${_tInits}</div>`;
+        ? `<div data-tenant-avatar="${t.id}" class="tn2-av" style="${_tAvSt}"><img src="${esc(t.photoUrl)}" alt="${_tInits}" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\\'font-size:12px;font-weight:700;color:var(--text2)\\'>${_tInits}</span>')"></div>`
+        : `<div data-tenant-avatar="${t.id}" class="tn2-av" style="${_tAvSt}">${_tInits}</div>`;
+      // ── Overflow menu items ──
+      const _oContract = (() => {
+        const c = contracts.find(x => x.tenantId === t.id);
+        if (!c) return '';
+        const signed = c.assinafyStatus === 'completed'; const hasDoc = !!c.assinafyDocumentId; const active = c.active;
+        if (active) return '';
+        const _sv = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+        const _rv = `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.1"/></svg>`;
+        const _kv = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>`;
+        if (signed && !active) return `<button type="button" class="tn2-mi" onclick="deliverKeysForTenant('${c.id}','${t.id}');_tnClose(this)">${_kv}Entregar chaves</button>`;
+        if (hasDoc) return `<button type="button" class="tn2-mi" onclick="regenContract('${c.id}',this);_tnClose(this)">${_rv}Reenviar contrato</button>`;
+        return `<button type="button" class="tn2-mi" onclick="generateContractForTenant('${c.id}',this);_tnClose(this)">${_sv}Gerar contrato</button>`;
+      })();
+      const _oCob = (() => {
+        const c = contracts.find(x => x.tenantId === t.id && x.active);
+        if (!c) return '';
+        return `<button type="button" class="tn2-mi" onclick="gerarCobrancaManual('${c.id}','${c.ownerId||currentOwnerId||''}','${(t.name||'').replace(/'/g,"\\'")}');_tnClose(this)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Gerar cobrança</button>`;
+      })();
+      const _oAvulsa = `<button type="button" class="tn2-mi" onclick="openAvulsa('${t.id}','${(t.name||'').replace(/'/g,"\\'")}','${(t.email||'').replace(/'/g,"\\'")}');_tnClose(this)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Cobrança avulsa</button>`;
+      const _oHist   = `<button type="button" class="tn2-mi" onclick="openHistory('${t.id}');_tnClose(this)"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.1"/></svg>Histórico</button>`;
+      const _oCredit = (() => {
+        if (!currentOwnerData?.creditAnalysisEnabled) return '';
+        const ca = t.creditAnalysis; const s = ca?.status||'pending';
+        const lbl = ({pending:'Análise de crédito',analyzing:'Em análise',approved:'Crédito aprovado',rejected:'Crédito reprovado'})[s]||'Análise de crédito';
+        return `<button type="button" class="tn2-mi" onclick="openCreditAnalysis('${t.id}');_tnClose(this)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>${esc(lbl)}</button>`;
+      })();
+      const _oDel = `<button type="button" class="tn2-mi danger" onclick="deleteTenant('${t.id}','${(t.name||'').replace(/'/g,'')}');_tnClose(this)"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Excluir</button>`;
+      const _menuInner = `${_oContract}${_oCob}${_oAvulsa}${_oHist}${_oCredit}<div class="tn2-sep"></div>${_oDel}`;
+      const _moreBtnHtml = (lbl) => `<button type="button" class="tn2-more" aria-label="${lbl}" aria-haspopup="menu" aria-expanded="false" onclick="_tnMore(this,event)"><svg width="16" height="4" viewBox="0 0 16 4" aria-hidden="true" fill="currentColor"><circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/><circle cx="14" cy="2" r="1.5"/></svg></button>`;
+      const _editBtnHtml = `<button type="button" class="tn2-btn" onclick="openEditTenant('${t.id}')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>`;
+      const _docsBtnHtml = `<button type="button" class="tn2-docs${docsCount>0?' tn2-docs-has':''}" onclick="openDocsModal_${t.id}()" aria-label="Documentos de ${esc(t.name)}"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>${docsCount}/5</button>`;
+      const row = document.createElement('tr');
       row.innerHTML = `
-        <td><div style="display:flex;align-items:center;gap:8px">${_tAvHtml}<span>${esc(t.name) || '—'}</span></div></td>
-        <td style="font-size:12px;color:#888">${esc(t.email) || '—'}</td>
-        <td style="font-size:12px;max-width:200px">${property}</td>
-        <td>${rent}</td>
+        <td><div class="tn2-id">${_tAvHtml}<div style="min-width:0"><div class="tn2-nm">${esc(t.name)||'—'}</div>${t.email?`<div class="tn2-em">${esc(t.email)}</div>`:''}</div></div></td>
+        <td class="tn2-prop">${propCode}<span class="tn2-prop-addr" title="${esc(_propFull)}">${esc(_propShort)}</span></td>
+        <td class="tn2-rent">${rent}</td>
         <td>${status}</td>
-        <td style="text-align:center"><span class="badge ${docsCount>0?'active':'inactive'}" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;font-size:12px;font-weight:700;flex-direction:column;gap:1px" onclick="openDocsModal_${t.id}()"><span style="font-size:14px">📄</span>${docsCount}/5</span></td>
-        <td style="white-space:nowrap">
-          <div style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap">
-          <button class="btn-sm" onclick="openEditTenant('${t.id}')">Editar</button>
-          <button class="btn-sm btn-sm-alt" onclick="openAvulsa('${t.id}','${(t.name||'').replace(/'/g,"\\'")}','${(t.email||'').replace(/'/g,"\\'")}')" style="color:#FFD54F;border-color:#FFD54F">+Avulsa</button>
-          ${(()=>{
-            const c = contracts.find(x => x.tenantId === t.id);
-            if (!c) return '';
-            const signed = c.assinafyStatus === 'completed';
-            const hasDoc = !!c.assinafyDocumentId;
-            const active = c.active;
-            if (active) return `<button class="btn-sm" style="color:#42A5F5;border-color:#42A5F5" disabled>🏠 Ativo</button>`;
-            if (signed && !active) return `<button class="btn-sm" style="color:#4CAF50;border-color:#4CAF50" onclick="deliverKeysForTenant('${c.id}','${t.id}')">🏠 Chaves</button>`;
-            if (hasDoc) return `<button class="btn-sm" style="color:#FFD54F;border-color:#FFD54F" onclick="regenContract('${c.id}',this)">📄 Reenviar</button>`;
-            return `<button class="btn-sm" style="color:#4CAF50;border-color:#4CAF50" onclick="generateContractForTenant('${c.id}',this)">📄 Contrato</button>`;
-          })()}
-          ${(()=>{
-            const c = contracts.find(x => x.tenantId === t.id && x.active);
-            if (!c) return '';
-            return `<button class="btn-sm" style="color:#CE93D8;border-color:#6a1b9a" title="Gerar cobrança" aria-label="Gerar cobrança" onclick="gerarCobrancaManual('${c.id}','${c.ownerId||currentOwnerId||''}','${(t.name||'').replace(/'/g,"\\'")}')">💳</button>`;
-          })()}
-          <div style="position:relative;display:inline-block" class="tenant-more-wrap">
-            <button class="btn-sm" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block';event.stopPropagation()" style="font-size:15px;padding:0 7px" title="Mais ações" aria-label="Mais ações">⋯</button>
-            <div style="display:none;position:absolute;right:0;top:100%;background:var(--s2);border:1px solid var(--border2);border-radius:8px;z-index:99;min-width:130px;padding:4px;box-shadow:0 4px 16px #0006" onclick="event.stopPropagation()">
-              <button class="btn-sm" style="width:100%;text-align:left;border:none;display:block;margin:2px 0" onclick="openHistory('${t.id}');this.closest('.tenant-more-wrap').querySelector('div').style.display='none'">📋 Histórico</button>
-              ${(()=>{ if (!currentOwnerData?.creditAnalysisEnabled) return '';
-                const ca = t.creditAnalysis; const s = ca?.status||'pending';
-                const cfg = {pending:['#888','⏳ Análise'],analyzing:['#FFD54F','🔍 Análise'],approved:['#4CAF50','✅ Aprovado'],rejected:['#ef5350','❌ Reprovado']};
-                const [col,lbl] = cfg[s]||cfg.pending;
-                return `<button class="btn-sm" style="width:100%;text-align:left;border:none;display:block;margin:2px 0;color:${col}" onclick="openCreditAnalysis('${t.id}');this.closest('.tenant-more-wrap').querySelector('div').style.display='none'">${lbl}</button>`;
-              })()}
-              <button class="btn-sm" style="width:100%;text-align:left;border:none;display:block;margin:2px 0;background:#c0392b;color:#fff" onclick="deleteTenant('${t.id}','${(t.name||'').replace(/'/g,'')}');this.closest('.tenant-more-wrap').querySelector('div').style.display='none'">🗑 Excluir</button>
-            </div>
-          </div>
-          </div>
-        </td>
+        <td>${_docsBtnHtml}</td>
+        <td><div class="tn2-act">${_editBtnHtml}<div class="tn2-more-wrap">${_moreBtnHtml(`Mais ações para ${esc(t.name)}`)}<div class="tn2-menu" role="menu">${_menuInner}</div></div></div></td>
       `;
       window[`openDocsModal_${t.id}`] = () => openDocsModal(t);
       tbody.appendChild(row);
+      if (cardsEl) cardsEl.insertAdjacentHTML('beforeend', `
+        <div class="tn2-card">
+          <div class="tn2-card-head">${_tAvHtml}<div class="tn2-card-inf"><div class="tn2-nm">${esc(t.name)||'—'}</div>${t.email?`<div class="tn2-em">${esc(t.email)}</div>`:''}</div></div>
+          <div class="tn2-card-grid">
+            <span class="tn2-card-lbl">Imóvel</span><span class="tn2-card-val" title="${esc(_propFull)}">${propCode}${esc(_propShort)}</span>
+            <span class="tn2-card-lbl">Aluguel</span><span class="tn2-card-val tn2-rent">${rent}</span>
+            <span class="tn2-card-lbl">Contrato</span><span class="tn2-card-val">${status}</span>
+            <span class="tn2-card-lbl">Docs</span><span class="tn2-card-val">${_docsBtnHtml}</span>
+          </div>
+          <div class="tn2-card-foot">${_editBtnHtml}<div class="tn2-more-wrap">${_moreBtnHtml('Mais ações')}<div class="tn2-menu" role="menu">${_menuInner}</div></div></div>
+        </div>
+      `);
     });
   }
 
@@ -6740,6 +6771,56 @@
   .tn-toolbar #tenant-search { padding-left: 36px; margin-bottom: 0; }
   html[data-theme="light"] .tn-count { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.10); }
 
+  /* ── MASTER-06A2: Tenant row + mobile cards ── */
+  .tn2-id { display:flex;align-items:center;gap:10px;min-width:0 }
+  .tn2-av { width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--text2);background:var(--s3);border:1px solid var(--border2);overflow:hidden }
+  .tn2-nm { font-size:13px;font-weight:600;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px }
+  .tn2-em { font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px;margin-top:1px }
+  .tn2-prop { font-size:12px;color:var(--text2);max-width:210px }
+  .tn2-prop-code { display:inline-flex;align-items:center;font-size:10px;font-weight:700;background:var(--accent-bg);color:var(--accent3);border:1px solid var(--accent2);border-radius:4px;padding:1px 6px;margin-right:5px;letter-spacing:.05em;vertical-align:middle;white-space:nowrap }
+  .tn2-prop-addr { display:inline;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle }
+  .tn2-rent { font-size:13px;font-weight:700;color:var(--text1);font-variant-numeric:tabular-nums;white-space:nowrap }
+  .tn2-b { display:inline-flex;align-items:center;font-size:11px;font-weight:600;padding:3px 9px;border-radius:5px;border:1px solid;white-space:nowrap }
+  .tn2-b-active  { color:var(--accent3);background:var(--accent-bg);border-color:var(--accent2) }
+  .tn2-b-digital { color:#c4b5fd;background:rgba(139,92,246,.12);border-color:rgba(139,92,246,.35) }
+  .tn2-b-wait    { color:var(--warn);background:var(--warn-bg);border-color:rgba(245,158,11,.35) }
+  .tn2-b-none    { color:var(--text3);background:var(--s3);border-color:var(--border2) }
+  .tn2-docs { display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--text3);padding:4px 9px;border-radius:5px;background:var(--s3);border:1px solid var(--border);cursor:pointer;transition:background .15s,color .15s;white-space:nowrap;font-family:inherit }
+  .tn2-docs:hover,.tn2-docs:focus-visible { background:var(--s4);color:var(--text1) }
+  .tn2-docs-has { color:var(--accent3) }
+  .tn2-act { display:flex;align-items:center;gap:5px;white-space:nowrap }
+  .tn2-btn { display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:6px;border:1px solid var(--border2);background:transparent;cursor:pointer;color:var(--text1);transition:background .12s,border-color .12s;line-height:1;font-family:inherit;white-space:nowrap }
+  .tn2-btn:hover { background:var(--s3) }
+  .tn2-btn:focus-visible { outline:2px solid var(--accent);outline-offset:2px }
+  .tn2-btn svg { flex-shrink:0;width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round }
+  .tn2-more-wrap { position:relative;display:inline-block }
+  .tn2-more { display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:6px;border:1px solid var(--border2);background:transparent;cursor:pointer;color:var(--text2);padding:0;font-family:inherit;transition:background .12s;flex-shrink:0 }
+  .tn2-more:hover { background:var(--s3);color:var(--text1) }
+  .tn2-more:focus-visible { outline:2px solid var(--accent);outline-offset:2px }
+  .tn2-menu { display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--s2);border:1px solid var(--border2);border-radius:8px;z-index:200;min-width:172px;padding:4px;box-shadow:0 8px 28px rgba(0,0,0,.28) }
+  .tn2-menu.open { display:block }
+  .tn2-mi { display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;font-size:12px;font-weight:500;color:var(--text1);background:transparent;border:none;border-radius:5px;cursor:pointer;text-align:left;white-space:nowrap;font-family:inherit;transition:background .1s }
+  .tn2-mi:hover,.tn2-mi:focus-visible { background:var(--s3);outline:none }
+  .tn2-mi svg { flex-shrink:0;width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round }
+  .tn2-mi.danger { color:var(--danger) }
+  .tn2-mi.danger:hover,.tn2-mi.danger:focus-visible { background:var(--danger-bg) }
+  .tn2-sep { height:1px;background:var(--border);margin:3px 4px }
+  .tn2-cards { display:none }
+  @media (max-width: 767px) {
+    #panel-tenants .table-wrap { display:none }
+    .tn2-cards { display:flex;flex-direction:column;gap:10px }
+  }
+  .tn2-card { background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:14px 14px 12px;display:flex;flex-direction:column;gap:10px }
+  .tn2-card-head { display:flex;align-items:center;gap:10px;min-width:0 }
+  .tn2-card-inf { min-width:0;flex:1 }
+  .tn2-card-grid { display:grid;grid-template-columns:max-content 1fr;gap:5px 14px;font-size:12px }
+  .tn2-card-lbl { color:var(--text3);font-weight:500;align-self:center }
+  .tn2-card-val { color:var(--text1);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0 }
+  .tn2-card-foot { display:flex;align-items:center;gap:7px;flex-wrap:wrap }
+  html[data-theme="light"] .tn2-menu { box-shadow:0 8px 28px rgba(0,0,0,.10) }
+  html[data-theme="light"] .tn2-b-digital { color:#5b21b6;background:rgba(91,33,182,.08);border-color:rgba(91,33,182,.25) }
+  html[data-theme="light"] .tn2-prop-code { background:rgba(16,185,129,.08);color:var(--accent);border-color:rgba(16,185,129,.25) }
+
   .metrics-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 24px; }
   @media (max-width: 1199px) { .metrics-row { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 767px)  { .metrics-row { grid-template-columns: repeat(2, 1fr); } }
@@ -7221,13 +7302,14 @@
     <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Nome</th><th>E-mail</th><th>Imóvel</th><th>Aluguel</th><th>Contrato</th><th>Docs</th><th>Ações</th></tr>
+        <tr><th>Inquilino</th><th>Imóvel</th><th>Aluguel</th><th>Contrato</th><th>Documentos</th><th>Ações</th></tr>
       </thead>
       <tbody id="tenants-tbody">
-        <tr><td colspan="7" class="empty">Carregando...</td></tr>
+        <tr><td colspan="6" class="empty">Carregando...</td></tr>
       </tbody>
     </table>
     </div>
+    <div class="tn2-cards" id="tenants-cards"></div>
   </div>
 
   <!-- Painel: Inadimplentes -->
