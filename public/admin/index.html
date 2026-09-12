@@ -6776,9 +6776,10 @@
   .tn2-av { width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--text2);background:var(--s3);border:1px solid var(--border2);overflow:hidden }
   .tn2-nm { font-size:13px;font-weight:600;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px }
   .tn2-em { font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px;margin-top:1px }
-  .tn2-prop { font-size:12px;color:var(--text2);max-width:210px }
+  .tn2-prop { font-size:12px;color:var(--text2);overflow:hidden }
+  #panel-tenants .table-wrap table { table-layout:fixed }
   .tn2-prop-code { display:inline-flex;align-items:center;font-size:10px;font-weight:700;background:var(--accent-bg);color:var(--accent3);border:1px solid var(--accent2);border-radius:4px;padding:1px 6px;margin-right:5px;letter-spacing:.05em;vertical-align:middle;white-space:nowrap }
-  .tn2-prop-addr { display:inline;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle }
+  .tn2-prop-addr { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
   .tn2-rent { font-size:13px;font-weight:700;color:var(--text1);font-variant-numeric:tabular-nums;white-space:nowrap }
   .tn2-b { display:inline-flex;align-items:center;font-size:11px;font-weight:600;padding:3px 9px;border-radius:5px;border:1px solid;white-space:nowrap }
   .tn2-b-active  { color:var(--accent3);background:var(--accent-bg);border-color:var(--accent2) }
@@ -7302,7 +7303,7 @@
     <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Inquilino</th><th>Imóvel</th><th>Aluguel</th><th>Contrato</th><th>Documentos</th><th>Ações</th></tr>
+        <tr><th style="width:220px">Inquilino</th><th>Imóvel</th><th style="width:95px">Aluguel</th><th style="width:115px">Contrato</th><th style="width:78px">Documentos</th><th style="width:108px">Ações</th></tr>
       </thead>
       <tbody id="tenants-tbody">
         <tr><td colspan="6" class="empty">Carregando...</td></tr>
