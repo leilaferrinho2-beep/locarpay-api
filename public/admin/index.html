@@ -2492,12 +2492,12 @@
       document.querySelectorAll('.tenant-more-wrap > div').forEach(el => el.style.display = 'none');
     }
     if (!e.target.closest('.tn2-more-wrap')) {
-      document.querySelectorAll('.tn2-menu.open').forEach(m => { m.classList.remove('open'); if (m.previousElementSibling) m.previousElementSibling.setAttribute('aria-expanded','false'); });
+      document.querySelectorAll('.tn2-menu.open').forEach(m => { m.classList.remove('open'); m.style.cssText=''; if (m.previousElementSibling) m.previousElementSibling.setAttribute('aria-expanded','false'); });
     }
   });
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
-      document.querySelectorAll('.tn2-menu.open').forEach(m => { m.classList.remove('open'); const b = m.previousElementSibling; if (b) { b.setAttribute('aria-expanded','false'); b.focus(); } });
+      document.querySelectorAll('.tn2-menu.open').forEach(m => { m.classList.remove('open'); m.style.cssText=''; const b = m.previousElementSibling; if (b) { b.setAttribute('aria-expanded','false'); b.focus(); } });
     }
   });
   // ── MASTER-06A2: tenant overflow menu helpers ──
@@ -2505,14 +2505,18 @@
     if (e) e.stopPropagation();
     const menu = btn.nextElementSibling;
     const isOpen = menu.classList.contains('open');
-    document.querySelectorAll('.tn2-menu.open').forEach(m => { m.classList.remove('open'); if (m.previousElementSibling) m.previousElementSibling.setAttribute('aria-expanded','false'); });
-    if (!isOpen) { menu.classList.add('open'); btn.setAttribute('aria-expanded','true'); }
+    document.querySelectorAll('.tn2-menu.open').forEach(m => { m.classList.remove('open'); m.style.cssText=''; if (m.previousElementSibling) m.previousElementSibling.setAttribute('aria-expanded','false'); });
+    if (!isOpen) {
+      const r = btn.getBoundingClientRect();
+      menu.style.cssText = 'position:fixed;top:'+(r.bottom+4)+'px;right:'+(window.innerWidth-r.right)+'px;left:auto';
+      menu.classList.add('open'); btn.setAttribute('aria-expanded','true');
+    }
   };
   window._tnClose = function(btn) {
     const wrap = btn.closest('.tn2-more-wrap');
     if (!wrap) return;
     const m = wrap.querySelector('.tn2-menu');
-    if (m) { m.classList.remove('open'); const b = m.previousElementSibling; if (b) b.setAttribute('aria-expanded','false'); }
+    if (m) { m.classList.remove('open'); m.style.cssText=''; const b = m.previousElementSibling; if (b) b.setAttribute('aria-expanded','false'); }
   };
 
   window.toggleBrokerMenu = (brokerId) => {
